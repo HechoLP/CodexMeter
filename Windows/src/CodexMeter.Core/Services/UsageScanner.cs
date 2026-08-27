@@ -11,7 +11,7 @@ using CodexMeter.Core.Parsing;
 
 namespace CodexMeter.Core.Services;
 
-public sealed partial class UsageScanner
+public sealed class UsageScanner
 {
     public const int MaximumSourceCount = 50_000;
     public const int MaximumEventCount = 1_000_000;
@@ -626,11 +626,13 @@ public sealed partial class UsageScanner
         internal uint FileIndexLow;
     }
 
-    [LibraryImport("kernel32.dll", SetLastError = true)]
+#pragma warning disable SYSLIB1054 // This small blittable Win32 call avoids enabling unsafe source-generated interop.
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetFileInformationByHandle(
+    private static extern bool GetFileInformationByHandle(
         SafeFileHandle file,
         out ByHandleFileInformation fileInformation);
+#pragma warning restore SYSLIB1054
 }
 
 internal sealed record BoundedLine(byte[]? Bytes, bool Oversized);
