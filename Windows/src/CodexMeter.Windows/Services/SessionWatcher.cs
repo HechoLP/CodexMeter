@@ -5,13 +5,13 @@ namespace CodexMeter.Windows.Services;
 
 internal sealed class SessionWatcher : IDisposable
 {
-    private readonly Action onChange;
+    private readonly Action<string?> onChange;
     private readonly List<FileSystemWatcher> watchers = [];
     private readonly object stateLock = new();
     private System.Threading.Timer? debounceTimer;
     private bool disposed;
 
-    public SessionWatcher(Action onChange)
+    public SessionWatcher(Action<string?> onChange)
     {
         this.onChange = onChange;
         Rebuild();
@@ -91,17 +91,19 @@ internal sealed class SessionWatcher : IDisposable
             && Directory.Exists(e.FullPath))
         {
             Rebuild();
+            onChange(null);
+            return;
         }
-        ScheduleRefresh();
+        ScheduleRefresh(e.FullPath);
     }
 
     private void HandleError(object sender, ErrorEventArgs e)
     {
         ThreadPool.QueueUserWorkItem(_ => Rebuild());
-        ScheduleRefresh();
+        ScheduleRefresh(null);
     }
 
-    private void ScheduleRefresh()
+    private void ScheduleRefresh(string? changedPath)
     {
         lock (stateLock)
         {
@@ -111,20 +113,20 @@ internal sealed class SessionWatcher : IDisposable
             }
             debounceTimer?.Dispose();
             debounceTimer = new System.Threading.Timer(
-                _ => NotifyChangeIfActive(),
+                _ => NotifyChangeIfActive(changedPath),
                 null,
                 TimeSpan.FromSeconds(2),
                 Timeout.InfiniteTimeSpan);
         }
     }
 
-    private void NotifyChangeIfActive()
+    private void NotifyChangeIfActive(string? changedPath)
     {
         lock (stateLock)
         {
             if (!disposed)
             {
-                onChange();
+                onChange(changedPath);
             }
         }
     }

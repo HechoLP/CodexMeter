@@ -47,6 +47,8 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     public void InvalidateCachedSources() => scanner.InvalidateCachedSources();
 
+    public void InvalidateCachedSource(string path) => scanner.InvalidateCachedSource(path);
+
     private async Task RefreshCoreAsync()
     {
         try
@@ -58,6 +60,10 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             snapshot = result.Snapshot;
             statusMessage = result.StatusMessage;
             RaiseAll();
+            if (result.HasMoreWork)
+            {
+                _ = RefreshAsync();
+            }
         }
         catch (OperationCanceledException)
         {

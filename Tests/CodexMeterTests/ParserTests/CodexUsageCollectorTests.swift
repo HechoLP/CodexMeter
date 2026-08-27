@@ -771,6 +771,103 @@ final class CodexUsageCollectorTests: XCTestCase {
         XCTAssertTrue(checkpoint?.contentFingerprint.hasPrefix("v2:") == true)
     }
 
+    func testLargeCommittedFingerprintVerificationResumesAndConverges() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+
+        let sessionID = "12121212-1212-1212-1212-121212121212"
+        let source = sessions.appendingPathComponent(
+            "rollout-2026-08-27T00-00-00-\(sessionID).jsonl"
+        )
+        let metadata =
+            #"{"timestamp":"2026-08-27T00:00:00Z","type":"session_meta","payload":{"id":"12121212-1212-1212-1212-121212121212"}}"#
+        let first = tokenLineWithoutOrdinal(
+            timestamp: "2026-08-27T00:01:00Z",
+            input: 100,
+            cached: 50,
+            output: 20,
+            lastInput: 100,
+            lastCached: 50,
+            lastOutput: 20
+        )
+        let filler = String(repeating: "x", count: 1_000) + "\n"
+        var sourceData = Data((metadata + "\n" + first + "\n").utf8)
+        for _ in 0..<3_500 {
+            sourceData.append(contentsOf: filler.utf8)
+        }
+        try sourceData.write(to: source)
+
+        let database = try SQLiteDatabase(url: root.appendingPathComponent("usage.sqlite"))
+        let initialCollector = CodexUsageCollector(
+            database: database,
+            roots: [sessions],
+            maximumRefreshDuration: .seconds(30)
+        )
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        let initial = try await initialCollector.refresh(
+            now: now,
+            calendar: utcCalendar,
+            weekStart: .monday
+        )
+        XCTAssertFalse(initial.hasMoreWork)
+
+        let second = tokenLineWithoutOrdinal(
+            timestamp: "2026-08-27T00:02:00Z",
+            input: 150,
+            cached: 75,
+            output: 30,
+            lastInput: 50,
+            lastCached: 25,
+            lastOutput: 10
+        )
+        let handle = try FileHandle(forWritingTo: source)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data((second + "\n").utf8))
+        try handle.close()
+
+        let verificationBudget = Int64((CodexJSONLParser.maximumLineBytes + 1) * 2)
+        let resumedCollector = CodexUsageCollector(
+            database: database,
+            roots: [sessions],
+            maximumBytesPerRefresh: verificationBudget,
+            maximumRefreshDuration: .seconds(30)
+        )
+
+        let firstContinuation = try await resumedCollector.refresh(
+            now: now,
+            calendar: utcCalendar,
+            weekStart: .monday
+        )
+        XCTAssertTrue(firstContinuation.hasMoreWork)
+        XCTAssertEqual(firstContinuation.processedBytes, 0)
+        XCTAssertEqual(firstContinuation.fingerprintBytesRead, verificationBudget)
+
+        let secondContinuation = try await resumedCollector.refresh(
+            now: now,
+            calendar: utcCalendar,
+            weekStart: .monday
+        )
+        XCTAssertTrue(secondContinuation.hasMoreWork)
+        XCTAssertEqual(secondContinuation.processedBytes, 0)
+        XCTAssertGreaterThan(secondContinuation.fingerprintBytesRead, 0)
+        XCTAssertLessThan(secondContinuation.fingerprintBytesRead, verificationBudget)
+
+        let completed = try await resumedCollector.refresh(
+            now: now,
+            calendar: utcCalendar,
+            weekStart: .monday
+        )
+        XCTAssertFalse(completed.hasMoreWork)
+        XCTAssertGreaterThan(completed.processedBytes, 0)
+        XCTAssertEqual(
+            completed.snapshot.allTime,
+            TokenUsage(inputTokens: 150, cachedInputTokens: 75, outputTokens: 30)
+        )
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

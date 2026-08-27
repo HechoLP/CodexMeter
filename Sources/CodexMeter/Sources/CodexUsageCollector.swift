@@ -23,13 +23,17 @@ struct DataStatistics: Equatable, Sendable {
 private enum CodexUsageCollectorError: Error {
     case sourceUnavailable
     case sourceChangedDuringRead
-    case fingerprintBudgetExceeded
 }
 
 private struct SourceProcessResult {
     let processedBytes: Int64
     let fingerprintBytesRead: Int64
     let hasMore: Bool
+}
+
+private struct FingerprintAdvanceResult {
+    let bytesRead: Int64
+    let reachedTarget: Bool
 }
 
 private struct SourceFingerprintAccumulator {
@@ -55,19 +59,20 @@ private struct SourceFingerprintAccumulator {
     mutating func advance(
         fileDescriptor: Int32,
         to offset: Int64,
-        deadline: ContinuousClock.Instant
-    ) throws -> Int64 {
+        maximumBytes: Int64
+    ) throws -> FingerprintAdvanceResult {
         guard offset >= authenticatedOffset else {
             throw CodexUsageCollectorError.sourceChangedDuringRead
         }
         let startingOffset = authenticatedOffset
-        let clock = ContinuousClock()
-        while authenticatedOffset < offset {
+        let byteLimit = authenticatedOffset + max(0, maximumBytes)
+        while authenticatedOffset < offset, authenticatedOffset < byteLimit {
             try Task.checkCancellation()
-            guard clock.now < deadline else {
-                throw CodexUsageCollectorError.fingerprintBudgetExceeded
-            }
-            let byteCount = Int(min(Int64(256 * 1_024), offset - authenticatedOffset))
+            let byteCount = Int(min(
+                Int64(256 * 1_024),
+                offset - authenticatedOffset,
+                byteLimit - authenticatedOffset
+            ))
             let sample = try readFingerprintSample(
                 fileDescriptor: fileDescriptor,
                 startingAt: authenticatedOffset,
@@ -77,7 +82,10 @@ private struct SourceFingerprintAccumulator {
             legacyAuthenticator?.update(data: sample)
             authenticatedOffset += Int64(byteCount)
         }
-        return authenticatedOffset - startingOffset
+        return FingerprintAdvanceResult(
+            bytesRead: authenticatedOffset - startingOffset,
+            reachedTarget: authenticatedOffset == offset
+        )
     }
 
     var fingerprint: String {
@@ -96,6 +104,30 @@ private struct SourceFingerprintAccumulator {
 
     private static func hexDigest(_ authenticationCode: HMAC<SHA256>.MAC) -> String {
         Data(authenticationCode).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+private struct FingerprintVerificationState {
+    let fileIdentity: String
+    let generation: Int64
+    let committedOffset: Int64
+    let contentFingerprint: String
+    let observedSize: Int64
+    let modificationTimeNanoseconds: Int64
+    var accumulator: SourceFingerprintAccumulator
+
+    func matches(
+        _ checkpoint: SourceCheckpoint,
+        openedSize: Int64,
+        openedModificationTime: Int64
+    ) -> Bool {
+        fileIdentity == checkpoint.fileIdentity
+            && generation == checkpoint.generation
+            && committedOffset == checkpoint.committedOffset
+            && contentFingerprint == checkpoint.contentFingerprint
+            && observedSize == openedSize
+            && modificationTimeNanoseconds == openedModificationTime
+            && accumulator.authenticatedOffset <= checkpoint.committedOffset
     }
 }
 
@@ -141,6 +173,7 @@ actor CodexUsageCollector {
     private let maximumBytesPerRefresh: Int64
     private let maximumRefreshDuration: Duration
     private var sourceFingerprintKeyData: Data?
+    private var fingerprintVerificationStates: [String: FingerprintVerificationState] = [:]
 
     init(
         database: SQLiteDatabase,
@@ -151,7 +184,7 @@ actor CodexUsageCollector {
         self.database = database
         self.roots = roots
         self.maximumBytesPerRefresh = max(
-            Int64(CodexJSONLParser.maximumLineBytes + 1),
+            Int64((CodexJSONLParser.maximumLineBytes + 1) * 2),
             maximumBytesPerRefresh
         )
         self.maximumRefreshDuration = maximumRefreshDuration
@@ -163,6 +196,12 @@ actor CodexUsageCollector {
 
     func refresh(now: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
         let sources = try discovery.discover(in: roots)
+        let activeCheckpointKeys = Set(
+            sources.map { storageIdentifier($0.url.standardizedFileURL.path) }
+        )
+        fingerprintVerificationStates = fingerprintVerificationStates.filter {
+            activeCheckpointKeys.contains($0.key)
+        }
         let importPolicy = try await database.importPolicy()
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: maximumRefreshDuration)
@@ -172,7 +211,7 @@ actor CodexUsageCollector {
         var skippedSource = false
         for source in sources {
             try Task.checkCancellation()
-            let remainingBytes = maximumBytesPerRefresh - processedBytes
+            let remainingBytes = maximumBytesPerRefresh - processedBytes - fingerprintBytesRead
             guard remainingBytes > 0, clock.now < deadline else {
                 hasMoreWork = true
                 break
@@ -191,10 +230,6 @@ actor CodexUsageCollector {
                     hasMoreWork = true
                     break
                 }
-            } catch CodexUsageCollectorError.fingerprintBudgetExceeded {
-                skippedSource = true
-                hasMoreWork = true
-                break
             } catch is CodexUsageCollectorError {
                 skippedSource = true
             }
@@ -295,17 +330,44 @@ actor CodexUsageCollector {
 
         let needsLegacyVerification = checkpoint.contentFingerprint.isEmpty == false
             && checkpoint.contentFingerprint.hasPrefix(SourceFingerprintAccumulator.versionPrefix) == false
-        var fingerprintAccumulator = SourceFingerprintAccumulator(
-            key: fingerprintKey,
-            legacyOffset: needsLegacyVerification ? checkpoint.committedOffset : nil
-        )
+        var fingerprintAccumulator: SourceFingerprintAccumulator
+        if let savedState = fingerprintVerificationStates[checkpointKey],
+           savedState.matches(
+               checkpoint,
+               openedSize: openedSize,
+               openedModificationTime: openedModificationTime
+           ) {
+            fingerprintAccumulator = savedState.accumulator
+        } else {
+            fingerprintVerificationStates.removeValue(forKey: checkpointKey)
+            fingerprintAccumulator = SourceFingerprintAccumulator(
+                key: fingerprintKey,
+                legacyOffset: needsLegacyVerification ? checkpoint.committedOffset : nil
+            )
+        }
         if checkpoint.committedOffset > 0,
            openedSize >= checkpoint.committedOffset {
-            fingerprintBytesRead += try fingerprintAccumulator.advance(
+            let advance = try fingerprintAccumulator.advance(
                 fileDescriptor: handle.fileDescriptor,
                 to: checkpoint.committedOffset,
-                deadline: deadline
+                maximumBytes: maximumBytes
             )
+            fingerprintBytesRead += advance.bytesRead
+            guard advance.reachedTarget else {
+                cacheFingerprintState(
+                    checkpointKey: checkpointKey,
+                    checkpoint: checkpoint,
+                    observedSize: openedSize,
+                    modificationTimeNanoseconds: openedModificationTime,
+                    accumulator: fingerprintAccumulator
+                )
+                return SourceProcessResult(
+                    processedBytes: 0,
+                    fingerprintBytesRead: fingerprintBytesRead,
+                    hasMore: true
+                )
+            }
+            fingerprintVerificationStates.removeValue(forKey: checkpointKey)
             let fingerprintMatches: Bool
             if checkpoint.contentFingerprint.isEmpty {
                 fingerprintMatches = true
@@ -318,6 +380,7 @@ actor CodexUsageCollector {
                 checkpoint.contentFingerprint = fingerprintAccumulator.fingerprint
                 fingerprintAccumulator.discardLegacyFingerprint()
             } else {
+                fingerprintVerificationStates.removeValue(forKey: checkpointKey)
                 checkpoint = SourceCheckpoint.fresh(
                     sourcePath: checkpointKey,
                     fileIdentity: source.identity,
@@ -326,6 +389,23 @@ actor CodexUsageCollector {
                 fingerprintAccumulator = SourceFingerprintAccumulator(key: fingerprintKey)
             }
         }
+        let remainingIOBudget = maximumBytes - fingerprintBytesRead
+        let minimumScanBytes = Int64(CodexJSONLParser.maximumLineBytes + 1)
+        guard remainingIOBudget >= minimumScanBytes * 2 else {
+            cacheFingerprintState(
+                checkpointKey: checkpointKey,
+                checkpoint: checkpoint,
+                observedSize: openedSize,
+                modificationTimeNanoseconds: openedModificationTime,
+                accumulator: fingerprintAccumulator
+            )
+            return SourceProcessResult(
+                processedBytes: 0,
+                fingerprintBytesRead: fingerprintBytesRead,
+                hasMore: openedSize > checkpoint.committedOffset
+            )
+        }
+        let scanByteBudget = remainingIOBudget / 2
         checkpoint.observedSize = openedSize
         checkpoint.modificationTimeNanoseconds = openedModificationTime
         guard openedSize > checkpoint.committedOffset else {
@@ -334,8 +414,7 @@ actor CodexUsageCollector {
                 fingerprintBytesRead += try updateCheckpointFingerprint(
                     &checkpoint,
                     accumulator: &fingerprintAccumulator,
-                    fileDescriptor: handle.fileDescriptor,
-                    deadline: deadline
+                    fileDescriptor: handle.fileDescriptor
                 )
             }
             if checkpoint != previousCheckpoint {
@@ -346,6 +425,13 @@ actor CodexUsageCollector {
                     expectedEpoch: expectedEpoch
                 )
             }
+            cacheFingerprintState(
+                checkpointKey: checkpointKey,
+                checkpoint: checkpoint,
+                observedSize: checkpoint.observedSize,
+                modificationTimeNanoseconds: checkpoint.modificationTimeNanoseconds,
+                accumulator: fingerprintAccumulator
+            )
             return SourceProcessResult(
                 processedBytes: 0,
                 fingerprintBytesRead: fingerprintBytesRead,
@@ -395,11 +481,11 @@ actor CodexUsageCollector {
 
         while true {
             let scannedBytes = readOffset - startingOffset
-            if scannedBytes >= maximumBytes || (scannedBytes > 0 && clock.now >= deadline) {
+            if scannedBytes >= scanByteBudget || (scannedBytes > 0 && clock.now >= deadline) {
                 stoppedForBudget = true
                 break
             }
-            let readLimit = Int(min(Int64(256 * 1_024), maximumBytes - scannedBytes))
+            let readLimit = Int(min(Int64(256 * 1_024), scanByteBudget - scannedBytes))
             let chunk: Data
             do {
                 chunk = try handle.read(upToCount: readLimit) ?? Data()
@@ -452,8 +538,7 @@ actor CodexUsageCollector {
                     fingerprintBytesRead += try updateCheckpointFingerprint(
                         &checkpoint,
                         accumulator: &fingerprintAccumulator,
-                        fileDescriptor: handle.fileDescriptor,
-                        deadline: deadline
+                        fileDescriptor: handle.fileDescriptor
                     )
                     let committedNormalizationState = try await database.commit(
                         events: pendingEvents,
@@ -498,8 +583,7 @@ actor CodexUsageCollector {
             fingerprintBytesRead += try updateCheckpointFingerprint(
                 &checkpoint,
                 accumulator: &fingerprintAccumulator,
-                fileDescriptor: handle.fileDescriptor,
-                deadline: deadline
+                fileDescriptor: handle.fileDescriptor
             )
             let committedNormalizationState = try await database.commit(
                 events: pendingEvents,
@@ -513,6 +597,13 @@ actor CodexUsageCollector {
                 normalizationState = committedNormalizationState
             }
         }
+        cacheFingerprintState(
+            checkpointKey: checkpointKey,
+            checkpoint: checkpoint,
+            observedSize: checkpoint.observedSize,
+            modificationTimeNanoseconds: checkpoint.modificationTimeNanoseconds,
+            accumulator: fingerprintAccumulator
+        )
         return SourceProcessResult(
             processedBytes: readOffset - startingOffset,
             fingerprintBytesRead: fingerprintBytesRead,
@@ -523,8 +614,7 @@ actor CodexUsageCollector {
     private func updateCheckpointFingerprint(
         _ checkpoint: inout SourceCheckpoint,
         accumulator: inout SourceFingerprintAccumulator,
-        fileDescriptor: Int32,
-        deadline: ContinuousClock.Instant
+        fileDescriptor: Int32
     ) throws -> Int64 {
         var currentStat = stat()
         guard fstat(fileDescriptor, &currentStat) == 0,
@@ -535,14 +625,39 @@ actor CodexUsageCollector {
         }
         checkpoint.observedSize = Int64(currentStat.st_size)
         checkpoint.modificationTimeNanoseconds = modificationTimeNanoseconds(currentStat)
-        let bytesRead = try accumulator.advance(
+        let advance = try accumulator.advance(
             fileDescriptor: fileDescriptor,
             to: checkpoint.committedOffset,
-            deadline: deadline
+            maximumBytes: checkpoint.committedOffset - accumulator.authenticatedOffset
         )
+        guard advance.reachedTarget else {
+            throw CodexUsageCollectorError.sourceChangedDuringRead
+        }
         checkpoint.contentFingerprint = accumulator.fingerprint
         accumulator.discardLegacyFingerprint()
-        return bytesRead
+        return advance.bytesRead
+    }
+
+    private func cacheFingerprintState(
+        checkpointKey: String,
+        checkpoint: SourceCheckpoint,
+        observedSize: Int64,
+        modificationTimeNanoseconds: Int64,
+        accumulator: SourceFingerprintAccumulator
+    ) {
+        guard accumulator.authenticatedOffset <= checkpoint.committedOffset else {
+            fingerprintVerificationStates.removeValue(forKey: checkpointKey)
+            return
+        }
+        fingerprintVerificationStates[checkpointKey] = FingerprintVerificationState(
+            fileIdentity: checkpoint.fileIdentity,
+            generation: checkpoint.generation,
+            committedOffset: checkpoint.committedOffset,
+            contentFingerprint: checkpoint.contentFingerprint,
+            observedSize: observedSize,
+            modificationTimeNanoseconds: modificationTimeNanoseconds,
+            accumulator: accumulator
+        )
     }
 
     private func sourceFingerprintKey() async throws -> Data {

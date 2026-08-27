@@ -42,9 +42,16 @@ public partial class App : System.Windows.Application
             ShutdownApplication);
 
         sessionWatcher = new SessionWatcher(
-            () => Dispatcher.BeginInvoke(() =>
+            changedPath => Dispatcher.BeginInvoke(() =>
             {
-                viewModel.InvalidateCachedSources();
+                if (changedPath is null)
+                {
+                    viewModel.InvalidateCachedSources();
+                }
+                else
+                {
+                    viewModel.InvalidateCachedSource(changedPath);
+                }
                 _ = viewModel.RefreshAsync();
             }));
         settingsStore.SettingsChanged += (_, _) => ApplySettings();
