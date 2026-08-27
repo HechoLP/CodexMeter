@@ -10,12 +10,18 @@ release_build=${CODEXMETER_BUILD_NUMBER:-${BUILD_NUMBER}}
 release_bundle_id=${CODEXMETER_BUNDLE_ID:-${BUNDLE_IDENTIFIER}}
 release_repository=${CODEXMETER_RELEASE_REPOSITORY:-${RELEASE_REPOSITORY}}
 update_feed_branch=${CODEXMETER_UPDATE_FEED_BRANCH:-${UPDATE_FEED_BRANCH}}
+adhoc_hardened_runtime=${CODEXMETER_ADHOC_HARDENED_RUNTIME:-1}
 sparkle_feed_url="https://raw.githubusercontent.com/${release_repository}/${update_feed_branch}/appcast.xml"
 artifact_root="${project_root}/Artifacts"
 cache_root=${CODEXMETER_BUILD_CACHE:-"$(getconf DARWIN_USER_CACHE_DIR)/dev.codexmeter.release"}
 app_path=${CODEXMETER_APP_PATH:-"${cache_root}/${PRODUCT_NAME}.app"}
 binary_path="${project_root}/.build/apple/Products/Release/${PRODUCT_NAME}"
 sparkle_framework="${project_root}/.build/apple/Products/Release/Frameworks/Sparkle.framework"
+
+if [[ "${adhoc_hardened_runtime}" != "0" && "${adhoc_hardened_runtime}" != "1" ]]; then
+  print -u2 "CODEXMETER_ADHOC_HARDENED_RUNTIME must be 0 or 1."
+  exit 2
+fi
 
 "${script_dir}/verify_release_context.sh"
 
@@ -60,5 +66,11 @@ fi
 /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey ${SPARKLE_PUBLIC_KEY}" "${app_path}/Contents/Info.plist"
 
 xattr -cr "${app_path}"
-codesign --force --sign - --options runtime --entitlements "${project_root}/Config/CodexMeter.entitlements" "${app_path}"
+if [[ "${adhoc_hardened_runtime}" == "1" ]]; then
+  codesign --force --sign - --options runtime \
+    --entitlements "${project_root}/Config/CodexMeter.entitlements" "${app_path}"
+elif [[ "${adhoc_hardened_runtime}" == "0" ]]; then
+  codesign --force --sign - \
+    --entitlements "${project_root}/Config/CodexMeter.entitlements" "${app_path}"
+fi
 print "Built ${app_path}"

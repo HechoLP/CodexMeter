@@ -13,6 +13,7 @@ update_feed_branch=${CODEXMETER_UPDATE_FEED_BRANCH:-${UPDATE_FEED_BRANCH}}
 expected_sparkle_feed_url="https://raw.githubusercontent.com/${release_repository}/${update_feed_branch}/appcast.xml"
 require_public_release=${CODEXMETER_REQUIRE_PUBLIC_RELEASE:-0}
 require_signed_release=${CODEXMETER_REQUIRE_SIGNED_RELEASE:-0}
+require_unsigned_release=${CODEXMETER_REQUIRE_UNSIGNED_RELEASE:-0}
 expected_team_id=${CODE_SIGN_TEAM_ID:-}
 cache_root=${CODEXMETER_BUILD_CACHE:-"$(getconf DARWIN_USER_CACHE_DIR)/dev.codexmeter.release"}
 app_path=${1:-"${CODEXMETER_APP_PATH:-${cache_root}/${PRODUCT_NAME}.app}"}
@@ -23,6 +24,12 @@ checksums_path="${artifact_root}/SHA256SUMS.txt"
 temporary_dir=$(mktemp -d)
 mount_dir="${temporary_dir}/mounted"
 mounted=0
+
+if [[ "${require_unsigned_release}" == "1" \
+    && ( "${require_signed_release}" == "1" || "${require_public_release}" == "1" ) ]]; then
+  print -u2 "Unsigned verification cannot be combined with signed or public verification."
+  exit 2
+fi
 
 cleanup() {
   if (( mounted )); then
@@ -112,7 +119,14 @@ verify_app() {
 
   local signature_details
   signature_details=$(codesign -dv --verbose=4 "${candidate}" 2>&1)
-  if [[ "${signature_details}" != *"runtime"* ]]; then
+  if [[ "${require_unsigned_release}" == "1" ]]; then
+    if [[ "${signature_details}" != *"Signature=adhoc"* \
+        || "${signature_details}" == *"Authority="* \
+        || "${signature_details}" == *"runtime"* ]]; then
+      print -u2 "Expected a non-Hardened Runtime ad-hoc signature: ${candidate}"
+      exit 1
+    fi
+  elif [[ "${signature_details}" != *"runtime"* ]]; then
     print -u2 "Hardened Runtime is missing: ${candidate}"
     exit 1
   fi
@@ -195,6 +209,8 @@ verify_app "${mount_dir}/${PRODUCT_NAME}.app"
 hdiutil detach -quiet "${mount_dir}"
 mounted=0
 
-if [[ "${require_public_release}" != "1" ]]; then
+if [[ "${require_unsigned_release}" == "1" ]]; then
+  print "Certificate-free preview verified. Gatekeeper trust and notarization are intentionally absent."
+elif [[ "${require_public_release}" != "1" ]]; then
   print "Local candidate verified. Public release still requires Developer ID signing and notarization."
 fi

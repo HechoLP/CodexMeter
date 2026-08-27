@@ -20,7 +20,7 @@ if brew list --cask codexmeter >/dev/null 2>&1; then
 fi
 
 if [[ ! -f "${artifact_path}" ]]; then
-  "${script_dir}/release.sh"
+  "${script_dir}/release_unsigned.sh"
 fi
 
 developer_was_enabled=0
