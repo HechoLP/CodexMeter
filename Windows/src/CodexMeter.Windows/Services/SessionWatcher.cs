@@ -5,13 +5,15 @@ namespace CodexMeter.Windows.Services;
 
 internal sealed class SessionWatcher : IDisposable
 {
-    private readonly Action<string?> onChange;
+    private readonly Action<IReadOnlyCollection<string>?> onChange;
     private readonly List<FileSystemWatcher> watchers = [];
+    private readonly HashSet<string> pendingChangedPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly object stateLock = new();
     private System.Threading.Timer? debounceTimer;
+    private bool requiresFullRefresh;
     private bool disposed;
 
-    public SessionWatcher(Action<string?> onChange)
+    public SessionWatcher(Action<IReadOnlyCollection<string>?> onChange)
     {
         this.onChange = onChange;
         Rebuild();
@@ -49,6 +51,7 @@ internal sealed class SessionWatcher : IDisposable
             DisposeWatchers();
             debounceTimer?.Dispose();
             debounceTimer = null;
+            pendingChangedPaths.Clear();
         }
     }
 
@@ -111,23 +114,39 @@ internal sealed class SessionWatcher : IDisposable
             {
                 return;
             }
+            if (changedPath is null)
+            {
+                requiresFullRefresh = true;
+                pendingChangedPaths.Clear();
+            }
+            else if (!requiresFullRefresh)
+            {
+                pendingChangedPaths.Add(Path.GetFullPath(changedPath));
+            }
             debounceTimer?.Dispose();
             debounceTimer = new System.Threading.Timer(
-                _ => NotifyChangeIfActive(changedPath),
+                _ => NotifyChangeIfActive(),
                 null,
                 TimeSpan.FromSeconds(2),
                 Timeout.InfiniteTimeSpan);
         }
     }
 
-    private void NotifyChangeIfActive(string? changedPath)
+    private void NotifyChangeIfActive()
     {
+        IReadOnlyCollection<string>? changedPaths;
         lock (stateLock)
         {
-            if (!disposed)
+            if (disposed)
             {
-                onChange(changedPath);
+                return;
             }
+
+            changedPaths = requiresFullRefresh ? null : pendingChangedPaths.ToArray();
+            requiresFullRefresh = false;
+            pendingChangedPaths.Clear();
         }
+
+        onChange(changedPaths);
     }
 }

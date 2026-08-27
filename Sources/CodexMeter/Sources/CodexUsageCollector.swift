@@ -114,12 +114,14 @@ private struct FingerprintVerificationState {
     let contentFingerprint: String
     let observedSize: Int64
     let modificationTimeNanoseconds: Int64
+    let statusChangeTimeNanoseconds: Int64
     var accumulator: SourceFingerprintAccumulator
 
     func matches(
         _ checkpoint: SourceCheckpoint,
         openedSize: Int64,
-        openedModificationTime: Int64
+        openedModificationTime: Int64,
+        openedStatusChangeTime: Int64
     ) -> Bool {
         fileIdentity == checkpoint.fileIdentity
             && generation == checkpoint.generation
@@ -127,6 +129,7 @@ private struct FingerprintVerificationState {
             && contentFingerprint == checkpoint.contentFingerprint
             && observedSize == openedSize
             && modificationTimeNanoseconds == openedModificationTime
+            && statusChangeTimeNanoseconds == openedStatusChangeTime
             && accumulator.authenticatedOffset <= checkpoint.committedOffset
     }
 }
@@ -302,6 +305,7 @@ actor CodexUsageCollector {
         else { throw CodexUsageCollectorError.sourceChangedDuringRead }
         let openedSize = Int64(openedStat.st_size)
         let openedModificationTime = modificationTimeNanoseconds(openedStat)
+        let openedStatusChangeTime = statusChangeTimeNanoseconds(openedStat)
 
         let sameSizeMutation = checkpoint.observedSize > 0
             && checkpoint.observedSize == openedSize
@@ -335,7 +339,8 @@ actor CodexUsageCollector {
            savedState.matches(
                checkpoint,
                openedSize: openedSize,
-               openedModificationTime: openedModificationTime
+               openedModificationTime: openedModificationTime,
+               openedStatusChangeTime: openedStatusChangeTime
            ) {
             fingerprintAccumulator = savedState.accumulator
         } else {
@@ -359,6 +364,7 @@ actor CodexUsageCollector {
                     checkpoint: checkpoint,
                     observedSize: openedSize,
                     modificationTimeNanoseconds: openedModificationTime,
+                    fileDescriptor: handle.fileDescriptor,
                     accumulator: fingerprintAccumulator
                 )
                 return SourceProcessResult(
@@ -367,6 +373,13 @@ actor CodexUsageCollector {
                     hasMore: true
                 )
             }
+            try verifyOpenedSourceState(
+                fileDescriptor: handle.fileDescriptor,
+                expectedIdentity: source.identity,
+                expectedSize: openedSize,
+                expectedModificationTime: openedModificationTime,
+                expectedStatusChangeTime: openedStatusChangeTime
+            )
             fingerprintVerificationStates.removeValue(forKey: checkpointKey)
             let fingerprintMatches: Bool
             if checkpoint.contentFingerprint.isEmpty {
@@ -397,6 +410,7 @@ actor CodexUsageCollector {
                 checkpoint: checkpoint,
                 observedSize: openedSize,
                 modificationTimeNanoseconds: openedModificationTime,
+                fileDescriptor: handle.fileDescriptor,
                 accumulator: fingerprintAccumulator
             )
             return SourceProcessResult(
@@ -430,6 +444,7 @@ actor CodexUsageCollector {
                 checkpoint: checkpoint,
                 observedSize: checkpoint.observedSize,
                 modificationTimeNanoseconds: checkpoint.modificationTimeNanoseconds,
+                fileDescriptor: handle.fileDescriptor,
                 accumulator: fingerprintAccumulator
             )
             return SourceProcessResult(
@@ -602,6 +617,7 @@ actor CodexUsageCollector {
             checkpoint: checkpoint,
             observedSize: checkpoint.observedSize,
             modificationTimeNanoseconds: checkpoint.modificationTimeNanoseconds,
+            fileDescriptor: handle.fileDescriptor,
             accumulator: fingerprintAccumulator
         )
         return SourceProcessResult(
@@ -642,10 +658,18 @@ actor CodexUsageCollector {
         checkpointKey: String,
         checkpoint: SourceCheckpoint,
         observedSize: Int64,
-        modificationTimeNanoseconds: Int64,
+        modificationTimeNanoseconds expectedModificationTimeNanoseconds: Int64,
+        fileDescriptor: Int32,
         accumulator: SourceFingerprintAccumulator
     ) {
-        guard accumulator.authenticatedOffset <= checkpoint.committedOffset else {
+        var currentStat = stat()
+        guard accumulator.authenticatedOffset <= checkpoint.committedOffset,
+              fstat(fileDescriptor, &currentStat) == 0,
+              (currentStat.st_mode & S_IFMT) == S_IFREG,
+              "\(UInt64(currentStat.st_dev)):\(UInt64(currentStat.st_ino))" == checkpoint.fileIdentity,
+              Int64(currentStat.st_size) == observedSize,
+              modificationTimeNanoseconds(currentStat) == expectedModificationTimeNanoseconds
+        else {
             fingerprintVerificationStates.removeValue(forKey: checkpointKey)
             return
         }
@@ -655,7 +679,8 @@ actor CodexUsageCollector {
             committedOffset: checkpoint.committedOffset,
             contentFingerprint: checkpoint.contentFingerprint,
             observedSize: observedSize,
-            modificationTimeNanoseconds: modificationTimeNanoseconds,
+            modificationTimeNanoseconds: expectedModificationTimeNanoseconds,
+            statusChangeTimeNanoseconds: statusChangeTimeNanoseconds(currentStat),
             accumulator: accumulator
         )
     }
@@ -670,6 +695,30 @@ actor CodexUsageCollector {
     private func modificationTimeNanoseconds(_ value: stat) -> Int64 {
         Int64(value.st_mtimespec.tv_sec) * 1_000_000_000
             + Int64(value.st_mtimespec.tv_nsec)
+    }
+
+    private func statusChangeTimeNanoseconds(_ value: stat) -> Int64 {
+        Int64(value.st_ctimespec.tv_sec) * 1_000_000_000
+            + Int64(value.st_ctimespec.tv_nsec)
+    }
+
+    private func verifyOpenedSourceState(
+        fileDescriptor: Int32,
+        expectedIdentity: String,
+        expectedSize: Int64,
+        expectedModificationTime: Int64,
+        expectedStatusChangeTime: Int64
+    ) throws {
+        var currentStat = stat()
+        guard fstat(fileDescriptor, &currentStat) == 0,
+              (currentStat.st_mode & S_IFMT) == S_IFREG,
+              "\(UInt64(currentStat.st_dev)):\(UInt64(currentStat.st_ino))" == expectedIdentity,
+              Int64(currentStat.st_size) == expectedSize,
+              modificationTimeNanoseconds(currentStat) == expectedModificationTime,
+              statusChangeTimeNanoseconds(currentStat) == expectedStatusChangeTime
+        else {
+            throw CodexUsageCollectorError.sourceChangedDuringRead
+        }
     }
 
     private func processLine(

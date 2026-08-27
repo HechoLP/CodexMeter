@@ -2,20 +2,23 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 using CodexMeter.Core.Domain;
 using CodexMeter.Core.Parsing;
 
 namespace CodexMeter.Core.Services;
 
-public sealed class UsageScanner
+public sealed partial class UsageScanner
 {
     public const int MaximumSourceCount = 50_000;
     public const int MaximumEventCount = 1_000_000;
     public const int MaximumEventsPerSource = 500_000;
     public const long MaximumSourceBytes = 512L * 1_024 * 1_024;
     public const long MaximumBytesPerScan = 4L * 1_024 * 1_024 * 1_024;
+    public const long MaximumTotalSourceBytes = 32L * 1_024 * 1_024 * 1_024;
     public static readonly TimeSpan MaximumScanDuration = TimeSpan.FromSeconds(30);
 
     private readonly IReadOnlyList<string> roots;
@@ -26,6 +29,7 @@ public sealed class UsageScanner
     private readonly int maximumEventsPerSource;
     private readonly long maximumSourceBytes;
     private readonly long maximumBytesPerScan;
+    private readonly long maximumTotalSourceBytes;
     private readonly TimeSpan maximumScanDuration;
     private int invalidationGeneration;
     private int appliedInvalidationGeneration;
@@ -38,7 +42,8 @@ public sealed class UsageScanner
             MaximumEventsPerSource,
             MaximumSourceBytes,
             MaximumBytesPerScan,
-            MaximumScanDuration)
+            MaximumScanDuration,
+            MaximumTotalSourceBytes)
     {
     }
 
@@ -49,7 +54,8 @@ public sealed class UsageScanner
         int maximumEventsPerSource,
         long maximumSourceBytes,
         long maximumBytesPerScan,
-        TimeSpan maximumScanDuration)
+        TimeSpan maximumScanDuration,
+        long maximumTotalSourceBytes = MaximumTotalSourceBytes)
     {
         this.roots = (roots ?? DefaultRoots()).Select(Path.GetFullPath).ToArray();
         this.maximumSourceCount = Math.Max(1, maximumSourceCount);
@@ -57,6 +63,7 @@ public sealed class UsageScanner
         this.maximumEventsPerSource = Math.Max(1, maximumEventsPerSource);
         this.maximumSourceBytes = Math.Max(CodexJsonlParser.MaximumLineBytes + 1L, maximumSourceBytes);
         this.maximumBytesPerScan = Math.Max(this.maximumSourceBytes, maximumBytesPerScan);
+        this.maximumTotalSourceBytes = Math.Max(this.maximumSourceBytes, maximumTotalSourceBytes);
         this.maximumScanDuration = maximumScanDuration > TimeSpan.Zero
             ? maximumScanDuration
             : TimeSpan.FromSeconds(1);
@@ -114,11 +121,12 @@ public sealed class UsageScanner
             }
         }
 
-        var sources = DiscoverSources(cancellationToken);
+        var discovery = DiscoverSources(cancellationToken);
+        var sources = discovery.Sources;
         var activePaths = new HashSet<string>(sources, StringComparer.OrdinalIgnoreCase);
-        var partial = false;
+        var partial = discovery.ResourceLimitReached;
         var hasMoreWork = false;
-        var resourceLimitReached = false;
+        var resourceLimitReached = discovery.ResourceLimitReached;
         var scannedBytes = 0L;
         var scanStartedAt = Stopwatch.GetTimestamp();
 
@@ -242,9 +250,12 @@ public sealed class UsageScanner
         return new ScanResult(snapshot, sources.Count, status, hasMoreWork);
     }
 
-    private List<string> DiscoverSources(CancellationToken cancellationToken)
+    private DiscoveryResult DiscoverSources(CancellationToken cancellationToken)
     {
         var sources = new List<string>();
+        var identities = new HashSet<FileIdentity>();
+        var totalSourceBytes = 0L;
+        var resourceLimitReached = false;
         var options = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -277,16 +288,34 @@ public sealed class UsageScanner
 
                 if (sources.Count >= maximumSourceCount)
                 {
-                    throw new InvalidOperationException(
-                        $"More than {maximumSourceCount:N0} Codex session files were found.");
+                    resourceLimitReached = true;
+                    break;
+                }
+
+                var info = new FileInfo(fullPath);
+                if (info.Length > maximumSourceBytes)
+                {
+                    resourceLimitReached = true;
+                    continue;
+                }
+                var identity = FileIdentity.TryRead(fullPath);
+                if (identity is { } value && !identities.Add(value))
+                {
+                    continue;
+                }
+                if (info.Length > maximumTotalSourceBytes - totalSourceBytes)
+                {
+                    resourceLimitReached = true;
+                    continue;
                 }
 
                 sources.Add(fullPath);
+                totalSourceBytes += info.Length;
             }
         }
 
         sources.Sort(StringComparer.OrdinalIgnoreCase);
-        return sources;
+        return new DiscoveryResult(sources, resourceLimitReached);
     }
 
     private static ParsedFile ParseFile(
@@ -536,6 +565,7 @@ public sealed class UsageScanner
         IReadOnlyList<UsageEvent> Events,
         bool Partial,
         bool ResourceLimitReached);
+    private sealed record DiscoveryResult(List<string> Sources, bool ResourceLimitReached);
     private sealed record CachedFile(FileStamp Stamp, IReadOnlyList<UsageEvent> Events, bool Partial);
     private readonly record struct FileStamp(long Length, long LastWriteTicks, long CreationTimeTicks)
     {
@@ -545,6 +575,62 @@ public sealed class UsageScanner
             return new FileStamp(info.Length, info.LastWriteTimeUtc.Ticks, info.CreationTimeUtc.Ticks);
         }
     }
+
+    private readonly record struct FileIdentity(uint VolumeSerialNumber, ulong FileIndex)
+    {
+        public static FileIdentity? TryRead(string path)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return null;
+            }
+
+            try
+            {
+                using var handle = File.OpenHandle(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete,
+                    FileOptions.None);
+                if (!GetFileInformationByHandle(handle, out var information))
+                {
+                    return null;
+                }
+
+                return new FileIdentity(
+                    information.VolumeSerialNumber,
+                    ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow);
+            }
+            catch (Exception error) when (error is IOException
+                                          or UnauthorizedAccessException
+                                          or System.Security.SecurityException)
+            {
+                return null;
+            }
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ByHandleFileInformation
+    {
+        internal uint FileAttributes;
+        internal System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+        internal System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+        internal System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+        internal uint VolumeSerialNumber;
+        internal uint FileSizeHigh;
+        internal uint FileSizeLow;
+        internal uint NumberOfLinks;
+        internal uint FileIndexHigh;
+        internal uint FileIndexLow;
+    }
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetFileInformationByHandle(
+        SafeFileHandle file,
+        out ByHandleFileInformation fileInformation);
 }
 
 internal sealed record BoundedLine(byte[]? Bytes, bool Oversized);
