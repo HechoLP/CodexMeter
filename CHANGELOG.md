@@ -15,6 +15,18 @@ All notable changes to CodexMeter will be documented in this file.
 - Made Windows settings saves atomic, prevented repeated startup-registry writes, and made the Settings window reopen reliably without duplicate event handlers.
 - Derived Windows package versions from the project metadata so CI and release artifacts cannot silently reuse an older release version.
 
+## [0.1.3] - 2026-08-27
+
+### Added
+
+- Added purposeful refresh feedback: the refresh icon completes one bounded turn and changed token totals transition smoothly while respecting Reduce Motion.
+- Added installation through the public `HechoLP/homebrew-tap` personal Tap.
+
+### Fixed
+
+- Replaced vague partial/stale-history warnings with concrete refresh results and update timestamps while preserving internal accounting safeguards.
+- Removed the same ambiguous status copy from the Windows source for the next Windows package.
+
 ## [0.1.2] - 2026-08-27
 
 ### Fixed

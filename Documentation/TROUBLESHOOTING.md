@@ -8,9 +8,9 @@ Confirm that Codex has created local session history on this Mac. CodexMeter doe
 
 CodexMeter reads `~/.codex/sessions` and `~/.codex/archived_sessions`. Run a local Codex session first, then choose Refresh in the menu bar popover.
 
-## Statistics appear incomplete
+## Totals are lower than expected
 
-The footer reports partial accuracy when a cumulative baseline, malformed event, or interleaved counter cannot be resolved safely. CodexMeter intentionally undercounts ambiguous usage instead of inventing a delta. Choose Data > Rebuild Statistics after Codex has finished writing its session files.
+CodexMeter excludes a cumulative baseline, malformed event, or interleaved counter when it cannot derive a safe delta. Choose Data > Rebuild Statistics after Codex has finished writing its session files. Deleted logs and usage from another computer cannot be reconstructed locally.
 
 ## Rebuild statistics
 

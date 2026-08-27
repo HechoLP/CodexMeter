@@ -5,7 +5,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=flat-square&logo=windows11&logoColor=white)](Documentation/WINDOWS.md)
-[![macOS Release](https://img.shields.io/badge/macOS-v0.1.2%20preview-6e5aff?style=flat-square)](Documentation/ReleaseNotes/0.1.2.md)
+[![macOS Release](https://img.shields.io/badge/macOS-v0.1.3%20preview-6e5aff?style=flat-square)](Documentation/ReleaseNotes/0.1.3.md)
 [![Windows Release](https://img.shields.io/badge/Windows-v0.1.1%20preview-0078D4?style=flat-square)](Documentation/ReleaseNotes/windows-0.1.1.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
@@ -30,9 +30,26 @@ Tiny native macOS menu bar and Windows notification-area apps that turn **local 
 - macOS 14 Sonoma or later
 - Local Codex session history under `~/.codex`
 
+### Homebrew Tap
+
+Install the current certificate-free preview from the public personal Tap:
+
+```bash
+brew install --cask HechoLP/tap/codexmeter
+```
+
+Homebrew verifies the published ZIP against the Cask's SHA-256 checksum. Because the app is ad-hoc signed and not Apple-notarized, macOS still blocks its first launch. After confirming that Homebrew installed `HechoLP/tap/codexmeter`, remove quarantine from this app only and open it:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/CodexMeter.app
+open /Applications/CodexMeter.app
+```
+
+Homebrew 6 no longer provides the old `--no-quarantine` installation option. The explicit command above keeps the trust decision limited to `/Applications/CodexMeter.app`.
+
 ### Direct download
 
-CodexMeter v0.1.2 is available from the public [CodexMeter Releases repository](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v0.1.2) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
+CodexMeter v0.1.3 is available from the public [CodexMeter Releases repository](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v0.1.3) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
 
 This is an unnotarized preview, not an Apple-trusted release. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
 
@@ -42,8 +59,8 @@ This is an unnotarized preview, not an Apple-trusted release. Sparkle update arc
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-0.1.2.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-0.1.2.dmg
+grep ' CodexMeter-0.1.3.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-0.1.3.dmg
 ```
 
 열린 DMG에서 `CodexMeter.app`을 `Applications` 폴더로 복사합니다. 체크섬이 일치하고 공식 릴리스임을 확인한 경우에만 아래 명령으로 해당 앱의 격리 속성을 제거하고 실행하세요.
@@ -127,7 +144,7 @@ It does not use an official account-usage API and does not scan unrelated folder
 - Deleted logs cannot be reconstructed.
 - Activity from another computer is not included unless its session history exists locally.
 - A future Codex session-schema change may require a CodexMeter update.
-- Ambiguous counter baselines and malformed records are reported as partial rather than guessed.
+- Ambiguous counter baselines and malformed records are excluded rather than guessed.
 
 ## Roadmap
 
@@ -194,7 +211,7 @@ dotnet test .\Windows\CodexMeter.Windows.sln --configuration Release
 ## Troubleshooting
 
 - **No usage found:** launch Codex at least once and check that `~/.codex/sessions` contains JSONL files.
-- **Statistics look incomplete:** use **Settings → Data → Rebuild Statistics**.
+- **Totals are lower than expected:** use **Settings → Data → Rebuild Statistics** after Codex finishes writing its session files.
 - **Launch at Login is blocked:** open macOS **System Settings → General → Login Items**.
 - **Database safety limit reached:** review the local totals, then use **Clear Local History** if they are no longer needed.
 
