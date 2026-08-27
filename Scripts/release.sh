@@ -9,7 +9,7 @@ identity=${CODE_SIGN_IDENTITY:-}
 team_id=${CODE_SIGN_TEAM_ID:-}
 if [[ -z "${identity}" || -z "${team_id}" ]]; then
   print -u2 "A runnable Sparkle build requires CODE_SIGN_IDENTITY and CODE_SIGN_TEAM_ID."
-  print -u2 "Use an Apple Development identity for previews or release_public.sh for Developer ID."
+  print -u2 "Use an Apple Development identity for local signed candidates or release_public.sh for Developer ID."
   exit 2
 fi
 

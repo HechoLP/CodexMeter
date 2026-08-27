@@ -210,7 +210,7 @@ hdiutil detach -quiet "${mount_dir}"
 mounted=0
 
 if [[ "${require_unsigned_release}" == "1" ]]; then
-  print "Certificate-free preview verified. Gatekeeper trust and notarization are intentionally absent."
+  print "Certificate-free release verified. Apple Developer ID trust and notarization are intentionally absent."
 elif [[ "${require_public_release}" != "1" ]]; then
   print "Local candidate verified. Public release still requires Developer ID signing and notarization."
 fi
