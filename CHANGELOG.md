@@ -4,6 +4,10 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added a native Windows 10/11 tray application with x64 and ARM64 self-contained packages, local Codex accounting, settings, tests, CI, and a certificate-free release workflow.
+
 ## [0.1.1] - 2026-08-27
 
 ### Added

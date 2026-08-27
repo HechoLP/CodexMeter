@@ -1,10 +1,12 @@
 # CodexMeter ◈ — Know where your Codex tokens went.
 
-> Local Codex token usage, always one click away in your macOS menu bar.
+> Local Codex token usage, always one click away on macOS and Windows.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
-[![Release](https://img.shields.io/badge/release-v0.1.1%20preview-6e5aff?style=flat-square)](Documentation/ReleaseNotes/0.1.1.md)
+[![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=flat-square&logo=windows11&logoColor=white)](Documentation/WINDOWS.md)
+[![macOS Release](https://img.shields.io/badge/macOS-v0.1.1%20preview-6e5aff?style=flat-square)](Documentation/ReleaseNotes/0.1.1.md)
+[![Windows Release](https://img.shields.io/badge/Windows-v0.1.0%20preview-0078D4?style=flat-square)](Documentation/ReleaseNotes/windows-0.1.0.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -12,18 +14,18 @@
 
 <p align="center"><sub>The app popover shown above is an actual CodexMeter screen.</sub></p>
 
-Tiny, native macOS 14+ menu bar app that turns **local Codex session history** into clear token totals. Today, this week, this month, and all locally available time stay one click away—without an account login, API key, browser cookie, telemetry, or cloud sync.
+Tiny native macOS menu bar and Windows notification-area apps that turn **local Codex session history** into clear token totals. Today, this week, this month, and all locally available time stay one click away—without an account login, API key, browser cookie, telemetry, or cloud sync.
 
 ## Why
 
 - **Glanceable totals.** See input, cached input, output, and total tokens without leaving the menu bar.
 - **Honest accounting.** Cumulative snapshots are normalized into increases instead of being added repeatedly.
 - **Local by design.** Prompts, responses, source code, credentials, and raw session paths are not stored in CodexMeter's database.
-- **Native and quiet.** Swift and SwiftUI, no Dock icon, no telemetry, and a narrowly scoped signed-update connection to GitHub.
+- **Native and quiet.** SwiftUI on macOS, WPF on Windows, no Dock/taskbar window, and no telemetry.
 
 ## Install
 
-### Requirements
+### macOS requirements
 
 - macOS 14 Sonoma or later
 - Local Codex session history under `~/.codex`
@@ -53,10 +55,23 @@ open /Applications/CodexMeter.app
 
 `xattr` 명령은 이 앱에 대한 macOS의 다운로드 격리 검사를 제거합니다. 출처가 다르거나 체크섬이 일치하지 않는 파일에는 사용하지 마세요. Developer ID 서명과 Apple 공증을 마친 정식 릴리스에서는 이 단계가 필요하지 않습니다.
 
+### Windows portable preview
+
+Windows 10/11 users can download the x64 or ARM64 portable ZIP from the [`windows-v0.1.0` release](https://github.com/HechoLP/CodexMeter/releases/tag/windows-v0.1.0). The package is self-contained, so a separate .NET installation is not required.
+
+Verify the ZIP against `SHA256SUMS-windows.txt`, extract it to a permanent folder, and run `CodexMeter.exe`. This preview is not code-signed, so Windows SmartScreen may require **Properties → Unblock** or the following command after the hash is confirmed:
+
+```powershell
+Unblock-File .\CodexMeter.exe
+Start-Process .\CodexMeter.exe
+```
+
+See the complete [Windows installation and build guide](Documentation/WINDOWS.md).
+
 ## First run
 
 1. Launch CodexMeter after Codex has created local session history.
-2. Select the diamond meter in the menu bar.
+2. Select the diamond meter in the macOS menu bar or Windows notification area.
 3. Open **Settings** to choose the displayed period, refresh mode, menu bar elements, and launch-at-login behavior.
 4. Use **Refresh** whenever you want an immediate reconciliation.
 
@@ -66,14 +81,14 @@ No Codex account sign-in is required.
 
 - Today, week, month, and locally observable all-time totals
 - Input, cached input, output, and total-token breakdowns
-- Automatic file-event refresh with a lightweight one-minute fallback
+- Automatic file-event refresh with a lightweight configurable fallback
 - Manual, 30-second, one-minute, and five-minute refresh modes
-- Incremental JSONL ingestion with transactional SQLite checkpoints
+- Bounded incremental JSONL ingestion on macOS and a changed-file memory cache on Windows
 - Duplicate, replay, partial-line, truncation, and same-inode rewrite protection
 - Resumable 32 MiB / roughly five-second import slices for large histories
-- Native menu bar popover, Settings window, VoiceOver labels, and keyboard-accessible controls
-- Optional Launch at Login through macOS Service Management
-- Daily signed update checks with automatic download/install and a manual check button
+- Native menu bar/notification-area popover and Settings window
+- Optional launch at login through macOS Service Management or the current-user Windows startup key
+- Daily signed update checks on macOS and a manually opened release page on Windows
 - Secure local-history clearing with a persistent re-import cutoff
 - No notifications, advertising, analytics, or cloud account
 
@@ -84,8 +99,8 @@ Codex session JSONL
   → contained source discovery
   → bounded incremental reader
   → cumulative snapshot normalization
-  → transactional SQLite storage
-  → menu bar totals
+  → local normalized event cache
+  → menu bar or notification-area totals
 ```
 
 Codex token-count events are cumulative snapshots. CodexMeter derives component-wise increases and ignores repeated snapshots. Cached input is a subset of input and is never added twice:
@@ -101,6 +116,8 @@ CodexMeter reads JSONL files only inside:
 
 - `~/.codex/sessions`
 - `~/.codex/archived_sessions`
+- `%USERPROFILE%\.codex\sessions` on Windows
+- `%USERPROFILE%\.codex\archived_sessions` on Windows
 
 It does not use an official account-usage API and does not scan unrelated folders.
 
@@ -108,7 +125,7 @@ It does not use an official account-usage API and does not scan unrelated folder
 
 - **All Time** means the oldest token record still present in local Codex session history through now.
 - Deleted logs cannot be reconstructed.
-- Activity from another Mac is not included unless its session history exists locally.
+- Activity from another computer is not included unless its session history exists locally.
 - A future Codex session-schema change may require a CodexMeter update.
 - Ambiguous counter baselines and malformed records are reported as partial rather than guessed.
 
@@ -118,25 +135,25 @@ Codex is the first supported data source. Future releases are planned to expand 
 
 ## Privacy
 
-CodexMeter processes usage entirely on-device. Its only network feature is Sparkle's signed update check against the configured public release repository's dedicated `update-feed` branch and GitHub Release archive; it never attaches token totals, prompts, source paths, credentials, or database contents. Automatic checks can be disabled under **Settings → General**. CodexMeter stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
+CodexMeter processes usage entirely on-device. The macOS build can check a signed Sparkle update feed; the Windows build opens GitHub Releases only when requested. Neither platform attaches token totals, prompts, source paths, credentials, or local cache contents. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `.codex/auth.json`.
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 
-## macOS permissions
+## Platform permissions
 
-| Capability | Required? | Why |
-| --- | :---: | --- |
-| Full Disk Access | No | Reads only supported files under `~/.codex`. |
-| Accessibility | No | Does not control other apps. |
-| Screen Recording | No | Does not inspect the screen. |
-| Keychain access | No | Does not read Codex credentials. |
-| Launch at Login approval | Optional | Used only when automatic launch is enabled. |
+| Capability | macOS | Windows | Why |
+| --- | :---: | :---: | --- |
+| Full Disk Access | No | N/A | Reads only supported files under `.codex`. |
+| Accessibility | No | No | Does not control other apps. |
+| Screen Recording | No | No | Does not inspect the screen. |
+| Codex credential access | No | No | Does not read Codex authentication data. |
+| Launch at Login | Optional | Optional | Enabled only by the user in Settings. |
 
 ## Settings
 
 | Pane | Controls |
 | --- | --- |
-| General | Launch at Login, refresh mode, week start, automatic updates |
+| General | Launch at Login, refresh mode, week start, and macOS automatic updates |
 | Appearance | Period, metric, number style, icon/text visibility, popover details |
 | Usage | Accounting semantics and cached-input explanation |
 | Data | Source status, database statistics, rebuild, clear history |
@@ -164,6 +181,14 @@ export CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 export CODE_SIGN_TEAM_ID="TEAMID"
 export NOTARY_PROFILE="codexmeter-notary"
 Scripts/release_public.sh
+```
+
+Build and test the Windows version with the .NET 8 SDK:
+
+```powershell
+dotnet restore .\Windows\CodexMeter.Windows.sln
+dotnet test .\Windows\CodexMeter.Windows.sln --configuration Release
+.\Windows\Scripts\package.ps1 -RuntimeIdentifier win-x64 -ResetManifest
 ```
 
 ## Troubleshooting
