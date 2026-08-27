@@ -3,7 +3,6 @@ import SwiftUI
 
 struct MenuPopoverView: View {
     @EnvironmentObject private var store: UsageStore
-    @Environment(\.openSettings) private var openSettings
     @AppStorage("numberStyle") private var numberStyleRawValue = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
     @AppStorage("showLastUpdated") private var showLastUpdated = true
@@ -139,7 +138,7 @@ struct MenuPopoverView: View {
             .accessibilityLabel("Refresh usage")
 
             Button {
-                openSettings()
+                SettingsWindowController.shared.showSettings(for: store)
             } label: {
                 Image(systemName: "gearshape")
             }

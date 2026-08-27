@@ -72,13 +72,13 @@ private struct GeneralSettingsView: View {
 }
 
 private struct AppearanceSettingsView: View {
-    @AppStorage("menuBarDisplay") private var display = MenuBarDisplay.total.rawValue
+    @AppStorage("menuBarDisplay") private var display = AppPreferences.defaultMenuBarDisplay
     @AppStorage("menuBarPeriod") private var period = UsagePeriod.today.rawValue
     @AppStorage("numberStyle") private var numberStyle = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
     @AppStorage("showLastUpdated") private var showLastUpdated = true
-    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
-    @AppStorage("showMenuBarText") private var showMenuBarText = true
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = AppPreferences.defaultShowMenuBarIcon
+    @AppStorage("showMenuBarText") private var showMenuBarText = AppPreferences.defaultShowMenuBarText
 
     var body: some View {
         Form {

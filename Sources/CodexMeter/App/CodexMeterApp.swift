@@ -13,15 +13,12 @@ import SwiftUI
 struct CodexMeterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: UsageStore
-    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
-    @AppStorage("showMenuBarText") private var showMenuBarText = true
+    @AppStorage("menuBarDisplay") private var menuBarDisplay = AppPreferences.defaultMenuBarDisplay
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = AppPreferences.defaultShowMenuBarIcon
+    @AppStorage("showMenuBarText") private var showMenuBarText = AppPreferences.defaultShowMenuBarText
 
     init() {
-        let defaults = UserDefaults.standard
-        if defaults.string(forKey: "menuBarDisplay") == MenuBarDisplay.iconOnly.rawValue {
-            defaults.set(true, forKey: "showMenuBarIcon")
-            defaults.set(false, forKey: "showMenuBarText")
-        }
+        AppPreferences.registerDefaults()
         let store = UsageStore()
         _store = StateObject(wrappedValue: store)
         Task { @MainActor [weak store] in
@@ -58,11 +55,19 @@ struct CodexMeterApp: App {
     }
 
     private var resolvedShowIcon: Bool {
-        showMenuBarIcon || !showMenuBarText
+        AppPreferences.shouldShowMenuBarIcon(
+            display: menuBarDisplay,
+            showIcon: showMenuBarIcon,
+            showText: showMenuBarText
+        )
     }
 
     private var resolvedShowText: Bool {
-        showMenuBarText && !store.menuBarText.isEmpty
+        AppPreferences.shouldShowMenuBarText(
+            display: menuBarDisplay,
+            showText: showMenuBarText,
+            text: store.menuBarText
+        )
     }
 }
 
