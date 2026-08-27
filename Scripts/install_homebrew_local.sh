@@ -13,6 +13,7 @@ if ! command -v brew >/dev/null 2>&1; then
   print -u2 "Homebrew is required: https://brew.sh"
   exit 2
 fi
+export HOMEBREW_NO_AUTO_UPDATE=1
 if brew list --cask codexmeter >/dev/null 2>&1; then
   print -u2 "CodexMeter is already installed. Remove it before installing this local candidate."
   exit 1
