@@ -11,6 +11,14 @@ public sealed class UsageNormalizerTests
         CultureInfo.InvariantCulture);
 
     [Fact]
+    public void TotalMatchesChatGptProfileActivityAccounting()
+    {
+        var usage = new TokenUsage(1_200, 800, 300);
+
+        Assert.Equal(2_300, usage.TotalTokens);
+    }
+
+    [Fact]
     public void UsesCumulativeIncreaseAndIgnoresRepeatedSnapshot()
     {
         var first = UsageNormalizer.Normalize(Observation(new TokenUsage(100, 60, 20)), UsageNormalizationState.Empty);

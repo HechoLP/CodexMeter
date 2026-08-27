@@ -15,6 +15,12 @@ All notable changes to CodexMeter will be documented in this file.
 - Made Windows settings saves atomic, prevented repeated startup-registry writes, and made the Settings window reopen reliably without duplicate event handlers.
 - Derived Windows package versions from the project metadata so CI and release artifacts cannot silently reuse an older release version.
 
+## [0.1.6] - 2026-08-27
+
+### Fixed
+
+- Aligned displayed totals with ChatGPT profile token activity by including input, cached input, and output while preserving the three auditable components.
+
 ## [0.1.5] - 2026-08-27
 
 ### Fixed

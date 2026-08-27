@@ -29,7 +29,7 @@ The app runs quietly in the macOS menu bar, discovers supported JSONL session hi
 ## Capabilities and Constraints
 
 - Show input, cached input, output, and total tokens for Today, This Week, This Month, and locally observable All Time.
-- Treat cached input as a subset of input when that matches the observed Codex schema; never add it to total a second time.
+- Preserve input, cached input, and output as separate auditable components, and add all three for the displayed activity total so it matches the ChatGPT profile.
 - Persist normalized usage and parser checkpoints in SQLite under Application Support.
 - Avoid prompts, responses, source code, terminal output, and authentication data.
 - Operate without telemetry, analytics, cloud sync, notifications, a local web server, or a separately installed runtime.
