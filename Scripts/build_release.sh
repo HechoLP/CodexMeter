@@ -15,8 +15,24 @@ sparkle_feed_url="https://raw.githubusercontent.com/${release_repository}/${upda
 artifact_root="${project_root}/Artifacts"
 cache_root=${CODEXMETER_BUILD_CACHE:-"$(getconf DARWIN_USER_CACHE_DIR)/dev.codexmeter.release"}
 app_path=${CODEXMETER_APP_PATH:-"${cache_root}/${PRODUCT_NAME}.app"}
-binary_path="${project_root}/.build/apple/Products/Release/${PRODUCT_NAME}"
-sparkle_framework="${project_root}/.build/apple/Products/Release/Frameworks/Sparkle.framework"
+mkdir -p "${cache_root}"
+if [[ -n "${CODEXMETER_SWIFT_SCRATCH_PATH:-}" ]]; then
+  swift_scratch_path=${CODEXMETER_SWIFT_SCRATCH_PATH}
+  remove_swift_scratch=0
+else
+  swift_scratch_path=$(mktemp -d "${cache_root}/swift-build.XXXXXX")
+  remove_swift_scratch=1
+fi
+binary_path="${swift_scratch_path}/apple/Products/Release/${PRODUCT_NAME}"
+sparkle_framework="${swift_scratch_path}/apple/Products/Release/Frameworks/Sparkle.framework"
+
+cleanup() {
+  if [[ "${remove_swift_scratch}" == "1" \
+      && "${swift_scratch_path}" == "${cache_root}/swift-build."* ]]; then
+    rm -rf -- "${swift_scratch_path}"
+  fi
+}
+trap cleanup EXIT INT TERM
 
 if [[ "${adhoc_hardened_runtime}" != "0" && "${adhoc_hardened_runtime}" != "1" ]]; then
   print -u2 "CODEXMETER_ADHOC_HARDENED_RUNTIME must be 0 or 1."
@@ -26,7 +42,8 @@ fi
 "${script_dir}/verify_release_context.sh"
 
 cd "${project_root}"
-swift build -c release --arch arm64 --arch x86_64
+swift build -c release --arch arm64 --arch x86_64 \
+  --scratch-path "${swift_scratch_path}"
 
 if [[ ! -f "${binary_path}" ]]; then
   print -u2 "Release executable was not produced at ${binary_path}"
