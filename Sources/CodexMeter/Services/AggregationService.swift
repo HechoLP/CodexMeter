@@ -31,13 +31,14 @@ struct AggregationService: Sendable {
             if event.occurredAt >= todayStart { today = today.adding(event.usage) }
         }
 
+        let visibleEvents = events.filter { $0.occurredAt <= now }
         return UsageSnapshot(
             today: today,
             week: week,
             month: month,
             allTime: allTime,
-            quality: events.isEmpty ? .unavailable : .exact,
-            updatedAt: events.map(\.occurredAt).max()
+            quality: visibleEvents.isEmpty ? .unavailable : .exact,
+            updatedAt: visibleEvents.map(\.occurredAt).max()
         )
     }
 }

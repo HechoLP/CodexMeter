@@ -18,6 +18,8 @@ struct PeriodDetailView: View {
                 Text("Total tokens")
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(title) total tokens, \(formatted(usage.totalTokens))")
 
             Divider()
 
@@ -40,12 +42,7 @@ struct PeriodDetailView: View {
     }
 
     private var statusSymbol: String {
-        switch store.snapshot.quality {
-        case .exact: "checkmark.circle"
-        case .partial, .stale: "clock"
-        case .unavailable: "questionmark.circle"
-        case .error: "exclamationmark.triangle"
-        }
+        store.operationAwareStatusSymbol
     }
 
     private var title: String {

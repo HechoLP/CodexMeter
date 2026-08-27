@@ -7,6 +7,8 @@ struct CollectorRefreshResult: Sendable {
     let sourceCount: Int
     let processedBytes: Int64
     let statistics: DataStatistics
+    let hasMoreWork: Bool
+    let maintenanceWarning: String?
 }
 
 struct DataStatistics: Equatable, Sendable {
@@ -17,16 +19,43 @@ struct DataStatistics: Equatable, Sendable {
     static let empty = DataStatistics(databaseBytes: 0, oldestRecord: nil, newestRecord: nil)
 }
 
+private enum CodexUsageCollectorError: Error {
+    case sourceChangedDuringRead
+}
+
+private struct SourceProcessResult {
+    let processedBytes: Int64
+    let hasMore: Bool
+}
+
+private enum CollectorResourceLimits {
+    static let maximumBytesPerRefresh: Int64 = 32 * 1_024 * 1_024
+    static let maximumRefreshDuration: Duration = .seconds(5)
+}
+
 actor CodexUsageCollector {
     private let database: SQLiteDatabase
     private let roots: [URL]
     private let discovery = CodexSourceDiscovery()
     private let parser = CodexJSONLParser()
     private let normalizer = UsageNormalizer()
+    private let maximumBytesPerRefresh: Int64
+    private let maximumRefreshDuration: Duration
+    private var sourceFingerprintKeyData: Data?
 
-    init(database: SQLiteDatabase, roots: [URL]) {
+    init(
+        database: SQLiteDatabase,
+        roots: [URL],
+        maximumBytesPerRefresh: Int64 = CollectorResourceLimits.maximumBytesPerRefresh,
+        maximumRefreshDuration: Duration = CollectorResourceLimits.maximumRefreshDuration
+    ) {
         self.database = database
         self.roots = roots
+        self.maximumBytesPerRefresh = max(
+            Int64(CodexJSONLParser.maximumLineBytes + 1),
+            maximumBytesPerRefresh
+        )
+        self.maximumRefreshDuration = maximumRefreshDuration
     }
 
     func cachedSnapshot(now: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> UsageSnapshot {
@@ -35,16 +64,30 @@ actor CodexUsageCollector {
 
     func refresh(now: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
         let sources = try discovery.discover(in: roots)
-        let importCutoff = try await database.importCutoff()
-        let dataEpoch = try await database.dataEpoch()
+        let importPolicy = try await database.importPolicy()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: maximumRefreshDuration)
         var processedBytes: Int64 = 0
+        var hasMoreWork = false
         for source in sources {
             try Task.checkCancellation()
-            processedBytes += try await process(
+            let remainingBytes = maximumBytesPerRefresh - processedBytes
+            guard remainingBytes > 0, clock.now < deadline else {
+                hasMoreWork = true
+                break
+            }
+            let result = try await process(
                 source,
-                importCutoff: importCutoff,
-                expectedEpoch: dataEpoch
+                importCutoff: importPolicy.cutoff,
+                expectedEpoch: importPolicy.dataEpoch,
+                maximumBytes: remainingBytes,
+                deadline: deadline
             )
+            processedBytes += result.processedBytes
+            if result.hasMore {
+                hasMoreWork = true
+                break
+            }
         }
 
         let snapshot = try await database.usageSnapshot(now: now, calendar: calendar, weekStart: weekStart)
@@ -53,7 +96,9 @@ actor CodexUsageCollector {
             snapshot: snapshot,
             sourceCount: sources.count,
             processedBytes: processedBytes,
-            statistics: statistics
+            statistics: statistics,
+            hasMoreWork: hasMoreWork,
+            maintenanceWarning: nil
         )
     }
 
@@ -63,26 +108,99 @@ actor CodexUsageCollector {
     }
 
     func clearLocalHistory(at cutoff: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
-        try await database.clearLocalHistory(at: cutoff)
-        return try await refresh(now: cutoff, calendar: calendar, weekStart: weekStart)
+        let compactionStatus = try await database.clearLocalHistory(at: cutoff)
+        let result = try await refresh(now: cutoff, calendar: calendar, weekStart: weekStart)
+        return CollectorRefreshResult(
+            snapshot: result.snapshot,
+            sourceCount: result.sourceCount,
+            processedBytes: result.processedBytes,
+            statistics: result.statistics,
+            hasMoreWork: result.hasMoreWork,
+            maintenanceWarning: compactionStatus == .deferred
+                ? "History cleared; secure compaction will need another attempt"
+                : nil
+        )
     }
 
     private func process(
         _ source: CodexSessionSource,
         importCutoff: Date?,
-        expectedEpoch: Int64
-    ) async throws -> Int64 {
-        var checkpoint = try await database.checkpoint(for: source.url.path)
-            ?? SourceCheckpoint.fresh(sourcePath: source.url.path, fileIdentity: source.identity)
+        expectedEpoch: Int64,
+        maximumBytes: Int64,
+        deadline: ContinuousClock.Instant
+    ) async throws -> SourceProcessResult {
+        let checkpointKey = storageIdentifier(source.url.standardizedFileURL.path)
+        var checkpoint = try await database.checkpoint(for: checkpointKey)
+            ?? SourceCheckpoint.fresh(sourcePath: checkpointKey, fileIdentity: source.identity)
+        let previousCheckpoint = checkpoint
+        let fingerprintKey = try await sourceFingerprintKey()
 
-        if checkpoint.fileIdentity != source.identity || source.size < checkpoint.committedOffset {
+        let handle = try FileHandle(forReadingFrom: source.url)
+        defer { try? handle.close() }
+        var openedStat = stat()
+        guard fstat(handle.fileDescriptor, &openedStat) == 0,
+              (openedStat.st_mode & S_IFMT) == S_IFREG,
+              "\(UInt64(openedStat.st_dev)):\(UInt64(openedStat.st_ino))" == source.identity
+        else { return SourceProcessResult(processedBytes: 0, hasMore: false) }
+        let openedSize = Int64(openedStat.st_size)
+        let openedModificationTime = modificationTimeNanoseconds(openedStat)
+
+        let sameSizeMutation = checkpoint.observedSize > 0
+            && checkpoint.observedSize == openedSize
+            && checkpoint.modificationTimeNanoseconds > 0
+            && checkpoint.modificationTimeNanoseconds != openedModificationTime
+        let unchangedSource = checkpoint.contentFingerprint.isEmpty == false
+            && checkpoint.observedSize == openedSize
+            && checkpoint.modificationTimeNanoseconds == openedModificationTime
+            && checkpoint.hasPendingImport == false
+        if checkpoint.fileIdentity != source.identity
+            || openedSize < checkpoint.committedOffset
+            || sameSizeMutation {
             checkpoint = SourceCheckpoint.fresh(
-                sourcePath: source.url.path,
+                sourcePath: checkpointKey,
                 fileIdentity: source.identity,
                 generation: checkpoint.generation + 1
             )
+        } else if unchangedSource {
+            return SourceProcessResult(processedBytes: 0, hasMore: false)
+        } else if checkpoint.committedOffset > 0,
+                  openedSize >= checkpoint.committedOffset {
+            let observedFingerprint = try contentFingerprint(
+                fileDescriptor: handle.fileDescriptor,
+                endingAt: checkpoint.committedOffset,
+                key: fingerprintKey
+            )
+            if checkpoint.contentFingerprint.isEmpty {
+                checkpoint.contentFingerprint = observedFingerprint
+            } else if checkpoint.contentFingerprint != observedFingerprint {
+                checkpoint = SourceCheckpoint.fresh(
+                    sourcePath: checkpointKey,
+                    fileIdentity: source.identity,
+                    generation: checkpoint.generation + 1
+                )
+            }
         }
-        guard source.size > checkpoint.committedOffset else { return 0 }
+        checkpoint.observedSize = openedSize
+        checkpoint.modificationTimeNanoseconds = openedModificationTime
+        guard openedSize > checkpoint.committedOffset else {
+            checkpoint.hasPendingImport = false
+            if checkpoint.contentFingerprint.isEmpty {
+                checkpoint.contentFingerprint = try contentFingerprint(
+                    fileDescriptor: handle.fileDescriptor,
+                    endingAt: checkpoint.committedOffset,
+                    key: fingerprintKey
+                )
+            }
+            if checkpoint != previousCheckpoint {
+                _ = try await database.commit(
+                    events: [],
+                    checkpoint: checkpoint,
+                    normalizationState: nil,
+                    expectedEpoch: expectedEpoch
+                )
+            }
+            return SourceProcessResult(processedBytes: 0, hasMore: false)
+        }
 
         if checkpoint.sessionID == nil {
             checkpoint.sessionID = sessionIdentifierFromFilename(source.url)
@@ -99,28 +217,31 @@ actor CodexUsageCollector {
         } else {
             UsageNormalizationState.empty
         }
+        var persistedNormalizationState = normalizationState
         var loadedStateSessionID = checkpoint.sessionID
         var pendingEvents: [UsageEvent] = []
         pendingEvents.reserveCapacity(256)
         var completedLineCount = 0
         let startingOffset = checkpoint.committedOffset
 
-        let handle = try FileHandle(forReadingFrom: source.url)
-        defer { try? handle.close() }
-        var openedStat = stat()
-        guard fstat(handle.fileDescriptor, &openedStat) == 0,
-              (openedStat.st_mode & S_IFMT) == S_IFREG,
-              "\(UInt64(openedStat.st_dev)):\(UInt64(openedStat.st_ino))" == source.identity
-        else { return 0 }
         try handle.seek(toOffset: UInt64(checkpoint.committedOffset))
 
         var lineBuffer = Data()
         lineBuffer.reserveCapacity(64 * 1024)
         var lineStartOffset = checkpoint.committedOffset
         var readOffset = checkpoint.committedOffset
-        var skippingOversizedLine = false
+        var skippingOversizedLine = checkpoint.isSkippingOversizedLine
+        var stoppedForBudget = false
+        let clock = ContinuousClock()
 
-        while let chunk = try handle.read(upToCount: 256 * 1024), !chunk.isEmpty {
+        while true {
+            let scannedBytes = readOffset - startingOffset
+            if scannedBytes >= maximumBytes || (scannedBytes > 0 && clock.now >= deadline) {
+                stoppedForBudget = true
+                break
+            }
+            let readLimit = Int(min(Int64(256 * 1_024), maximumBytes - scannedBytes))
+            guard let chunk = try handle.read(upToCount: readLimit), !chunk.isEmpty else { break }
             try Task.checkCancellation()
             let chunkStartOffset = readOffset
             readOffset += Int64(chunk.count)
@@ -130,6 +251,7 @@ actor CodexUsageCollector {
                     let afterNewline = chunk.index(after: newline)
                     let consumed = chunk.distance(from: chunk.startIndex, to: afterNewline)
                     checkpoint.committedOffset = chunkStartOffset + Int64(consumed)
+                    checkpoint.isSkippingOversizedLine = false
                     lineStartOffset = checkpoint.committedOffset
                     skippingOversizedLine = false
                     lineBuffer.append(contentsOf: chunk[afterNewline...])
@@ -151,6 +273,7 @@ actor CodexUsageCollector {
                     checkpoint: &checkpoint,
                     metadata: &metadata,
                     normalizationState: &normalizationState,
+                    persistedNormalizationState: &persistedNormalizationState,
                     loadedStateSessionID: &loadedStateSessionID,
                     pendingEvents: &pendingEvents,
                     importCutoff: importCutoff
@@ -161,12 +284,24 @@ actor CodexUsageCollector {
                     + Int64(lineBuffer.distance(from: lineBuffer.startIndex, to: consumedThrough))
 
                 if completedLineCount >= 1_000 || pendingEvents.count >= 256 {
-                    try await database.commit(
+                    try updateCheckpointFingerprint(
+                        &checkpoint,
+                        fileDescriptor: handle.fileDescriptor,
+                        key: fingerprintKey
+                    )
+                    let committedNormalizationState = try await database.commit(
                         events: pendingEvents,
                         checkpoint: checkpoint,
                         normalizationState: checkpoint.sessionID == nil ? nil : normalizationState,
-                        expectedEpoch: expectedEpoch
+                        expectedEpoch: expectedEpoch,
+                        expectedNormalizationState: checkpoint.sessionID == nil ? nil : persistedNormalizationState
                     )
+                    if let committedNormalizationState {
+                        persistedNormalizationState = committedNormalizationState
+                        if normalizationState.cumulativeHighWaterMark != nil {
+                            normalizationState = committedNormalizationState
+                        }
+                    }
                     pendingEvents.removeAll(keepingCapacity: true)
                     completedLineCount = 0
                 }
@@ -181,22 +316,124 @@ actor CodexUsageCollector {
             if lineBuffer.count > CodexJSONLParser.maximumLineBytes {
                 lineBuffer.removeAll(keepingCapacity: false)
                 skippingOversizedLine = true
+                checkpoint.isSkippingOversizedLine = true
             }
         }
 
         if skippingOversizedLine {
             checkpoint.committedOffset = readOffset
         }
+        var finalStat = stat()
+        let sourceGrewWhileReading = fstat(handle.fileDescriptor, &finalStat) == 0
+            && Int64(finalStat.st_size) > readOffset
+        checkpoint.hasPendingImport = stoppedForBudget || sourceGrewWhileReading
 
-        if checkpoint.committedOffset > startingOffset {
-            try await database.commit(
+        if checkpoint.committedOffset > startingOffset || checkpoint != previousCheckpoint {
+            try updateCheckpointFingerprint(
+                &checkpoint,
+                fileDescriptor: handle.fileDescriptor,
+                key: fingerprintKey
+            )
+            let committedNormalizationState = try await database.commit(
                 events: pendingEvents,
                 checkpoint: checkpoint,
                 normalizationState: checkpoint.sessionID == nil ? nil : normalizationState,
-                expectedEpoch: expectedEpoch
+                expectedEpoch: expectedEpoch,
+                expectedNormalizationState: checkpoint.sessionID == nil ? nil : persistedNormalizationState
             )
+            if let committedNormalizationState,
+               normalizationState.cumulativeHighWaterMark != nil {
+                normalizationState = committedNormalizationState
+            }
         }
-        return checkpoint.committedOffset - startingOffset
+        return SourceProcessResult(
+            processedBytes: readOffset - startingOffset,
+            hasMore: stoppedForBudget || sourceGrewWhileReading
+        )
+    }
+
+    private func updateCheckpointFingerprint(
+        _ checkpoint: inout SourceCheckpoint,
+        fileDescriptor: Int32,
+        key: Data
+    ) throws {
+        var currentStat = stat()
+        guard fstat(fileDescriptor, &currentStat) == 0,
+              (currentStat.st_mode & S_IFMT) == S_IFREG,
+              Int64(currentStat.st_size) >= checkpoint.committedOffset
+        else {
+            throw CodexUsageCollectorError.sourceChangedDuringRead
+        }
+        checkpoint.observedSize = Int64(currentStat.st_size)
+        checkpoint.modificationTimeNanoseconds = modificationTimeNanoseconds(currentStat)
+        checkpoint.contentFingerprint = try contentFingerprint(
+            fileDescriptor: fileDescriptor,
+            endingAt: checkpoint.committedOffset,
+            key: key
+        )
+    }
+
+    private func contentFingerprint(
+        fileDescriptor: Int32,
+        endingAt offset: Int64,
+        key: Data
+    ) throws -> String {
+        var authenticator = HMAC<SHA256>(key: SymmetricKey(data: key))
+        authenticator.update(data: Data("size:\(offset)|".utf8))
+        var readOffset: Int64 = 0
+        while readOffset < offset {
+            try Task.checkCancellation()
+            let byteCount = Int(min(Int64(256 * 1_024), offset - readOffset))
+            authenticator.update(
+                data: try readFingerprintSample(
+                    fileDescriptor: fileDescriptor,
+                    startingAt: readOffset,
+                    byteCount: byteCount
+                )
+            )
+            readOffset += Int64(byteCount)
+        }
+        let authenticationCode = authenticator.finalize()
+        return Data(authenticationCode).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func sourceFingerprintKey() async throws -> Data {
+        if let sourceFingerprintKeyData { return sourceFingerprintKeyData }
+        let key = await database.sourceFingerprintKey()
+        sourceFingerprintKeyData = key
+        return key
+    }
+
+    private func readFingerprintSample(
+        fileDescriptor: Int32,
+        startingAt start: Int64,
+        byteCount: Int
+    ) throws -> Data {
+        var bytes = [UInt8](repeating: 0, count: byteCount)
+        let readCount = bytes.withUnsafeMutableBytes { buffer -> Int in
+            guard let baseAddress = buffer.baseAddress else { return 0 }
+            var total = 0
+            while total < byteCount {
+                let result = Darwin.pread(
+                    fileDescriptor,
+                    baseAddress.advanced(by: total),
+                    byteCount - total,
+                    off_t(start + Int64(total))
+                )
+                guard result > 0 else { return total }
+                total += result
+            }
+            return total
+        }
+        guard readCount == byteCount else {
+            throw CodexUsageCollectorError.sourceChangedDuringRead
+        }
+        return Data(bytes)
+    }
+
+    private func modificationTimeNanoseconds(_ value: stat) -> Int64 {
+        Int64(value.st_mtimespec.tv_sec) * 1_000_000_000
+            + Int64(value.st_mtimespec.tv_nsec)
     }
 
     private func processLine(
@@ -206,6 +443,7 @@ actor CodexUsageCollector {
         checkpoint: inout SourceCheckpoint,
         metadata: inout SessionMetadata,
         normalizationState: inout UsageNormalizationState,
+        persistedNormalizationState: inout UsageNormalizationState,
         loadedStateSessionID: inout String?,
         pendingEvents: inout [UsageEvent],
         importCutoff: Date?
@@ -233,6 +471,7 @@ actor CodexUsageCollector {
             checkpoint.projectPath = nil
             if resolvedID != loadedStateSessionID, let resolvedID {
                 normalizationState = try await database.normalizationState(for: resolvedID)
+                persistedNormalizationState = normalizationState
                 loadedStateSessionID = resolvedID
             }
 
@@ -249,7 +488,7 @@ actor CodexUsageCollector {
                 UsageEvent(
                     eventKey: eventKey(
                         sessionID: sessionID,
-                        line: line
+                        observation: observation
                     ),
                     occurredAt: observation.occurredAt,
                     sessionID: sessionID,
@@ -271,10 +510,22 @@ actor CodexUsageCollector {
 
     private func eventKey(
         sessionID: String?,
-        line: Data
+        observation: CodexTokenObservation
     ) -> String {
-        let material = "session:\(sessionID ?? "unknown")|line:\(storageIdentifier(line))"
+        let material = [
+            "event-v2",
+            "session:\(sessionID ?? "unknown")",
+            "time:\(observation.occurredAt.timeIntervalSinceReferenceDate.bitPattern)",
+            "ordinal:\(observation.ordinal.map(String.init) ?? "none")",
+            "last:\(usageIdentity(observation.lastUsage))",
+            "cumulative:\(usageIdentity(observation.cumulativeUsage))"
+        ].joined(separator: "|")
         return storageIdentifier(Data(material.utf8))
+    }
+
+    private func usageIdentity(_ usage: TokenUsage?) -> String {
+        guard let usage else { return "none" }
+        return "\(usage.inputTokens),\(usage.cachedInputTokens),\(usage.outputTokens)"
     }
 
     private func sessionIdentifierFromFilename(_ url: URL) -> String? {

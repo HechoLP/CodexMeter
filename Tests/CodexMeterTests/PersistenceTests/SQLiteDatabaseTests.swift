@@ -96,7 +96,8 @@ final class SQLiteDatabaseTests: XCTestCase {
         let database = try SQLiteDatabase(url: directory.appendingPathComponent("db.sqlite"))
         let cutoff = Date(timeIntervalSince1970: 1_800_000_000)
 
-        try await database.clearLocalHistory(at: cutoff)
+        let compactionStatus = try await database.clearLocalHistory(at: cutoff)
+        XCTAssertEqual(compactionStatus, .complete)
         let savedCutoff = try await database.importCutoff()
         XCTAssertEqual(savedCutoff, cutoff)
         try await database.rebuildStatistics()
@@ -153,7 +154,7 @@ final class SQLiteDatabaseTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let database = try SQLiteDatabase(url: directory.appendingPathComponent("db.sqlite"))
         let oldEpoch = try await database.dataEpoch()
-        try await database.clearLocalHistory(at: Date(timeIntervalSince1970: 1_800_000_000))
+        _ = try await database.clearLocalHistory(at: Date(timeIntervalSince1970: 1_800_000_000))
         let checkpoint = SourceCheckpoint.fresh(sourcePath: "/stale.jsonl", fileIdentity: "1:1")
 
         do {
@@ -177,7 +178,7 @@ final class SQLiteDatabaseTests: XCTestCase {
         let url = directory.appendingPathComponent("db.sqlite")
         let database = try SQLiteDatabase(url: url)
         let cutoff = Date(timeIntervalSince1970: 1_799_999_000)
-        try await database.clearLocalHistory(at: cutoff)
+        _ = try await database.clearLocalHistory(at: cutoff)
 
         let rawSessionID = "raw-session-id"
         let checkpoint = SourceCheckpoint(
@@ -232,7 +233,10 @@ final class SQLiteDatabaseTests: XCTestCase {
         let rawState = try await migrated.normalizationState(for: rawSessionID)
         XCTAssertEqual(migratedState.cumulativeHighWaterMark, usage)
         XCTAssertEqual(rawState, .empty)
-        let migratedCheckpoint = try await migrated.checkpoint(for: checkpoint.sourcePath)
+        let checkpointDigest = SHA256.hash(data: Data(checkpoint.sourcePath.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let migratedCheckpoint = try await migrated.checkpoint(for: checkpointDigest)
         XCTAssertEqual(migratedCheckpoint?.sessionID, digest)
         XCTAssertNil(migratedCheckpoint?.model)
         XCTAssertNil(migratedCheckpoint?.projectPath)
@@ -251,7 +255,204 @@ final class SQLiteDatabaseTests: XCTestCase {
         let databaseMode = try XCTUnwrap(
             FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
         ).intValue & 0o777
+        let startupLockMode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: url.path + ".startup.lock")[.posixPermissions] as? NSNumber
+        ).intValue & 0o777
+        let fingerprintKeyMode = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: url.path + ".fingerprint-key")[.posixPermissions] as? NSNumber
+        ).intValue & 0o777
         XCTAssertEqual(directoryMode, 0o700)
         XCTAssertEqual(databaseMode, 0o600)
+        XCTAssertEqual(startupLockMode, 0o600)
+        XCTAssertEqual(fingerprintKeyMode, 0o600)
+    }
+
+    func testFutureOnlyEventsDoNotMakeTheCurrentSnapshotLookAvailable() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let database = try SQLiteDatabase(url: directory.appendingPathComponent("db.sqlite"))
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let future = now.addingTimeInterval(3_600)
+        let checkpoint = SourceCheckpoint(
+            sourcePath: "/future.jsonl",
+            fileIdentity: "1:1",
+            generation: 0,
+            committedOffset: 1,
+            sessionID: "future-session",
+            inheritsHistory: false,
+            model: nil,
+            projectPath: nil
+        )
+        let event = UsageEvent(
+            eventKey: "future-event",
+            occurredAt: future,
+            sessionID: "future-session",
+            model: nil,
+            projectPath: nil,
+            usage: TokenUsage(inputTokens: 100, cachedInputTokens: 50, outputTokens: 20),
+            sourcePath: "future-source",
+            sourcePosition: 0
+        )
+        try await database.commit(
+            events: [event],
+            checkpoint: checkpoint,
+            normalizationState: UsageNormalizationState(
+                cumulativeHighWaterMark: event.usage,
+                lastObservedAt: future,
+                quality: .exact
+            )
+        )
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let snapshot = try await database.usageSnapshot(now: now, calendar: calendar, weekStart: .monday)
+        XCTAssertEqual(snapshot.today, .zero)
+        XCTAssertEqual(snapshot.week, .zero)
+        XCTAssertEqual(snapshot.month, .zero)
+        XCTAssertEqual(snapshot.allTime, .zero)
+        XCTAssertNil(snapshot.updatedAt)
+        XCTAssertEqual(snapshot.quality, .unavailable)
+    }
+
+    func testStaleNormalizationComputationRollsBackBeforeInsert() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let database = try SQLiteDatabase(url: directory.appendingPathComponent("db.sqlite"))
+        let sessionID = "session"
+        let initialCursor = UsageNormalizationState.empty
+        let newerDate = Date(timeIntervalSince1970: 1_800_000_200)
+        let newer = UsageNormalizationState(
+            cumulativeHighWaterMark: TokenUsage(inputTokens: 200, cachedInputTokens: 100, outputTokens: 40),
+            lastObservedAt: newerDate,
+            quality: .exact
+        )
+        let stale = UsageNormalizationState(
+            cumulativeHighWaterMark: TokenUsage(inputTokens: 150, cachedInputTokens: 75, outputTokens: 30),
+            lastObservedAt: newerDate.addingTimeInterval(-50),
+            quality: .exact
+        )
+        let newerCheckpoint = SourceCheckpoint(
+            sourcePath: "/newer.jsonl", fileIdentity: "1:1", generation: 0, committedOffset: 10,
+            sessionID: sessionID, inheritsHistory: false, model: nil, projectPath: nil
+        )
+        let staleCheckpoint = SourceCheckpoint(
+            sourcePath: "/stale.jsonl", fileIdentity: "1:2", generation: 0, committedOffset: 10,
+            sessionID: sessionID, inheritsHistory: false, model: nil, projectPath: nil
+        )
+        let newerEvent = UsageEvent(
+            eventKey: "newer", occurredAt: newerDate, sessionID: sessionID, model: nil, projectPath: nil,
+            usage: newer.cumulativeHighWaterMark!, sourcePath: "newer", sourcePosition: 0
+        )
+        let staleEvent = UsageEvent(
+            eventKey: "stale", occurredAt: newerDate.addingTimeInterval(-50), sessionID: sessionID, model: nil, projectPath: nil,
+            usage: TokenUsage(inputTokens: 150, cachedInputTokens: 75, outputTokens: 30), sourcePath: "stale", sourcePosition: 0
+        )
+
+        try await database.commit(
+            events: [newerEvent], checkpoint: newerCheckpoint, normalizationState: newer,
+            expectedNormalizationState: initialCursor
+        )
+        do {
+            try await database.commit(
+                events: [staleEvent], checkpoint: staleCheckpoint, normalizationState: stale,
+                expectedNormalizationState: initialCursor
+            )
+            XCTFail("Expected stale cursor rejection")
+        } catch SQLiteDatabaseError.staleScan {
+            let eventCount = try await database.eventCount()
+            let savedState = try await database.normalizationState(for: sessionID)
+            let staleCheckpointState = try await database.checkpoint(for: staleCheckpoint.sourcePath)
+            XCTAssertEqual(eventCount, 1)
+            XCTAssertEqual(savedState, newer)
+            XCTAssertNil(staleCheckpointState)
+        }
+    }
+
+    func testDatabaseSafetyLimitRejectsAnEventWithoutAdvancingCheckpoint() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let database = try SQLiteDatabase(
+            url: directory.appendingPathComponent("db.sqlite"),
+            maximumDatabaseBytes: 1
+        )
+        let checkpoint = SourceCheckpoint.fresh(sourcePath: "source", fileIdentity: "1:1")
+        let event = UsageEvent(
+            eventKey: "event",
+            occurredAt: Date(),
+            sessionID: nil,
+            model: nil,
+            projectPath: nil,
+            usage: TokenUsage(inputTokens: 1, cachedInputTokens: 0, outputTokens: 0),
+            sourcePath: "source",
+            sourcePosition: 0
+        )
+
+        do {
+            try await database.commit(events: [event], checkpoint: checkpoint, normalizationState: nil)
+            XCTFail("Expected the database safety limit to reject the event")
+        } catch SQLiteDatabaseError.resourceLimit {
+            let count = try await database.eventCount()
+            let savedCheckpoint = try await database.checkpoint(for: checkpoint.sourcePath)
+            XCTAssertEqual(count, 0)
+            XCTAssertNil(savedCheckpoint)
+        }
+    }
+
+    func testConcurrentColdStartInitializationIsSerialized() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("db.sqlite")
+
+        try await withThrowingTaskGroup(of: Int64.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    let database = try SQLiteDatabase(url: url)
+                    return try await database.eventCount()
+                }
+            }
+            for try await count in group {
+                XCTAssertEqual(count, 0)
+            }
+        }
+    }
+
+    func testSnapshotPeriodsComeFromOneReadTransaction() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("db.sqlite")
+        let reader = try SQLiteDatabase(url: url)
+        let writer = try SQLiteDatabase(url: url)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        let writerTask = Task {
+            for index in 0..<200 {
+                let checkpoint = SourceCheckpoint(
+                    sourcePath: "/writer-\(index).jsonl", fileIdentity: "1:\(index)", generation: 0,
+                    committedOffset: 1, sessionID: nil, inheritsHistory: false, model: nil, projectPath: nil
+                )
+                let event = UsageEvent(
+                    eventKey: "event-\(index)", occurredAt: now.addingTimeInterval(-1), sessionID: nil,
+                    model: nil, projectPath: nil,
+                    usage: TokenUsage(inputTokens: 1, cachedInputTokens: 0, outputTokens: 0),
+                    sourcePath: "source-\(index)", sourcePosition: 0
+                )
+                try await writer.commit(events: [event], checkpoint: checkpoint, normalizationState: nil)
+            }
+        }
+
+        for _ in 0..<50 {
+            let snapshot = try await reader.usageSnapshot(now: now, calendar: calendar, weekStart: .monday)
+            XCTAssertEqual(snapshot.today, snapshot.week)
+            XCTAssertEqual(snapshot.week, snapshot.month)
+            XCTAssertEqual(snapshot.month, snapshot.allTime)
+        }
+        try await writerTask.value
     }
 }

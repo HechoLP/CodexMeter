@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct MenuPopoverView: View {
@@ -104,7 +105,22 @@ struct MenuPopoverView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             if shouldShowStatus {
-                Label(store.statusMessage, systemImage: statusSymbol)
+                Label {
+                    if showLastUpdated,
+                       !store.isRefreshing,
+                       !store.isImportingHistory,
+                       let lastSourceRefreshAt = store.lastSourceRefreshAt,
+                       store.snapshot.quality == .exact {
+                        HStack(spacing: 3) {
+                            Text("Updated")
+                            Text(lastSourceRefreshAt, style: .relative)
+                        }
+                    } else {
+                        Text(store.statusMessage)
+                    }
+                } icon: {
+                    Image(systemName: statusSymbol)
+                }
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -118,7 +134,7 @@ struct MenuPopoverView: View {
             .buttonStyle(.plain)
             .frame(width: 28, height: 28)
             .contentShape(Rectangle())
-            .disabled(store.isRefreshing || store.isMaintainingData)
+            .disabled(store.isRefreshing || store.isMaintainingData || store.isImportingHistory)
             .help("Refresh usage")
             .accessibilityLabel("Refresh usage")
 
@@ -132,22 +148,28 @@ struct MenuPopoverView: View {
             .contentShape(Rectangle())
             .help("Open Settings")
             .accessibilityLabel("Open Settings")
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+            }
+            .buttonStyle(.plain)
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
+            .help("Quit CodexMeter")
+            .accessibilityLabel("Quit CodexMeter")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
     }
 
     private var shouldShowStatus: Bool {
-        showLastUpdated || store.isRefreshing || store.snapshot.quality != .exact
+        showLastUpdated || store.isRefreshing || store.isImportingHistory || store.snapshot.quality != .exact
     }
 
     private var statusSymbol: String {
-        switch store.snapshot.quality {
-        case .exact: "checkmark.circle"
-        case .partial, .stale: "clock"
-        case .unavailable: "questionmark.circle"
-        case .error: "exclamationmark.triangle"
-        }
+        store.operationAwareStatusSymbol
     }
 
     private func metricRow(_ title: String, value: Int64, symbol: String) -> some View {
@@ -184,6 +206,7 @@ struct MenuPopoverView: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
+        .disabled(store.snapshot.updatedAt == nil)
         .accessibilityLabel("\(title), \(formatted(value)) tokens")
     }
 

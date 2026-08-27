@@ -50,12 +50,13 @@ private struct GeneralSettingsView: View {
             }
             Section("Refresh") {
                 Picker("Refresh", selection: $refreshMode) {
-                    Text("Automatic").tag("automatic")
-                    Text("30 Seconds").tag("30")
-                    Text("1 Minute").tag("60")
-                    Text("5 Minutes").tag("300")
-                    Text("Manual").tag("manual")
+                    ForEach(RefreshMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
                 }
+                Text("Automatic uses file events with a lightweight one-minute fallback check.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Calendar") {
                 Picker("Week starts on", selection: $weekStart) {
@@ -76,6 +77,8 @@ private struct AppearanceSettingsView: View {
     @AppStorage("numberStyle") private var numberStyle = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
     @AppStorage("showLastUpdated") private var showLastUpdated = true
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
+    @AppStorage("showMenuBarText") private var showMenuBarText = true
 
     var body: some View {
         Form {
@@ -93,6 +96,19 @@ private struct AppearanceSettingsView: View {
                 Text("Compact").tag(TokenNumberStyle.compact.rawValue)
                 Text("Detailed").tag(TokenNumberStyle.detailed.rawValue)
             }
+            Section("Menu bar elements") {
+                Toggle("Show icon", isOn: iconVisibility)
+                    .disabled(isIconOnly)
+                Toggle("Show text", isOn: textVisibility)
+                    .disabled(isIconOnly)
+                Text(
+                    isIconOnly
+                        ? "Icon Only always shows the CodexMeter icon without token text."
+                        : "CodexMeter keeps at least one menu bar element visible."
+                )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Popover") {
                 Toggle("Show cached input", isOn: $showCachedInput)
                 Toggle("Show last updated", isOn: $showLastUpdated)
@@ -100,18 +116,55 @@ private struct AppearanceSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear { enforceIconOnlyVisibility() }
+        .onChange(of: display) { _, _ in enforceIconOnlyVisibility() }
+    }
+
+    private var isIconOnly: Bool { display == MenuBarDisplay.iconOnly.rawValue }
+
+    private func enforceIconOnlyVisibility() {
+        guard isIconOnly else { return }
+        showMenuBarIcon = true
+        showMenuBarText = false
+    }
+
+    private var iconVisibility: Binding<Bool> {
+        Binding(
+            get: { isIconOnly ? true : showMenuBarIcon },
+            set: { newValue in
+                guard !isIconOnly else { return }
+                showMenuBarIcon = newValue
+                if !newValue && !showMenuBarText {
+                    showMenuBarText = true
+                }
+            }
+        )
+    }
+
+    private var textVisibility: Binding<Bool> {
+        Binding(
+            get: { isIconOnly ? false : showMenuBarText },
+            set: { newValue in
+                guard !isIconOnly else { return }
+                showMenuBarText = newValue
+                if !newValue && !showMenuBarIcon {
+                    showMenuBarIcon = true
+                }
+            }
+        )
     }
 }
 
 private struct UsageSettingsView: View {
     var body: some View {
         Form {
-            Section("Included metrics") {
-                LabeledContent("Input tokens", value: "On")
-                LabeledContent("Cached input", value: "On")
-                LabeledContent("Output tokens", value: "On")
+            Section("Accounting") {
+                Label("Input includes cached input", systemImage: "arrow.up")
+                Label("Cached input is reported separately", systemImage: "bolt.horizontal")
+                Label("Output is counted independently", systemImage: "arrow.down")
+                Label("Total equals input plus output", systemImage: "sum")
             }
-            Text("Total tokens are calculated as input plus output. Cached input is shown as a subset of input and is not added twice.")
+            Text("Cached input is a subset of input and is never added to the total a second time. All periods follow your Mac's current calendar and time zone.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -127,24 +180,42 @@ private struct DataSettingsView: View {
     var body: some View {
         Form {
             Section("Codex Local Data") {
-                LabeledContent("Status", value: store.sourceCount > 0 ? "Connected" : "Not Found")
-                LabeledContent("Source files", value: store.sourceCount.formatted())
-                LabeledContent("Database size", value: formattedBytes(store.dataStatistics.databaseBytes))
-                LabeledContent("Oldest record", value: formattedDate(store.dataStatistics.oldestRecord))
-                LabeledContent("Newest record", value: formattedDate(store.dataStatistics.newestRecord))
+                statisticRow("Status", store.sourceStatusText)
+                statisticRow("Source files", store.sourceCount.formatted())
+                statisticRow("Database size", formattedBytes(store.dataStatistics.databaseBytes))
+                statisticRow("Oldest record", formattedDate(store.dataStatistics.oldestRecord))
+                statisticRow("Newest record", formattedDate(store.dataStatistics.newestRecord))
                 Button("Open Data Folder") {
                     openDataFolder()
                 }
             }
             Section {
+                if store.isMaintainingData || store.isRefreshing || store.isImportingHistory {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(store.statusMessage)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                } else if let message = store.dataOperationMessage {
+                    Label(
+                        message,
+                        systemImage: store.dataOperationFailed
+                            ? "exclamationmark.triangle"
+                            : "checkmark.circle"
+                    )
+                    .foregroundStyle(store.dataOperationFailed ? .red : .secondary)
+                    .accessibilityLabel("Data operation status, \(message)")
+                }
                 Button("Rebuild Statistics") {
                     Task { await store.rebuildStatistics() }
                 }
-                .disabled(store.isMaintainingData || store.isRefreshing)
+                .disabled(store.isMaintainingData || store.isRefreshing || store.isImportingHistory)
                 Button("Clear Local History", role: .destructive) {
                     confirmsClear = true
                 }
-                .disabled(store.isMaintainingData || store.isRefreshing)
+                .disabled(store.isMaintainingData || store.isRefreshing || store.isImportingHistory)
             }
             Text("Clearing history establishes a new local cutoff. Older Codex logs stay excluded instead of being imported again on the next refresh.")
                 .font(.caption)
@@ -178,6 +249,12 @@ private struct DataSettingsView: View {
 
     private func formattedDate(_ date: Date?) -> String {
         date?.formatted(date: .abbreviated, time: .shortened) ?? "None"
+    }
+
+    private func statisticRow(_ title: String, _ value: String) -> some View {
+        LabeledContent(title, value: value)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(title), \(value)")
     }
 }
 
@@ -241,6 +318,7 @@ private struct AboutSettingsView: View {
                 .multilineTextAlignment(.center)
             HStack(spacing: 16) {
                 Link("GitHub", destination: URL(string: "https://github.com/HechoLP/codex-meter")!)
+                Link("Releases", destination: URL(string: "https://github.com/HechoLP/codex-meter/releases")!)
                 Link("MIT License", destination: URL(string: "https://github.com/HechoLP/codex-meter/blob/main/LICENSE")!)
             }
             .font(.caption)

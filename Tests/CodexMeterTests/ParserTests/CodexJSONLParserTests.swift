@@ -37,7 +37,7 @@ final class CodexJSONLParserTests: XCTestCase {
     }
 
     func testRejectsBooleanFractionalAndUnboundedTokenComponents() {
-        for input in ["true", "1.5", "1000000000001"] {
+        for input in ["true", "1.5", "1000.0", "999999999999.99999999", "1000000000001"] {
             let line = "{\"timestamp\":\"2026-08-27T01:02:03Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":\(input),\"cached_input_tokens\":0,\"output_tokens\":2}}}}"
             XCTAssertEqual(
                 parser.parse(Data(line.utf8)),

@@ -139,8 +139,7 @@ struct CodexJSONLParser: Sendable {
         switch value {
         case let number as NSNumber:
             guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
-            let floating = number.doubleValue
-            guard floating.isFinite, floating.rounded() == floating else { return nil }
+            guard !CFNumberIsFloatType(number) else { return nil }
             let result = number.int64Value
             return (0...Self.maximumTokenComponent).contains(result) ? result : nil
         case let string as String:

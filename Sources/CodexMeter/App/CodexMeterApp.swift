@@ -13,8 +13,15 @@ import SwiftUI
 struct CodexMeterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: UsageStore
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
+    @AppStorage("showMenuBarText") private var showMenuBarText = true
 
     init() {
+        let defaults = UserDefaults.standard
+        if defaults.string(forKey: "menuBarDisplay") == MenuBarDisplay.iconOnly.rawValue {
+            defaults.set(true, forKey: "showMenuBarIcon")
+            defaults.set(false, forKey: "showMenuBarText")
+        }
         let store = UsageStore()
         _store = StateObject(wrappedValue: store)
         Task { @MainActor [weak store] in
@@ -27,7 +34,19 @@ struct CodexMeterApp: App {
             MenuPopoverView()
                 .environmentObject(store)
         } label: {
-            Label(store.menuBarText, systemImage: "diamond")
+            HStack(spacing: 4) {
+                if resolvedShowIcon {
+                    Image(systemName: "diamond")
+                        .accessibilityHidden(true)
+                }
+                if resolvedShowText {
+                    Text(store.menuBarText)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 220)
+                }
+            }
                 .accessibilityLabel(store.menuBarAccessibilityLabel)
         }
         .menuBarExtraStyle(.window)
@@ -36,6 +55,14 @@ struct CodexMeterApp: App {
             SettingsView()
                 .environmentObject(store)
         }
+    }
+
+    private var resolvedShowIcon: Bool {
+        showMenuBarIcon || !showMenuBarText
+    }
+
+    private var resolvedShowText: Bool {
+        showMenuBarText && !store.menuBarText.isEmpty
     }
 }
 

@@ -1,12 +1,20 @@
 import CSQLite
 import CryptoKit
+import Darwin
 import Foundation
+
+private let sqliteProcessStartupLock = NSLock()
 
 struct SourceCheckpoint: Equatable, Sendable {
     let sourcePath: String
     var fileIdentity: String
     var generation: Int64
     var committedOffset: Int64
+    var isSkippingOversizedLine = false
+    var observedSize: Int64 = 0
+    var modificationTimeNanoseconds: Int64 = 0
+    var contentFingerprint = ""
+    var hasPendingImport = false
     var sessionID: String?
     var inheritsHistory: Bool
     var model: String?
@@ -18,6 +26,11 @@ struct SourceCheckpoint: Equatable, Sendable {
             fileIdentity: fileIdentity,
             generation: generation,
             committedOffset: 0,
+            isSkippingOversizedLine: false,
+            observedSize: 0,
+            modificationTimeNanoseconds: 0,
+            contentFingerprint: "",
+            hasPendingImport: false,
             sessionID: nil,
             inheritsHistory: false,
             model: nil,
@@ -26,11 +39,22 @@ struct SourceCheckpoint: Equatable, Sendable {
     }
 }
 
+struct ImportPolicy: Equatable, Sendable {
+    let cutoff: Date?
+    let dataEpoch: Int64
+}
+
+enum ClearHistoryCompactionStatus: Equatable, Sendable {
+    case complete
+    case deferred
+}
+
 enum SQLiteDatabaseError: Error, LocalizedError {
     case open(String)
     case statement(String)
     case step(String)
     case migration(String)
+    case resourceLimit(String)
     case staleScan
 
     var errorDescription: String? {
@@ -39,17 +63,26 @@ enum SQLiteDatabaseError: Error, LocalizedError {
         case let .statement(message): "Database statement failed: \(message)"
         case let .step(message): "Database operation failed: \(message)"
         case let .migration(message): "Database migration failed: \(message)"
+        case let .resourceLimit(message): message
         case .staleScan: "The source scan was superseded by a data maintenance operation"
         }
     }
 }
 
 actor SQLiteDatabase {
+    static let maximumDatabaseBytes: Int64 = 1_073_741_824
+
     private let databaseURL: URL
+    private let databaseByteLimit: Int64
+    private let sourceFingerprintKeyData: Data
     private var connection: SQLiteConnection?
 
-    init(url: URL) throws {
+    init(url: URL, maximumDatabaseBytes: Int64 = SQLiteDatabase.maximumDatabaseBytes) throws {
+        sqliteProcessStartupLock.lock()
+        defer { sqliteProcessStartupLock.unlock() }
+
         databaseURL = url
+        databaseByteLimit = max(1, maximumDatabaseBytes)
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(
             at: directory,
@@ -59,6 +92,28 @@ actor SQLiteDatabase {
             [.posixPermissions: 0o700],
             ofItemAtPath: directory.path
         )
+
+        let lockPath = url.path + ".startup.lock"
+        let lockDescriptor = Darwin.open(
+            lockPath,
+            O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW,
+            S_IRUSR | S_IWUSR
+        )
+        guard lockDescriptor >= 0 else {
+            throw SQLiteDatabaseError.open("unable to create the database startup lock")
+        }
+        defer {
+            flock(lockDescriptor, LOCK_UN)
+            Darwin.close(lockDescriptor)
+        }
+        guard flock(lockDescriptor, LOCK_EX) == 0 else {
+            throw SQLiteDatabaseError.open("unable to acquire the database startup lock")
+        }
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: lockPath
+        )
+        sourceFingerprintKeyData = try Self.loadOrCreateSourceFingerprintKey(at: url)
 
         var database: OpaquePointer?
         let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
@@ -89,8 +144,9 @@ actor SQLiteDatabase {
     func checkpoint(for sourcePath: String) throws -> SourceCheckpoint? {
         let statement = try prepare(
             """
-            SELECT file_identity, generation, committed_offset, session_id,
-                   inherits_history, model, project_path
+            SELECT file_identity, generation, committed_offset, skipping_oversized_line,
+                   observed_size, modification_time_ns, content_fingerprint, has_pending_import,
+                   session_id, inherits_history, model, project_path
             FROM parsing_state
             WHERE source_path = ?1
             """
@@ -105,10 +161,15 @@ actor SQLiteDatabase {
                 fileIdentity: text(statement, column: 0) ?? "",
                 generation: sqlite3_column_int64(statement, 1),
                 committedOffset: sqlite3_column_int64(statement, 2),
-                sessionID: text(statement, column: 3),
-                inheritsHistory: sqlite3_column_int(statement, 4) != 0,
-                model: text(statement, column: 5),
-                projectPath: text(statement, column: 6)
+                isSkippingOversizedLine: sqlite3_column_int(statement, 3) != 0,
+                observedSize: sqlite3_column_int64(statement, 4),
+                modificationTimeNanoseconds: sqlite3_column_int64(statement, 5),
+                contentFingerprint: text(statement, column: 6) ?? "",
+                hasPendingImport: sqlite3_column_int(statement, 7) != 0,
+                sessionID: text(statement, column: 8),
+                inheritsHistory: sqlite3_column_int(statement, 9) != 0,
+                model: text(statement, column: 10),
+                projectPath: text(statement, column: 11)
             )
         case SQLITE_DONE:
             return nil
@@ -117,7 +178,15 @@ actor SQLiteDatabase {
         }
     }
 
+    func sourceFingerprintKey() -> Data {
+        sourceFingerprintKeyData
+    }
+
     func normalizationState(for sessionID: String) throws -> UsageNormalizationState {
+        try normalizationStateWithinTransaction(for: sessionID)
+    }
+
+    private func normalizationStateWithinTransaction(for sessionID: String) throws -> UsageNormalizationState {
         let statement = try prepare(
             """
             SELECT input_tokens, cached_input_tokens, output_tokens, last_observed_at, quality
@@ -148,16 +217,28 @@ actor SQLiteDatabase {
         }
     }
 
+    @discardableResult
     func commit(
         events: [UsageEvent],
         checkpoint: SourceCheckpoint,
         normalizationState: UsageNormalizationState?,
-        expectedEpoch: Int64? = nil
-    ) throws {
+        expectedEpoch: Int64? = nil,
+        expectedNormalizationState: UsageNormalizationState? = nil
+    ) throws -> UsageNormalizationState? {
         try execute("BEGIN IMMEDIATE")
         do {
             if let expectedEpoch, try dataEpochWithinTransaction() != expectedEpoch {
                 throw SQLiteDatabaseError.staleScan
+            }
+            if let expectedNormalizationState, let sessionID = checkpoint.sessionID,
+               try normalizationStateWithinTransaction(for: sessionID) != expectedNormalizationState {
+                throw SQLiteDatabaseError.staleScan
+            }
+            if !events.isEmpty,
+               try allocatedDatabaseBytesWithinTransaction() >= databaseByteLimit {
+                throw SQLiteDatabaseError.resourceLimit(
+                    "The local CodexMeter database reached its 1 GB safety limit"
+                )
             }
             var insertedEventCount = 0
             let insert = try prepare(
@@ -209,6 +290,14 @@ actor SQLiteDatabase {
                         output_tokens = excluded.output_tokens,
                         last_observed_at = excluded.last_observed_at,
                         quality = excluded.quality
+                    WHERE session_counters.last_observed_at IS NULL
+                       OR excluded.last_observed_at > session_counters.last_observed_at
+                       OR (
+                            excluded.last_observed_at = session_counters.last_observed_at
+                            AND excluded.input_tokens >= session_counters.input_tokens
+                            AND excluded.cached_input_tokens >= session_counters.cached_input_tokens
+                            AND excluded.output_tokens >= session_counters.output_tokens
+                       )
                     """
                 )
                 defer { sqlite3_finalize(counter) }
@@ -230,13 +319,19 @@ actor SQLiteDatabase {
             let state = try prepare(
                 """
                 INSERT INTO parsing_state (
-                    source_path, file_identity, generation, committed_offset,
+                    source_path, file_identity, generation, committed_offset, skipping_oversized_line,
+                    observed_size, modification_time_ns, content_fingerprint, has_pending_import,
                     session_id, inherits_history, model, project_path, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
                 ON CONFLICT(source_path) DO UPDATE SET
                     file_identity = excluded.file_identity,
                     generation = excluded.generation,
                     committed_offset = excluded.committed_offset,
+                    skipping_oversized_line = excluded.skipping_oversized_line,
+                    observed_size = excluded.observed_size,
+                    modification_time_ns = excluded.modification_time_ns,
+                    content_fingerprint = excluded.content_fingerprint,
+                    has_pending_import = excluded.has_pending_import,
                     session_id = excluded.session_id,
                     inherits_history = excluded.inherits_history,
                     model = excluded.model,
@@ -249,11 +344,16 @@ actor SQLiteDatabase {
             try bind(checkpoint.fileIdentity, at: 2, to: state)
             sqlite3_bind_int64(state, 3, checkpoint.generation)
             sqlite3_bind_int64(state, 4, checkpoint.committedOffset)
-            try bind(checkpoint.sessionID, at: 5, to: state)
-            sqlite3_bind_int(state, 6, checkpoint.inheritsHistory ? 1 : 0)
-            try bind(checkpoint.model, at: 7, to: state)
-            try bind(checkpoint.projectPath, at: 8, to: state)
-            sqlite3_bind_double(state, 9, Date().timeIntervalSince1970)
+            sqlite3_bind_int(state, 5, checkpoint.isSkippingOversizedLine ? 1 : 0)
+            sqlite3_bind_int64(state, 6, checkpoint.observedSize)
+            sqlite3_bind_int64(state, 7, checkpoint.modificationTimeNanoseconds)
+            try bind(checkpoint.contentFingerprint, at: 8, to: state)
+            sqlite3_bind_int(state, 9, checkpoint.hasPendingImport ? 1 : 0)
+            try bind(checkpoint.sessionID, at: 10, to: state)
+            sqlite3_bind_int(state, 11, checkpoint.inheritsHistory ? 1 : 0)
+            try bind(checkpoint.model, at: 12, to: state)
+            try bind(checkpoint.projectPath, at: 13, to: state)
+            sqlite3_bind_double(state, 14, Date().timeIntervalSince1970)
             guard sqlite3_step(state) == SQLITE_DONE else {
                 throw SQLiteDatabaseError.step(errorMessage)
             }
@@ -263,6 +363,9 @@ actor SQLiteDatabase {
             try? execute("ROLLBACK")
             throw error
         }
+        try Self.protectDatabaseFiles(at: databaseURL)
+        guard let sessionID = checkpoint.sessionID else { return nil }
+        return try normalizationStateWithinTransaction(for: sessionID)
     }
 
     func usageSnapshot(now: Date, calendar: Calendar, weekStart: WeekStart) throws -> UsageSnapshot {
@@ -272,21 +375,28 @@ actor SQLiteDatabase {
         let week = reportingCalendar.dateInterval(of: .weekOfYear, for: now)?.start ?? today
         let month = reportingCalendar.dateInterval(of: .month, for: now)?.start ?? today
 
-        let todayUsage = try sum(from: today, through: now)
-        let weekUsage = try sum(from: week, through: now)
-        let monthUsage = try sum(from: month, through: now)
-        let allTimeUsage = try sum(from: nil, through: now)
-        let lastUpdated = try maximumEventDate()
-        let quality = try databaseQuality(hasEvents: lastUpdated != nil)
-
-        return UsageSnapshot(
-            today: todayUsage,
-            week: weekUsage,
-            month: monthUsage,
-            allTime: allTimeUsage,
-            quality: quality,
-            updatedAt: lastUpdated
-        )
+        try execute("BEGIN DEFERRED")
+        do {
+            let todayUsage = try sum(from: today, through: now)
+            let weekUsage = try sum(from: week, through: now)
+            let monthUsage = try sum(from: month, through: now)
+            let allTimeUsage = try sum(from: nil, through: now)
+            let lastUpdated = try maximumEventDate(through: now)
+            let quality = try databaseQuality(hasEvents: lastUpdated != nil)
+            let snapshot = UsageSnapshot(
+                today: todayUsage,
+                week: weekUsage,
+                month: monthUsage,
+                allTime: allTimeUsage,
+                quality: quality,
+                updatedAt: lastUpdated
+            )
+            try execute("COMMIT")
+            return snapshot
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
     }
 
     func dataStatistics() throws -> DataStatistics {
@@ -318,12 +428,36 @@ actor SQLiteDatabase {
 
 #if DEBUG
     func prepareVersion2FixtureForTesting() throws {
+        try execute("ALTER TABLE parsing_state DROP COLUMN has_pending_import")
+        try execute("ALTER TABLE parsing_state DROP COLUMN content_fingerprint")
+        try execute("ALTER TABLE parsing_state DROP COLUMN modification_time_ns")
+        try execute("ALTER TABLE parsing_state DROP COLUMN observed_size")
+        try execute("ALTER TABLE parsing_state DROP COLUMN skipping_oversized_line")
         try execute("ALTER TABLE session_counters DROP COLUMN last_observed_at")
         try execute("PRAGMA user_version = 2")
     }
 #endif
 
     func importCutoff() throws -> Date? {
+        try importCutoffWithinTransaction()
+    }
+
+    func importPolicy() throws -> ImportPolicy {
+        try execute("BEGIN DEFERRED")
+        do {
+            let policy = ImportPolicy(
+                cutoff: try importCutoffWithinTransaction(),
+                dataEpoch: try dataEpochWithinTransaction()
+            )
+            try execute("COMMIT")
+            return policy
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
+    private func importCutoffWithinTransaction() throws -> Date? {
         let statement = try prepare("SELECT value FROM app_metadata WHERE key = 'import_cutoff'")
         defer { sqlite3_finalize(statement) }
         switch sqlite3_step(statement) {
@@ -355,9 +489,10 @@ actor SQLiteDatabase {
             try? execute("ROLLBACK")
             throw error
         }
+        try Self.protectDatabaseFiles(at: databaseURL)
     }
 
-    func clearLocalHistory(at cutoff: Date) throws {
+    func clearLocalHistory(at cutoff: Date) throws -> ClearHistoryCompactionStatus {
         try execute("BEGIN IMMEDIATE")
         do {
             try incrementDataEpoch()
@@ -382,8 +517,30 @@ actor SQLiteDatabase {
             try? execute("ROLLBACK")
             throw error
         }
-        try execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        try execute("VACUUM")
+        var compactionStatus = ClearHistoryCompactionStatus.complete
+        do {
+            guard let connection else {
+                throw SQLiteDatabaseError.statement("database is closed")
+            }
+            var logFrameCount: Int32 = 0
+            var checkpointedFrameCount: Int32 = 0
+            let checkpointResult = sqlite3_wal_checkpoint_v2(
+                connection.rawValue,
+                nil,
+                SQLITE_CHECKPOINT_TRUNCATE,
+                &logFrameCount,
+                &checkpointedFrameCount
+            )
+            guard checkpointResult == SQLITE_OK else {
+                throw SQLiteDatabaseError.step(errorMessage)
+            }
+            try execute("VACUUM")
+            try Self.protectDatabaseFiles(at: databaseURL)
+        } catch {
+            compactionStatus = .deferred
+            try? Self.protectDatabaseFiles(at: databaseURL)
+        }
+        return compactionStatus
     }
 
     private func dataEpochWithinTransaction() throws -> Int64 {
@@ -397,6 +554,25 @@ actor SQLiteDatabase {
         default:
             throw SQLiteDatabaseError.step(errorMessage)
         }
+    }
+
+    private func allocatedDatabaseBytesWithinTransaction() throws -> Int64 {
+        let pageCount = try pragmaInt64("PRAGMA page_count")
+        let pageSize = try pragmaInt64("PRAGMA page_size")
+        let (bytes, overflow) = pageCount.multipliedReportingOverflow(by: pageSize)
+        guard !overflow else {
+            throw SQLiteDatabaseError.resourceLimit("The local database size exceeds the supported range")
+        }
+        return bytes
+    }
+
+    private func pragmaInt64(_ sql: String) throws -> Int64 {
+        let statement = try prepare(sql)
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw SQLiteDatabaseError.step(errorMessage)
+        }
+        return sqlite3_column_int64(statement, 0)
     }
 
     private func incrementDataEpoch() throws {
@@ -461,9 +637,10 @@ actor SQLiteDatabase {
         }
     }
 
-    private func maximumEventDate() throws -> Date? {
-        let statement = try prepare("SELECT MAX(occurred_at) FROM usage_events")
+    private func maximumEventDate(through end: Date) throws -> Date? {
+        let statement = try prepare("SELECT MAX(occurred_at) FROM usage_events WHERE occurred_at <= ?1")
         defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, end.timeIntervalSince1970)
         guard sqlite3_step(statement) == SQLITE_ROW else {
             throw SQLiteDatabaseError.step(errorMessage)
         }
@@ -494,7 +671,7 @@ actor SQLiteDatabase {
 
     private static func migrate(_ database: OpaquePointer) throws {
         var version = try userVersion(database)
-        guard version <= 4 else {
+        guard version <= 9 else {
             throw SQLiteDatabaseError.migration("database schema is newer than this app supports")
         }
 
@@ -512,6 +689,26 @@ actor SQLiteDatabase {
         }
         if version == 3 {
             try migrateToVersion4(database)
+            version = 4
+        }
+        if version == 4 {
+            try migrateToVersion5(database)
+            version = 5
+        }
+        if version == 5 {
+            try migrateToVersion6(database)
+            version = 6
+        }
+        if version == 6 {
+            try migrateToVersion7(database)
+            version = 7
+        }
+        if version == 7 {
+            try migrateToVersion8(database)
+            version = 8
+        }
+        if version == 8 {
+            try migrateToVersion9(database)
         }
     }
 
@@ -686,7 +883,137 @@ actor SQLiteDatabase {
                 return
             }
             try execute("ALTER TABLE session_counters ADD COLUMN last_observed_at REAL", on: database)
+            try execute(
+                """
+                UPDATE session_counters
+                SET last_observed_at = (
+                    SELECT MAX(usage_events.occurred_at)
+                    FROM usage_events
+                    WHERE usage_events.session_id = session_counters.session_id
+                )
+                """,
+                on: database
+            )
             try execute("PRAGMA user_version = 4", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion5(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 5 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute(
+                "ALTER TABLE parsing_state ADD COLUMN skipping_oversized_line INTEGER NOT NULL DEFAULT 0",
+                on: database
+            )
+            try execute(
+                """
+                UPDATE session_counters
+                SET last_observed_at = (
+                    SELECT MAX(usage_events.occurred_at)
+                    FROM usage_events
+                    WHERE usage_events.session_id = session_counters.session_id
+                )
+                WHERE last_observed_at IS NULL
+                """,
+                on: database
+            )
+            try execute("PRAGMA user_version = 5", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion6(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 6 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute(
+                "ALTER TABLE parsing_state ADD COLUMN observed_size INTEGER NOT NULL DEFAULT 0",
+                on: database
+            )
+            try execute(
+                "ALTER TABLE parsing_state ADD COLUMN modification_time_ns INTEGER NOT NULL DEFAULT 0",
+                on: database
+            )
+            try execute("PRAGMA user_version = 6", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion7(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 7 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute(
+                "ALTER TABLE parsing_state ADD COLUMN content_fingerprint TEXT NOT NULL DEFAULT ''",
+                on: database
+            )
+            try execute("PRAGMA user_version = 7", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion8(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 8 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            let checkpointPaths = try distinctTextValues(
+                "SELECT source_path FROM parsing_state",
+                on: database
+            )
+            for sourcePath in checkpointPaths {
+                try updateText(
+                    "UPDATE parsing_state SET source_path = ?1 WHERE source_path = ?2",
+                    newValue: stableDigest(sourcePath),
+                    oldValue: sourcePath,
+                    on: database
+                )
+            }
+            try execute("PRAGMA user_version = 8", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion9(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 9 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute(
+                "ALTER TABLE parsing_state ADD COLUMN has_pending_import INTEGER NOT NULL DEFAULT 0",
+                on: database
+            )
+            try execute("PRAGMA user_version = 9", on: database)
             try execute("COMMIT", on: database)
         } catch {
             try? execute("ROLLBACK", on: database)
@@ -791,10 +1118,86 @@ actor SQLiteDatabase {
     }
 
     private static func protectDatabaseFiles(at url: URL) throws {
-        let paths = [url.path, url.path + "-wal", url.path + "-shm"]
+        let paths = [
+            url.path,
+            url.path + "-wal",
+            url.path + "-shm",
+            url.path + ".startup.lock",
+            url.path + ".fingerprint-key"
+        ]
         for path in paths where FileManager.default.fileExists(atPath: path) {
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
         }
+    }
+
+    private static func loadOrCreateSourceFingerprintKey(at databaseURL: URL) throws -> Data {
+        let path = databaseURL.path + ".fingerprint-key"
+        let existingDescriptor = Darwin.open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+        if existingDescriptor >= 0 {
+            defer { Darwin.close(existingDescriptor) }
+            var fileStat = stat()
+            guard fstat(existingDescriptor, &fileStat) == 0,
+                  (fileStat.st_mode & S_IFMT) == S_IFREG,
+                  fileStat.st_size == 32
+            else {
+                throw SQLiteDatabaseError.open("the source fingerprint key is invalid")
+            }
+            var key = Data(count: 32)
+            let readSucceeded = key.withUnsafeMutableBytes { buffer -> Bool in
+                guard let baseAddress = buffer.baseAddress else { return false }
+                var total = 0
+                while total < buffer.count {
+                    let count = Darwin.read(
+                        existingDescriptor,
+                        baseAddress.advanced(by: total),
+                        buffer.count - total
+                    )
+                    if count < 0, errno == EINTR { continue }
+                    guard count > 0 else { return false }
+                    total += count
+                }
+                return true
+            }
+            guard readSucceeded else {
+                throw SQLiteDatabaseError.open("unable to read the source fingerprint key")
+            }
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+            return key
+        }
+        guard errno == ENOENT else {
+            throw SQLiteDatabaseError.open("unable to open the source fingerprint key")
+        }
+
+        let key = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
+        let createdDescriptor = Darwin.open(
+            path,
+            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW,
+            S_IRUSR | S_IWUSR
+        )
+        guard createdDescriptor >= 0 else {
+            throw SQLiteDatabaseError.open("unable to create the source fingerprint key")
+        }
+        defer { Darwin.close(createdDescriptor) }
+        let writeSucceeded = key.withUnsafeBytes { buffer -> Bool in
+            guard let baseAddress = buffer.baseAddress else { return false }
+            var total = 0
+            while total < buffer.count {
+                let count = Darwin.write(
+                    createdDescriptor,
+                    baseAddress.advanced(by: total),
+                    buffer.count - total
+                )
+                if count < 0, errno == EINTR { continue }
+                guard count > 0 else { return false }
+                total += count
+            }
+            return true
+        }
+        guard writeSucceeded, fsync(createdDescriptor) == 0 else {
+            throw SQLiteDatabaseError.open("unable to persist the source fingerprint key")
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+        return key
     }
 
     private var errorMessage: String {
