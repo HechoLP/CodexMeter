@@ -114,6 +114,10 @@ It does not use an official account-usage API and does not scan unrelated folder
 - A future Codex session-schema change may require a CodexMeter update.
 - Ambiguous counter baselines and malformed records are reported as partial rather than guessed.
 
+## Roadmap
+
+Codex is the first supported data source. Future releases are planned to expand CodexMeter into a multi-service local usage meter, including **Claude** and other AI coding assistants where reliable local usage data is available. Support will be added service by service while preserving CodexMeter's local-first privacy model.
+
 ## Privacy
 
 CodexMeter performs no network requests. It stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
