@@ -4,7 +4,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/codex-meter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/codex-meter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
-[![Homebrew Cask](https://img.shields.io/badge/Homebrew-Cask%20verified-FBB040?style=flat-square&logo=homebrew&logoColor=black)](Casks/codexmeter.rb)
+[![Release](https://img.shields.io/badge/release-v0.1.0%20preview-6e5aff?style=flat-square)](https://github.com/HechoLP/CodexMeter/releases/tag/v0.1.0)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -28,33 +28,17 @@ Tiny, native macOS 14+ menu bar app that turns **local Codex session history** i
 - macOS 14 Sonoma or later
 - Local Codex session history under `~/.codex`
 
-### Homebrew from source
+### Direct download
 
-The Cask is implemented and its complete install/uninstall cycle is tested. Until the first Developer ID-signed and notarized GitHub Release is published, install the current candidate through a local Homebrew Tap:
+Homebrew is not required. Download [CodexMeter 0.1.0](https://github.com/HechoLP/CodexMeter/releases/tag/v0.1.0), then:
 
-```bash
-git clone https://github.com/HechoLP/codex-meter.git
-cd codex-meter
-Scripts/release.sh
-Scripts/install_homebrew_local.sh
-```
+1. Open `CodexMeter-0.1.0.dmg`.
+2. Drag `CodexMeter.app` into **Applications**.
+3. Control-click the installed app and choose **Open** on the first launch.
 
-This builds the Universal 2 app, creates a local Tap, and installs `CodexMeter.app` through Homebrew. Remove it with:
+The ZIP asset contains the same Universal 2 app for manual installation. SHA-256 checksum files are included with both downloads.
 
-```bash
-brew uninstall --cask codexmeter
-brew untap hechop/codexmeter-local
-```
-
-### Public Homebrew Tap
-
-The stable public command will be:
-
-```bash
-brew install --cask HechoLP/tap/codexmeter
-```
-
-It will be activated only after the matching ZIP is Developer ID-signed, notarized, published at the stable release URL, and copied to `HechoLP/homebrew-tap`. CodexMeter does not recommend bypassing Gatekeeper.
+This preview is ad-hoc signed because a Developer ID certificate and Apple notarization profile are not yet available. macOS may ask you to confirm the first launch; if it remains blocked, use **System Settings → Privacy & Security → Open Anyway**. A future stable release will use Developer ID signing and notarization.
 
 ## First run
 
@@ -147,8 +131,8 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 ## Build from source
 
 ```bash
-git clone https://github.com/HechoLP/codex-meter.git
-cd codex-meter
+git clone https://github.com/HechoLP/CodexMeter.git
+cd CodexMeter
 swift test
 swift run CodexMeter
 ```
