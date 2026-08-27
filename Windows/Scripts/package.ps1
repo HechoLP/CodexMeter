@@ -50,11 +50,13 @@ if (Test-Path $archivePath) {
 Compress-Archive -Path (Join-Path $publishRoot "*") -DestinationPath $archivePath
 
 $hash = (Get-FileHash -Algorithm SHA256 $archivePath).Hash.ToLowerInvariant()
-"$hash  $archiveName" | Set-Content -Encoding ascii $checksumPath
+$checksumLine = "$hash  $archiveName"
+$ascii = [System.Text.Encoding]::ASCII
+[System.IO.File]::WriteAllText($checksumPath, "$checksumLine`n", $ascii)
 if ($ResetManifest -and (Test-Path $manifestPath)) {
     Remove-Item -Force $manifestPath
 }
-"$hash  $archiveName" | Add-Content -Encoding ascii $manifestPath
+[System.IO.File]::AppendAllText($manifestPath, "$checksumLine`n", $ascii)
 
 Write-Host "Packaged $archivePath"
 Write-Host "SHA-256 $hash"
