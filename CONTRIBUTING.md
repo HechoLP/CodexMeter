@@ -6,8 +6,8 @@ Before opening a pull request:
 
 ```bash
 swift test
-Scripts/build_release.sh
-Scripts/verify_release.sh
+for test_script in Tests/Scripts/*_tests.zsh; do "$test_script"; done
+Scripts/release.sh
 ```
 
 Never commit real Codex session files. Parser fixtures must contain synthetic token metadata only, with no prompts, responses, source code, terminal output, or credentials.

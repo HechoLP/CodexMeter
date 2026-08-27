@@ -1,6 +1,6 @@
 # Architecture
 
-CodexMeter is a native Swift menu bar app with no third-party runtime dependencies.
+CodexMeter is a native Swift menu bar app. Local usage accounting has no network dependency; the only bundled third-party runtime is Sparkle 2.9.6 for signed application updates.
 
 ```text
 Codex session JSONL
@@ -14,6 +14,8 @@ Codex session JSONL
   -> MainActor UI store
   -> MenuBarExtra popover and Settings
 ```
+
+The updater is isolated from token ingestion. It reads a signed HTTPS appcast from the configured public release repository's dedicated `update-feed` branch, verifies the feed and GitHub Release archive with an embedded Ed25519 public key, and verifies the archive before extraction. No usage state is passed to Sparkle.
 
 Token-count events are cumulative snapshots. The normalizer ignores identical snapshots, derives component-wise increases, counts a fresh first counter only when `last_token_usage` equals `total_token_usage`, and treats unresolved baselines or ambiguous decreases as partial accuracy. Cached input remains a subset of input; total is always input plus output.
 

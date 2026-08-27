@@ -20,7 +20,7 @@ if brew list --cask codexmeter >/dev/null 2>&1; then
 fi
 
 if [[ ! -f "${artifact_path}" ]]; then
-  "${script_dir}/release.sh"
+  "${script_dir}/release_unsigned.sh"
 fi
 
 developer_was_enabled=0
@@ -50,11 +50,24 @@ fi
 artifact_sha=$(shasum -a 256 "${artifact_path}" | awk '{print $1}')
 {
   print "# Managed by CodexMeter local installer"
-  awk -v local_url="file://${artifact_path}" -v local_sha="${artifact_sha}" '
-    /^  sha256 / { print "  sha256 \"" local_sha "\""; next }
-    /^  url / { print "  url \"" local_url "\""; getline; next }
-    { print }
-  ' "${project_root}/Casks/codexmeter.rb"
+  print 'cask "codexmeter" do'
+  print "  version \"${release_version}\""
+  print "  sha256 \"${artifact_sha}\""
+  print
+  print "  url \"file://${artifact_path}\""
+  print '  name "CodexMeter"'
+  print '  desc "Local Codex token usage in the menu bar"'
+  print '  homepage "https://github.com/HechoLP/CodexMeter"'
+  print
+  print '  depends_on macos: :sonoma'
+  print
+  print '  app "CodexMeter.app"'
+  print
+  print '  zap trash: ['
+  print '    "~/Library/Application Support/CodexMeter",'
+  print '    "~/Library/Preferences/dev.codexmeter.CodexMeter.plist",'
+  print '  ]'
+  print 'end'
 } > "${local_cask}"
 
 brew install --cask "${tap_name}/codexmeter"

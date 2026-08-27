@@ -1,0 +1,61 @@
+import Foundation
+import XCTest
+@testable import CodexMeter
+
+final class AppPreferencesTests: XCTestCase {
+    func testFreshInstallDefaultsToIconOnly() throws {
+        let suiteName = "CodexMeterTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        AppPreferences.registerDefaults(in: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: "menuBarDisplay"), MenuBarDisplay.iconOnly.rawValue)
+        XCTAssertTrue(defaults.bool(forKey: "showMenuBarIcon"))
+        XCTAssertFalse(defaults.bool(forKey: "showMenuBarText"))
+        XCTAssertTrue(
+            AppPreferences.shouldShowMenuBarIcon(
+                display: defaults.string(forKey: "menuBarDisplay") ?? "",
+                showIcon: defaults.bool(forKey: "showMenuBarIcon"),
+                showText: defaults.bool(forKey: "showMenuBarText")
+            )
+        )
+        XCTAssertFalse(
+            AppPreferences.shouldShowMenuBarText(
+                display: defaults.string(forKey: "menuBarDisplay") ?? "",
+                showText: defaults.bool(forKey: "showMenuBarText"),
+                text: "123M"
+            )
+        )
+    }
+
+    func testRegistrationPreservesAnExistingDisplayPreference() throws {
+        let suiteName = "CodexMeterTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(MenuBarDisplay.total.rawValue, forKey: "menuBarDisplay")
+        defaults.set(true, forKey: "showMenuBarText")
+
+        AppPreferences.registerDefaults(in: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: "menuBarDisplay"), MenuBarDisplay.total.rawValue)
+        XCTAssertTrue(defaults.bool(forKey: "showMenuBarText"))
+    }
+
+    func testPreparingDataDirectoryEnforcesOwnerOnlyPermissions() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: root.path
+        )
+
+        try AppPaths.prepareOwnerOnlyDirectory(at: root)
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: root.path)
+        let permissions = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(permissions.intValue & 0o777, 0o700)
+    }
+}

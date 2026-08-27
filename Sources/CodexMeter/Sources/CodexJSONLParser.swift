@@ -3,6 +3,7 @@ import Foundation
 
 enum CodexParsedLine: Equatable, Sendable {
     case sessionMetadata(SessionMetadata)
+    case taskStarted(TaskStartedMetadata)
     case turnContext(TurnContextMetadata)
     case token(CodexTokenObservation)
     case ignored
@@ -19,6 +20,12 @@ struct CodexTokenObservation: Equatable, Sendable {
 struct TurnContextMetadata: Equatable, Sendable {
     let model: String?
     let workingDirectory: String?
+}
+
+struct TaskStartedMetadata: Equatable, Sendable {
+    let occurredAt: Date
+    let startedAt: Date?
+    let ordinal: Int64?
 }
 
 struct CodexJSONLParser: Sendable {
@@ -81,18 +88,33 @@ struct CodexJSONLParser: Sendable {
                 workingDirectory: sanitized(payload["cwd"], maximumLength: Self.maximumPathLength),
                 forkedFromID: sanitized(payload["forked_from_id"], maximumLength: Self.maximumIdentifierLength),
                 parentThreadID: sanitized(payload["parent_thread_id"], maximumLength: Self.maximumIdentifierLength),
-                subagentHistoryStartOrdinal: integer(payload["subagent_history_start_ordinal"])
+                subagentHistoryStartOrdinal: integer(payload["subagent_history_start_ordinal"]),
+                occurredAt: (root["timestamp"] as? String).flatMap(parseTimestamp)
             )
         )
     }
 
     private func parseEventMessage(_ root: [String: Any]) -> CodexParsedLine {
-        guard
-            let payload = root["payload"] as? [String: Any],
-            payload["type"] as? String == "token_count"
-        else {
+        guard let payload = root["payload"] as? [String: Any],
+              let eventType = payload["type"] as? String else {
             return .ignored
         }
+
+        if eventType == "task_started" {
+            guard let timestamp = root["timestamp"] as? String,
+                  let occurredAt = parseTimestamp(timestamp) else {
+                return .malformed("task start is missing a valid timestamp")
+            }
+            return .taskStarted(
+                TaskStartedMetadata(
+                    occurredAt: occurredAt,
+                    startedAt: timeInterval(payload["started_at"]).map(Date.init(timeIntervalSince1970:)),
+                    ordinal: integer(root["ordinal"])
+                )
+            )
+        }
+
+        guard eventType == "token_count" else { return .ignored }
 
         guard
             let timestamp = root["timestamp"] as? String,
@@ -150,6 +172,14 @@ struct CodexJSONLParser: Sendable {
         default:
             return nil
         }
+    }
+
+    private func timeInterval(_ value: Any?) -> TimeInterval? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let seconds = number.doubleValue
+        guard seconds.isFinite, seconds >= 0 else { return nil }
+        return seconds
     }
 
     private func sanitized(_ value: Any?, maximumLength: Int) -> String? {

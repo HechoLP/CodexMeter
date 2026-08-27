@@ -34,8 +34,8 @@ final class UsageStore: ObservableObject {
     private var previousRefreshModeRawValue = RefreshMode.automatic.rawValue
 
     var menuBarText: String {
-        let displayRawValue = defaults.string(forKey: "menuBarDisplay") ?? MenuBarDisplay.total.rawValue
-        let display = MenuBarDisplay(rawValue: displayRawValue) ?? .total
+        let displayRawValue = defaults.string(forKey: "menuBarDisplay") ?? AppPreferences.defaultMenuBarDisplay
+        let display = MenuBarDisplay(rawValue: displayRawValue) ?? .iconOnly
         if display == .iconOnly { return "" }
         guard hasLoadedSnapshot else { return "…" }
         guard snapshot.updatedAt != nil else { return "—" }
@@ -63,9 +63,9 @@ final class UsageStore: ObservableObject {
         guard hasLoadedSnapshot else { return "CodexMeter, loading local usage" }
         guard snapshot.updatedAt != nil else { return "CodexMeter, no local usage found" }
         let periodRawValue = defaults.string(forKey: "menuBarPeriod") ?? UsagePeriod.today.rawValue
-        let displayRawValue = defaults.string(forKey: "menuBarDisplay") ?? MenuBarDisplay.total.rawValue
+        let displayRawValue = defaults.string(forKey: "menuBarDisplay") ?? AppPreferences.defaultMenuBarDisplay
         let period = UsagePeriod(rawValue: periodRawValue) ?? .today
-        let display = MenuBarDisplay(rawValue: displayRawValue) ?? .total
+        let display = MenuBarDisplay(rawValue: displayRawValue) ?? .iconOnly
         let usage = snapshot.totals(for: period)
         let periodName = switch period {
         case .today: "today"

@@ -10,6 +10,9 @@ let package = Package(
     products: [
         .executable(name: "CodexMeter", targets: ["CodexMeter"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6")
+    ],
     targets: [
         .systemLibrary(
             name: "CSQLite",
@@ -17,7 +20,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "CodexMeter",
-            dependencies: ["CSQLite"],
+            dependencies: [
+                "CSQLite",
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
             path: "Sources/CodexMeter",
             linkerSettings: [
                 .linkedFramework("AppKit"),

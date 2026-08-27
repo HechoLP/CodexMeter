@@ -17,6 +17,9 @@ struct SourceCheckpoint: Equatable, Sendable {
     var hasPendingImport = false
     var sessionID: String?
     var inheritsHistory: Bool
+    var sessionStartedAt: Date?
+    var inheritedHistoryEndOrdinal: Int64?
+    var historyReplayComplete: Bool = true
     var model: String?
     var projectPath: String?
 
@@ -33,6 +36,9 @@ struct SourceCheckpoint: Equatable, Sendable {
             hasPendingImport: false,
             sessionID: nil,
             inheritsHistory: false,
+            sessionStartedAt: nil,
+            inheritedHistoryEndOrdinal: nil,
+            historyReplayComplete: true,
             model: nil,
             projectPath: nil
         )
@@ -146,7 +152,8 @@ actor SQLiteDatabase {
             """
             SELECT file_identity, generation, committed_offset, skipping_oversized_line,
                    observed_size, modification_time_ns, content_fingerprint, has_pending_import,
-                   session_id, inherits_history, model, project_path
+                   session_id, inherits_history, session_started_at,
+                   inherited_history_end_ordinal, history_replay_complete, model, project_path
             FROM parsing_state
             WHERE source_path = ?1
             """
@@ -168,8 +175,15 @@ actor SQLiteDatabase {
                 hasPendingImport: sqlite3_column_int(statement, 7) != 0,
                 sessionID: text(statement, column: 8),
                 inheritsHistory: sqlite3_column_int(statement, 9) != 0,
-                model: text(statement, column: 10),
-                projectPath: text(statement, column: 11)
+                sessionStartedAt: sqlite3_column_type(statement, 10) == SQLITE_NULL
+                    ? nil
+                    : Date(timeIntervalSince1970: sqlite3_column_double(statement, 10)),
+                inheritedHistoryEndOrdinal: sqlite3_column_type(statement, 11) == SQLITE_NULL
+                    ? nil
+                    : sqlite3_column_int64(statement, 11),
+                historyReplayComplete: sqlite3_column_int(statement, 12) != 0,
+                model: text(statement, column: 13),
+                projectPath: text(statement, column: 14)
             )
         case SQLITE_DONE:
             return nil
@@ -321,8 +335,10 @@ actor SQLiteDatabase {
                 INSERT INTO parsing_state (
                     source_path, file_identity, generation, committed_offset, skipping_oversized_line,
                     observed_size, modification_time_ns, content_fingerprint, has_pending_import,
-                    session_id, inherits_history, model, project_path, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                    session_id, inherits_history, session_started_at,
+                    inherited_history_end_ordinal, history_replay_complete,
+                    model, project_path, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
                 ON CONFLICT(source_path) DO UPDATE SET
                     file_identity = excluded.file_identity,
                     generation = excluded.generation,
@@ -334,6 +350,9 @@ actor SQLiteDatabase {
                     has_pending_import = excluded.has_pending_import,
                     session_id = excluded.session_id,
                     inherits_history = excluded.inherits_history,
+                    session_started_at = excluded.session_started_at,
+                    inherited_history_end_ordinal = excluded.inherited_history_end_ordinal,
+                    history_replay_complete = excluded.history_replay_complete,
                     model = excluded.model,
                     project_path = excluded.project_path,
                     updated_at = excluded.updated_at
@@ -351,9 +370,20 @@ actor SQLiteDatabase {
             sqlite3_bind_int(state, 9, checkpoint.hasPendingImport ? 1 : 0)
             try bind(checkpoint.sessionID, at: 10, to: state)
             sqlite3_bind_int(state, 11, checkpoint.inheritsHistory ? 1 : 0)
-            try bind(checkpoint.model, at: 12, to: state)
-            try bind(checkpoint.projectPath, at: 13, to: state)
-            sqlite3_bind_double(state, 14, Date().timeIntervalSince1970)
+            if let sessionStartedAt = checkpoint.sessionStartedAt {
+                sqlite3_bind_double(state, 12, sessionStartedAt.timeIntervalSince1970)
+            } else {
+                sqlite3_bind_null(state, 12)
+            }
+            if let inheritedHistoryEndOrdinal = checkpoint.inheritedHistoryEndOrdinal {
+                sqlite3_bind_int64(state, 13, inheritedHistoryEndOrdinal)
+            } else {
+                sqlite3_bind_null(state, 13)
+            }
+            sqlite3_bind_int(state, 14, checkpoint.historyReplayComplete ? 1 : 0)
+            try bind(checkpoint.model, at: 15, to: state)
+            try bind(checkpoint.projectPath, at: 16, to: state)
+            sqlite3_bind_double(state, 17, Date().timeIntervalSince1970)
             guard sqlite3_step(state) == SQLITE_DONE else {
                 throw SQLiteDatabaseError.step(errorMessage)
             }
@@ -427,7 +457,17 @@ actor SQLiteDatabase {
     }
 
 #if DEBUG
+    func prepareVersion9FixtureForTesting() throws {
+        try execute("ALTER TABLE parsing_state DROP COLUMN history_replay_complete")
+        try execute("ALTER TABLE parsing_state DROP COLUMN inherited_history_end_ordinal")
+        try execute("ALTER TABLE parsing_state DROP COLUMN session_started_at")
+        try execute("PRAGMA user_version = 9")
+    }
+
     func prepareVersion2FixtureForTesting() throws {
+        try execute("ALTER TABLE parsing_state DROP COLUMN history_replay_complete")
+        try execute("ALTER TABLE parsing_state DROP COLUMN inherited_history_end_ordinal")
+        try execute("ALTER TABLE parsing_state DROP COLUMN session_started_at")
         try execute("ALTER TABLE parsing_state DROP COLUMN has_pending_import")
         try execute("ALTER TABLE parsing_state DROP COLUMN content_fingerprint")
         try execute("ALTER TABLE parsing_state DROP COLUMN modification_time_ns")
@@ -671,7 +711,7 @@ actor SQLiteDatabase {
 
     private static func migrate(_ database: OpaquePointer) throws {
         var version = try userVersion(database)
-        guard version <= 9 else {
+        guard version <= 10 else {
             throw SQLiteDatabaseError.migration("database schema is newer than this app supports")
         }
 
@@ -709,6 +749,10 @@ actor SQLiteDatabase {
         }
         if version == 8 {
             try migrateToVersion9(database)
+            version = 9
+        }
+        if version == 9 {
+            try migrateToVersion10(database)
         }
     }
 
@@ -1014,6 +1058,49 @@ actor SQLiteDatabase {
                 on: database
             )
             try execute("PRAGMA user_version = 9", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion10(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 10 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute("ALTER TABLE parsing_state ADD COLUMN session_started_at REAL", on: database)
+            try execute(
+                "ALTER TABLE parsing_state ADD COLUMN inherited_history_end_ordinal INTEGER",
+                on: database
+            )
+            try execute(
+                "ALTER TABLE parsing_state ADD COLUMN history_replay_complete INTEGER NOT NULL DEFAULT 1",
+                on: database
+            )
+
+            // Older builds counted the replayed parent prefix in inherited sessions.
+            // Invalidate only those derived rows so source JSONL files can be imported correctly.
+            try execute(
+                "DELETE FROM usage_events WHERE source_path IN (SELECT source_path FROM parsing_state WHERE inherits_history = 1)",
+                on: database
+            )
+            try execute(
+                "DELETE FROM session_counters WHERE session_id IN (SELECT session_id FROM parsing_state WHERE inherits_history = 1)",
+                on: database
+            )
+            try execute("DELETE FROM parsing_state WHERE inherits_history = 1", on: database)
+            try execute(
+                """
+                INSERT INTO app_metadata(key, value) VALUES('data_epoch', '1')
+                ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1
+                """,
+                on: database
+            )
+            try execute("PRAGMA user_version = 10", on: database)
             try execute("COMMIT", on: database)
         } catch {
             try? execute("ROLLBACK", on: database)

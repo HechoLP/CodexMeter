@@ -25,6 +25,7 @@ private struct GeneralSettingsView: View {
     @AppStorage("refreshMode") private var refreshMode = "automatic"
     @AppStorage("weekStart") private var weekStart = WeekStart.monday.rawValue
     @StateObject private var launchAtLogin = LaunchAtLoginService()
+    @State private var automaticallyChecksForUpdates = true
 
     var body: some View {
         Form {
@@ -58,6 +59,22 @@ private struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Section("Updates") {
+                Toggle(
+                    "Automatically check for updates",
+                    isOn: Binding(
+                        get: { automaticallyChecksForUpdates },
+                        set: { newValue in
+                            automaticallyChecksForUpdates = newValue
+                            UpdateService.shared.setAutomaticallyChecksForUpdates(newValue)
+                        }
+                    )
+                )
+                .disabled(!UpdateService.shared.isAvailable)
+                Text("Checks the signed update feed once per day. Token usage data is never sent.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Calendar") {
                 Picker("Week starts on", selection: $weekStart) {
                     Text("Monday").tag(WeekStart.monday.rawValue)
@@ -67,18 +84,22 @@ private struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
-        .onAppear { launchAtLogin.refresh() }
+        .onAppear {
+            launchAtLogin.refresh()
+            UpdateService.shared.start()
+            automaticallyChecksForUpdates = UpdateService.shared.automaticallyChecksForUpdates
+        }
     }
 }
 
 private struct AppearanceSettingsView: View {
-    @AppStorage("menuBarDisplay") private var display = MenuBarDisplay.total.rawValue
+    @AppStorage("menuBarDisplay") private var display = AppPreferences.defaultMenuBarDisplay
     @AppStorage("menuBarPeriod") private var period = UsagePeriod.today.rawValue
     @AppStorage("numberStyle") private var numberStyle = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
     @AppStorage("showLastUpdated") private var showLastUpdated = true
-    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = true
-    @AppStorage("showMenuBarText") private var showMenuBarText = true
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon = AppPreferences.defaultShowMenuBarIcon
+    @AppStorage("showMenuBarText") private var showMenuBarText = AppPreferences.defaultShowMenuBarText
 
     var body: some View {
         Form {
@@ -238,9 +259,12 @@ private struct DataSettingsView: View {
     }
 
     private func openDataFolder() {
-        let directory = AppPaths.applicationSupportDirectory
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(directory)
+        do {
+            let directory = try AppPaths.prepareApplicationSupportDirectory()
+            NSWorkspace.shared.open(directory)
+        } catch {
+            NSSound.beep()
+        }
     }
 
     private func formattedBytes(_ bytes: Int64) -> String {
@@ -316,10 +340,14 @@ private struct AboutSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            Button("Check for Updates…") {
+                UpdateService.shared.checkForUpdates()
+            }
+            .disabled(!UpdateService.shared.isAvailable)
             HStack(spacing: 16) {
-                Link("GitHub", destination: URL(string: "https://github.com/HechoLP/codex-meter")!)
-                Link("Releases", destination: URL(string: "https://github.com/HechoLP/codex-meter/releases")!)
-                Link("MIT License", destination: URL(string: "https://github.com/HechoLP/codex-meter/blob/main/LICENSE")!)
+                Link("GitHub", destination: URL(string: "https://github.com/HechoLP/CodexMeter")!)
+                Link("Releases", destination: URL(string: "https://github.com/HechoLP/CodexMeter/releases")!)
+                Link("MIT License", destination: URL(string: "https://github.com/HechoLP/CodexMeter/blob/main/LICENSE")!)
             }
             .font(.caption)
         }
