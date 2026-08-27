@@ -8,11 +8,9 @@
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
-<p align="center">
-  <img src="Assets/README/codexmeter-screenshot.png" alt="Actual CodexMeter menu bar popover showing local token totals" width="658" />
-</p>
+<img src="Assets/README/codexmeter-hero.png" alt="CodexMeter hero featuring the actual app popover and local token totals" width="100%" />
 
-<p align="center"><sub>CodexMeter running on macOS with totals calculated from local Codex session history.</sub></p>
+<p align="center"><sub>The app popover shown above is an actual CodexMeter screen.</sub></p>
 
 Tiny, native macOS 14+ menu bar app that turns **local Codex session history** into clear token totals. Today, this week, this month, and all locally available time stay one click away—without an account login, API key, browser cookie, telemetry, or cloud sync.
 
