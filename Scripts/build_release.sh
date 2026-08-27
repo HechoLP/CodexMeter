@@ -12,6 +12,7 @@ artifact_root="${project_root}/Artifacts"
 cache_root=${CODEXMETER_BUILD_CACHE:-"$(getconf DARWIN_USER_CACHE_DIR)/dev.codexmeter.release"}
 app_path=${CODEXMETER_APP_PATH:-"${cache_root}/${PRODUCT_NAME}.app"}
 binary_path="${project_root}/.build/apple/Products/Release/${PRODUCT_NAME}"
+sparkle_framework="${project_root}/.build/apple/Products/Release/Frameworks/Sparkle.framework"
 
 cd "${project_root}"
 swift build -c release --arch arm64 --arch x86_64
@@ -20,16 +21,29 @@ if [[ ! -f "${binary_path}" ]]; then
   print -u2 "Release executable was not produced at ${binary_path}"
   exit 1
 fi
+if [[ ! -d "${sparkle_framework}" ]]; then
+  print -u2 "Sparkle.framework was not produced at ${sparkle_framework}"
+  exit 1
+fi
 
 if [[ "${app_path:t}" != "${PRODUCT_NAME}.app" ]]; then
   print -u2 "Refusing to replace unexpected app path: ${app_path}"
   exit 1
 fi
 rm -rf "${app_path}"
-mkdir -p "${app_path}/Contents/MacOS" "${app_path}/Contents/Resources"
+mkdir -p "${app_path}/Contents/MacOS" "${app_path}/Contents/Resources" \
+  "${app_path}/Contents/Frameworks"
 install -m 755 "${binary_path}" "${app_path}/Contents/MacOS/${PRODUCT_NAME}"
 install -m 644 "${project_root}/Assets/AppIcon.icns" "${app_path}/Contents/Resources/AppIcon.icns"
 install -m 644 "${project_root}/Config/Info.plist" "${app_path}/Contents/Info.plist"
+ditto --norsrc --noextattr "${sparkle_framework}" \
+  "${app_path}/Contents/Frameworks/Sparkle.framework"
+
+binary_load_commands=$(otool -l "${app_path}/Contents/MacOS/${PRODUCT_NAME}")
+if [[ "${binary_load_commands}" != *'@executable_path/../Frameworks'* ]]; then
+  install_name_tool -add_rpath '@executable_path/../Frameworks' \
+    "${app_path}/Contents/MacOS/${PRODUCT_NAME}"
+fi
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ${PRODUCT_NAME}" "${app_path}/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable ${PRODUCT_NAME}" "${app_path}/Contents/Info.plist"

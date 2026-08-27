@@ -1,12 +1,12 @@
 cask "codexmeter" do
   version "0.1.0"
-  sha256 "7a49e20f0ee4e3859e3333fdf0c1d213da3258d7462dabc840bff29746c1207d"
+  sha256 "38a1ec06849647555fb73e2a401371a94f76be551c2d4cb2352ea3da9d745e2f"
 
-  url "https://github.com/HechoLP/codex-meter/releases/download/v#{version}/CodexMeter-#{version}.zip",
-      verified: "github.com/HechoLP/codex-meter/"
+  url "https://github.com/HechoLP/CodexMeter/releases/download/v#{version}/CodexMeter-#{version}.zip",
+      verified: "github.com/HechoLP/CodexMeter/"
   name "CodexMeter"
   desc "Local Codex token usage in the menu bar"
-  homepage "https://github.com/HechoLP/codex-meter"
+  homepage "https://github.com/HechoLP/CodexMeter"
 
   depends_on macos: :sonoma
 

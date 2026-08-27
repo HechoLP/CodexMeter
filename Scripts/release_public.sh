@@ -25,6 +25,7 @@ app_path=${CODEXMETER_APP_PATH:-"${cache_root}/${PRODUCT_NAME}.app"}
 "${script_dir}/sign_app.sh" "${app_path}"
 "${script_dir}/notarize.sh" "${app_path}"
 "${script_dir}/package_release.sh"
+"${script_dir}/generate_appcast.sh"
 CODEXMETER_REQUIRE_PUBLIC_RELEASE=1 \
   CODE_SIGN_TEAM_ID="${team_id}" \
   "${script_dir}/verify_release.sh" "${app_path}"
