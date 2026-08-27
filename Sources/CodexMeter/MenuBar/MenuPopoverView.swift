@@ -2,10 +2,12 @@ import AppKit
 import SwiftUI
 
 struct MenuPopoverView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
     @AppStorage("numberStyle") private var numberStyleRawValue = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
     @AppStorage("showLastUpdated") private var showLastUpdated = true
+    @State private var refreshTurns = 0
 
     private let formatter = TokenFormatter()
 
@@ -25,6 +27,10 @@ struct MenuPopoverView: View {
                 PeriodDetailView(period: period)
                     .environmentObject(store)
             }
+        }
+        .onChange(of: store.isRefreshing) { _, isRefreshing in
+            guard isRefreshing, !reduceMotion else { return }
+            refreshTurns += 1
         }
     }
 
@@ -71,6 +77,10 @@ struct MenuPopoverView: View {
                             .font(.system(size: 32, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .contentTransition(.numericText())
+                            .animation(
+                                reduceMotion ? nil : .easeOut(duration: 0.24),
+                                value: store.snapshot.today.totalTokens
+                            )
                         Text("Total tokens today")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -109,7 +119,8 @@ struct MenuPopoverView: View {
                        !store.isRefreshing,
                        !store.isImportingHistory,
                        let lastSourceRefreshAt = store.lastSourceRefreshAt,
-                       store.snapshot.quality == .exact {
+                       store.snapshot.quality != .stale,
+                       store.snapshot.quality != .error {
                         HStack(spacing: 3) {
                             Text("Updated")
                             Text(lastSourceRefreshAt, style: .relative)
@@ -123,12 +134,22 @@ struct MenuPopoverView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .contentTransition(.opacity)
+                    .animation(
+                        reduceMotion ? nil : .easeOut(duration: 0.18),
+                        value: store.statusMessage
+                    )
             }
             Spacer()
             Button {
                 Task { await store.refresh() }
             } label: {
                 Image(systemName: "arrow.clockwise")
+                    .rotationEffect(.degrees(Double(refreshTurns) * 360))
+                    .animation(
+                        reduceMotion ? nil : .easeInOut(duration: 0.5),
+                        value: refreshTurns
+                    )
             }
             .buttonStyle(.plain)
             .frame(width: 28, height: 28)
@@ -164,7 +185,11 @@ struct MenuPopoverView: View {
     }
 
     private var shouldShowStatus: Bool {
-        showLastUpdated || store.isRefreshing || store.isImportingHistory || store.snapshot.quality != .exact
+        let qualityNeedsStatus = switch store.snapshot.quality {
+        case .stale, .unavailable, .error: true
+        case .exact, .partial: false
+        }
+        return showLastUpdated || store.isRefreshing || store.isImportingHistory || qualityNeedsStatus
     }
 
     private var statusSymbol: String {
@@ -182,6 +207,8 @@ struct MenuPopoverView: View {
             Spacer()
             Text(formatted(value))
                 .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: value)
         }
         .font(.subheadline)
         .accessibilityElement(children: .ignore)
@@ -196,6 +223,8 @@ struct MenuPopoverView: View {
                 Text(formatted(value))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: value)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.tertiary)

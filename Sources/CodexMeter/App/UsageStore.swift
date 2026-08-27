@@ -92,7 +92,7 @@ final class UsageStore: ObservableObject {
         if sourceCount > 0 {
             return "Connected"
         }
-        return snapshot.updatedAt == nil ? "Not Found" : "Sources Unavailable"
+        return "No session files found"
     }
 
     var operationAwareStatusSymbol: String {
@@ -100,8 +100,8 @@ final class UsageStore: ObservableObject {
             return "arrow.triangle.2.circlepath"
         }
         return switch snapshot.quality {
-        case .exact: "checkmark.circle"
-        case .partial, .stale: "clock"
+        case .exact, .partial: "checkmark.circle"
+        case .stale: "exclamationmark.triangle"
         case .unavailable: "questionmark.circle"
         case .error: "exclamationmark.triangle"
         }
@@ -224,22 +224,20 @@ final class UsageStore: ObservableObject {
                 scheduleContinuationRefresh()
             } else {
                 switch result.snapshot.quality {
-                case .exact:
+                case .exact, .partial:
                     statusMessage = result.snapshot.updatedAt == nil ? "No Codex usage found" : "Updated just now"
-                case .partial:
-                    statusMessage = "Some history is incomplete"
                 case .stale:
-                    statusMessage = "Showing the last good update"
+                    statusMessage = "Refresh failed"
                 case .unavailable:
                     statusMessage = result.sourceCount == 0 ? "Codex sessions not found" : "No Codex usage found"
                 case .error:
-                    statusMessage = "Unable to update usage"
+                    statusMessage = "Refresh failed"
                 }
             }
         } catch is CancellationError {
             isImportingHistory = false
             hasLoadedSnapshot = true
-            statusMessage = snapshot.updatedAt == nil ? "Refresh cancelled" : "Showing the last good update"
+            statusMessage = "Refresh cancelled"
         } catch {
             isImportingHistory = false
             hasLoadedSnapshot = true
@@ -259,7 +257,7 @@ final class UsageStore: ObservableObject {
                 statusMessage = resourceMessage
             } else if snapshot.updatedAt != nil {
                 snapshot.quality = .stale
-                statusMessage = "Showing the last good update"
+                statusMessage = "Refresh failed"
             } else {
                 snapshot.quality = .error
                 statusMessage = "Unable to read local usage"
@@ -289,7 +287,7 @@ final class UsageStore: ObservableObject {
             await DiagnosticsLogger.shared.record(.rebuildCompleted(quality: result.snapshot.quality))
             statusMessage = result.hasMoreWork
                 ? "Importing local history…"
-                : (result.snapshot.quality == .partial ? "Some history is incomplete" : "Rebuild complete")
+                : "Rebuild complete"
             dataOperationMessage = statusMessage
             if result.hasMoreWork { scheduleContinuationRefresh() }
         } catch {
@@ -450,8 +448,8 @@ final class UsageStore: ObservableObject {
             }
             if cached.quality != .exact {
                 statusMessage = switch cached.quality {
-                case .partial: "Some history is incomplete"
-                case .stale: "Showing the last good update"
+                case .partial: cached.updatedAt == nil ? "No Codex usage found" : "Updated"
+                case .stale: "Refresh failed"
                 case .unavailable: "No Codex usage found"
                 case .error: "Unable to read local usage"
                 case .exact: statusMessage
@@ -461,7 +459,7 @@ final class UsageStore: ObservableObject {
             hasLoadedSnapshot = true
             if snapshot.updatedAt != nil {
                 snapshot.quality = .stale
-                statusMessage = "Showing the last good update"
+                statusMessage = "Refresh failed"
             } else {
                 snapshot.quality = .error
                 statusMessage = "Unable to read local usage"

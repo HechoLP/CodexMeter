@@ -126,7 +126,7 @@ public sealed class UsageScanner
         var status = snapshot.Quality switch
         {
             DataQuality.Exact => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
-            DataQuality.Partial => "Some history is incomplete",
+            DataQuality.Partial => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
             DataQuality.Unavailable => sources.Count == 0 ? "Codex sessions not found" : "No Codex usage found",
             _ => "Unable to read local usage"
         };
