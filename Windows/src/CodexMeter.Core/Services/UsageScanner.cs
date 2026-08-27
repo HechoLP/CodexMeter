@@ -233,12 +233,12 @@ public sealed class UsageScanner
             : hasMoreWork
                 ? "Importing local history…"
                 : snapshot.Quality switch
-        {
-            DataQuality.Exact => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
-            DataQuality.Partial => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
-            DataQuality.Unavailable => sources.Count == 0 ? "Codex sessions not found" : "No Codex usage found",
-            _ => "Unable to read local usage"
-        };
+                {
+                    DataQuality.Exact => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
+                    DataQuality.Partial => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
+                    DataQuality.Unavailable => sources.Count == 0 ? "Codex sessions not found" : "No Codex usage found",
+                    _ => "Unable to read local usage"
+                };
         return new ScanResult(snapshot, sources.Count, status, hasMoreWork);
     }
 
