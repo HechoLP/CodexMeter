@@ -12,6 +12,8 @@ All notable changes to CodexMeter will be documented in this file.
 - Launch at Login, data rebuild/clear controls, and privacy-safe opt-in diagnostics.
 - Universal 2 ZIP/DMG release pipeline, checksums, CI, and release documentation.
 - Resumable 10,000/100,000-event stress coverage and fail-closed public-release verification.
+- Versioned Homebrew Cask and a verified local-Tap installation path.
+- Product-focused README artwork and installation documentation.
 
 ### Fixed
 

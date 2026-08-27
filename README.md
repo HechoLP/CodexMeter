@@ -2,73 +2,84 @@
 
 > Local Codex token usage, always one click away in your macOS menu bar.
 
-[![CI](https://github.com/HechoLP/codex-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/HechoLP/codex-meter/actions/workflows/ci.yml)
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-111827?logo=apple&logoColor=white)
-![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift&logoColor=white)
-![Status: pre-release](https://img.shields.io/badge/status-pre--release-F59E0B)
-[![MIT License](https://img.shields.io/badge/license-MIT-22C55E)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/codex-meter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/codex-meter/actions/workflows/ci.yml)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
+[![Homebrew Cask](https://img.shields.io/badge/Homebrew-Cask%20verified-FBB040?style=flat-square&logo=homebrew&logoColor=black)](Casks/codexmeter.rb)
+[![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
+[![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
-<p align="center">
-  <img src="Assets/AppIcon-1024.png" width="180" alt="CodexMeter app icon">
-</p>
+<img src="Assets/README/codexmeter-hero.png" alt="CodexMeter product preview showing its menu bar token totals with example data" width="100%" />
 
-CodexMeter is a lightweight, native macOS menu bar app that turns locally observable Codex session history into clear token totals for today, this week, this month, and all locally available time. It needs no account login, API key, browser cookie, cloud sync, or telemetry.
+Tiny, native macOS 14+ menu bar app that turns **local Codex session history** into clear token totals. Today, this week, this month, and all locally available time stay one click away—without an account login, API key, browser cookie, telemetry, or cloud sync.
 
-## Why CodexMeter?
+> The hero uses representative example values. CodexMeter shows totals calculated from the Codex session files available on your Mac.
+
+## Why
 
 - **Glanceable totals.** See input, cached input, output, and total tokens without leaving the menu bar.
-- **Honest accounting.** Cumulative token snapshots are normalized into increases instead of being naively added together.
-- **Local by design.** Session history is parsed and summarized entirely on your Mac.
-- **Native and quiet.** Built with Swift and SwiftUI, with no third-party runtime dependencies or background network traffic.
+- **Honest accounting.** Cumulative snapshots are normalized into increases instead of being added repeatedly.
+- **Local by design.** Prompts, responses, source code, credentials, and raw session paths are not stored in CodexMeter's database.
+- **Native and quiet.** Swift and SwiftUI, no third-party runtime, no Dock icon, and no background network traffic.
 
 ## Install
-
-> [!IMPORTANT]
-> CodexMeter is currently pre-release. A signed and notarized public download has not been published yet.
 
 ### Requirements
 
 - macOS 14 Sonoma or later
-- Xcode 26 or later with Swift 6.2
-- Local Codex session history
+- Local Codex session history under `~/.codex`
 
-### Build the current release candidate
+### Homebrew from source
+
+The Cask is implemented and its complete install/uninstall cycle is tested. Until the first Developer ID-signed and notarized GitHub Release is published, install the current candidate through a local Homebrew Tap:
 
 ```bash
 git clone https://github.com/HechoLP/codex-meter.git
 cd codex-meter
-swift test
 Scripts/release.sh
-open "$(getconf DARWIN_USER_CACHE_DIR)/dev.codexmeter.release/CodexMeter.app"
+Scripts/install_homebrew_local.sh
 ```
 
-The release script builds and verifies a Universal 2 app, then creates ZIP, DMG, and SHA-256 artifacts under `Artifacts/`. The local candidate is ad-hoc signed; Developer ID signing and Apple notarization are still required for public distribution.
+This builds the Universal 2 app, creates a local Tap, and installs `CodexMeter.app` through Homebrew. Remove it with:
 
-Maintainers use `Scripts/release_public.sh` for the fail-closed Developer ID, notarization, stapling, and Gatekeeper path described in the [release guide](Documentation/RELEASING.md).
+```bash
+brew uninstall --cask codexmeter
+brew untap hechop/codexmeter-local
+```
+
+### Public Homebrew Tap
+
+The stable public command will be:
+
+```bash
+brew install --cask HechoLP/tap/codexmeter
+```
+
+It will be activated only after the matching ZIP is Developer ID-signed, notarized, published at the stable release URL, and copied to `HechoLP/homebrew-tap`. CodexMeter does not recommend bypassing Gatekeeper.
 
 ## First run
 
 1. Launch CodexMeter after Codex has created local session history.
-2. Select the diamond meter in the macOS menu bar.
-3. Open **Settings** to control launch-at-login, refresh behavior, and local data.
+2. Select the diamond meter in the menu bar.
+3. Open **Settings** to choose the displayed period, refresh mode, menu bar elements, and launch-at-login behavior.
 4. Use **Refresh** whenever you want an immediate reconciliation.
 
-No Codex account sign-in is required. CodexMeter reads only the supported local session directories on the current Mac.
+No Codex account sign-in is required.
 
 ## Features
 
-- Today, week, month, and locally observable all-time periods
+- Today, week, month, and locally observable all-time totals
 - Input, cached input, output, and total-token breakdowns
-- File-event hints plus periodic and manual refresh
+- Automatic file-event refresh with a lightweight one-minute fallback
+- Manual, 30-second, one-minute, and five-minute refresh modes
 - Incremental JSONL ingestion with transactional SQLite checkpoints
-- Duplicate, replay, incomplete-line, and file-truncation safeguards
-- Native menu bar popover and Settings window
-- Optional launch at login through macOS Service Management
-- Local history clearing with secure deletion and a re-import cutoff
-- Opt-in operational diagnostics that exclude sensitive content and paths
-- No notifications, advertisements, analytics, or cloud account
+- Duplicate, replay, partial-line, truncation, and same-inode rewrite protection
+- Resumable 32 MiB / roughly five-second import slices for large histories
+- Native menu bar popover, Settings window, VoiceOver labels, and keyboard-accessible controls
+- Optional Launch at Login through macOS Service Management
+- Secure local-history clearing with a persistent re-import cutoff
+- No notifications, advertising, analytics, or cloud account
 
-## How counting works
+## How token counting works
 
 ```text
 Codex session JSONL
@@ -79,62 +90,98 @@ Codex session JSONL
   → menu bar totals
 ```
 
-Codex token-count events are cumulative snapshots. CodexMeter derives component-wise increases and ignores repeated snapshots. Cached input is shown separately but is not added to the total twice: total tokens remain input plus output, while cached input is a subset of input.
+Codex token-count events are cumulative snapshots. CodexMeter derives component-wise increases and ignores repeated snapshots. Cached input is a subset of input and is never added twice:
 
-> [!NOTE]
-> CodexMeter does not use an official account-usage API. **All Time** means the oldest token record still available in local Codex session history through now. Deleted logs and activity on other Macs may not be represented.
+```text
+Total = Input + Output
+Cached Input ⊆ Input
+```
 
-## Privacy note
+## Data sources
 
-CodexMeter performs no network requests. It discovers JSONL files only inside:
+CodexMeter reads JSONL files only inside:
 
 - `~/.codex/sessions`
 - `~/.codex/archived_sessions`
 
-It stores normalized token counts, timestamps, SHA-256-derived session/source/event identifiers, and parser checkpoints. It does **not** store or log raw session paths, prompts, responses, reasoning text, source code, tool input or output, terminal output, model names, project working directories, authentication tokens, or `~/.codex/auth.json`.
+It does not use an official account-usage API and does not scan unrelated folders.
 
-The Application Support directory is restricted to the current user (`0700`), and SQLite files are restricted to the current user (`0600`). See the full [privacy design](Documentation/PRIVACY.md).
+## Accuracy and limitations
+
+- **All Time** means the oldest token record still present in local Codex session history through now.
+- Deleted logs cannot be reconstructed.
+- Activity from another Mac is not included unless its session history exists locally.
+- A future Codex session-schema change may require a CodexMeter update.
+- Ambiguous counter baselines and malformed records are reported as partial rather than guessed.
+
+## Privacy
+
+CodexMeter performs no network requests. It stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
+
+The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 
 ## macOS permissions
 
 | Capability | Required? | Why |
 | --- | :---: | --- |
-| Full Disk Access | No | CodexMeter reads only known files under `~/.codex`. |
-| Accessibility | No | It does not control other apps. |
-| Screen Recording | No | It does not inspect the screen. |
-| Keychain access | No | It does not read Codex credentials. |
-| Launch at Login approval | Optional | Needed only when you enable automatic launch. |
+| Full Disk Access | No | Reads only supported files under `~/.codex`. |
+| Accessibility | No | Does not control other apps. |
+| Screen Recording | No | Does not inspect the screen. |
+| Keychain access | No | Does not read Codex credentials. |
+| Launch at Login approval | Optional | Used only when automatic launch is enabled. |
 
-## Development
+## Settings
 
-Run the test suite and development build:
+| Pane | Controls |
+| --- | --- |
+| General | Launch at Login, refresh mode, week start |
+| Appearance | Period, metric, number style, icon/text visibility, popover details |
+| Usage | Accounting semantics and cached-input explanation |
+| Data | Source status, database statistics, rebuild, clear history |
+| Advanced | Privacy-safe diagnostics and log folder |
+
+## Build from source
 
 ```bash
+git clone https://github.com/HechoLP/codex-meter.git
+cd codex-meter
 swift test
 swift run CodexMeter
 ```
 
-Build the same Universal 2 configuration used by CI:
+Build and verify the Universal 2 local candidate:
 
 ```bash
-swift build -c release --arch arm64 --arch x86_64
+Scripts/release.sh
 ```
 
-CodexMeter targets macOS 14 and Swift 6.2. The codebase uses AppKit, SwiftUI, Core Services, Service Management, and the system SQLite library.
+Maintainers with a Developer ID Application certificate and notarization profile use:
+
+```bash
+export CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export CODE_SIGN_TEAM_ID="TEAMID"
+export NOTARY_PROFILE="codexmeter-notary"
+Scripts/release_public.sh
+```
+
+## Troubleshooting
+
+- **No usage found:** launch Codex at least once and check that `~/.codex/sessions` contains JSONL files.
+- **Statistics look incomplete:** use **Settings → Data → Rebuild Statistics**.
+- **Launch at Login is blocked:** open macOS **System Settings → General → Login Items**.
+- **Database safety limit reached:** review the local totals, then use **Clear Local History** if they are no longer needed.
+
+See the complete [Troubleshooting guide](Documentation/TROUBLESHOOTING.md).
 
 ## Documentation
 
-- [Architecture](Documentation/ARCHITECTURE.md) — ingestion, normalization, storage, and UI flow
-- [Privacy](Documentation/PRIVACY.md) — data boundaries, file permissions, and deletion behavior
-- [Troubleshooting](Documentation/TROUBLESHOOTING.md) — common local issues and safe recovery steps
-- [Releasing](Documentation/RELEASING.md) — signing, notarization, packaging, and rollback
-- [Changelog](CHANGELOG.md) — version history
-- [Contributing](CONTRIBUTING.md) — development and contribution workflow
-- [Security](SECURITY.md) — vulnerability reporting
-
-## Project status
-
-The current version is `0.1.0` and remains pre-release. CI builds and tests the app on macOS, including the Universal 2 release configuration. Public distribution remains gated on Developer ID signing, notarization, and a final independent release audit.
+- [Architecture](Documentation/ARCHITECTURE.md)
+- [Privacy](Documentation/PRIVACY.md)
+- [Releasing](Documentation/RELEASING.md)
+- [Troubleshooting](Documentation/TROUBLESHOOTING.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 
 ## Acknowledgements
 
@@ -146,4 +193,4 @@ CodexMeter is an unofficial utility and is not affiliated with or endorsed by Op
 
 ## License
 
-CodexMeter is available under the [MIT License](LICENSE).
+MIT © CodexMeter contributors. See [LICENSE](LICENSE).
