@@ -597,7 +597,7 @@ actor CodexUsageCollector {
             checkpoint.inheritsHistory = parsed.inheritsHistory
             checkpoint.sessionStartedAt = parsed.occurredAt
             checkpoint.inheritedHistoryEndOrdinal = parsed.subagentHistoryStartOrdinal
-            checkpoint.historyReplayComplete = parsed.subagentHistoryStartOrdinal == nil
+            checkpoint.historyReplayComplete = !parsed.inheritsHistory
             checkpoint.model = nil
             checkpoint.projectPath = nil
             if resolvedID != loadedStateSessionID, let resolvedID {

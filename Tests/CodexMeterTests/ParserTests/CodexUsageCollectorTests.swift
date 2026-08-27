@@ -604,6 +604,46 @@ final class CodexUsageCollectorTests: XCTestCase {
         XCTAssertEqual(checkpoint?.historyReplayComplete, true)
     }
 
+    func testInheritedReplayWithoutCopiedSessionMetadataIsNotCounted() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        let childID = "abababab-abab-abab-abab-abababababab"
+        let source = sessions.appendingPathComponent("rollout-2026-08-27T00-00-10-\(childID).jsonl")
+        let lines = [
+            #"{"timestamp":"2026-08-27T00:00:10Z","type":"session_meta","payload":{"id":"abababab-abab-abab-abab-abababababab","parent_thread_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}"#,
+            tokenLineWithoutOrdinal(
+                timestamp: "2026-08-27T00:00:10.100Z",
+                input: 5_000, cached: 4_000, output: 500,
+                lastInput: 5_000, lastCached: 4_000, lastOutput: 500
+            ),
+            #"{"timestamp":"2026-08-27T00:00:11Z","type":"event_msg","payload":{"type":"task_started","started_at":4000000000}}"#,
+            tokenLineWithoutOrdinal(
+                timestamp: "2026-08-27T00:00:20Z",
+                input: 5_100, cached: 4_080, output: 520,
+                lastInput: 100, lastCached: 80, lastOutput: 20
+            )
+        ]
+        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: source)
+
+        let database = try SQLiteDatabase(url: root.appendingPathComponent("usage.sqlite"))
+        let collector = CodexUsageCollector(database: database, roots: [sessions])
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        let result = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+
+        XCTAssertEqual(
+            result.snapshot.allTime,
+            TokenUsage(inputTokens: 100, cachedInputTokens: 80, outputTokens: 20)
+        )
+        let eventCount = try await database.eventCount()
+        XCTAssertEqual(eventCount, 1)
+        let checkpoint = try await database.checkpoint(for: storageIdentifier(source.path))
+        XCTAssertNotNil(checkpoint?.sessionStartedAt)
+        XCTAssertEqual(checkpoint?.historyReplayComplete, true)
+    }
+
     func testHistoryStartOrdinalExcludesCopiedPrefix() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -457,6 +457,10 @@ actor SQLiteDatabase {
     }
 
 #if DEBUG
+    func prepareVersion10FixtureForTesting() throws {
+        try execute("PRAGMA user_version = 10")
+    }
+
     func prepareVersion9FixtureForTesting() throws {
         try execute("ALTER TABLE parsing_state DROP COLUMN history_replay_complete")
         try execute("ALTER TABLE parsing_state DROP COLUMN inherited_history_end_ordinal")
@@ -711,7 +715,7 @@ actor SQLiteDatabase {
 
     private static func migrate(_ database: OpaquePointer) throws {
         var version = try userVersion(database)
-        guard version <= 10 else {
+        guard version <= 11 else {
             throw SQLiteDatabaseError.migration("database schema is newer than this app supports")
         }
 
@@ -753,6 +757,10 @@ actor SQLiteDatabase {
         }
         if version == 9 {
             try migrateToVersion10(database)
+            version = 10
+        }
+        if version == 10 {
+            try migrateToVersion11(database)
         }
     }
 
@@ -1101,6 +1109,36 @@ actor SQLiteDatabase {
                 on: database
             )
             try execute("PRAGMA user_version = 10", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion11(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 11 {
+                try execute("COMMIT", on: database)
+                return
+            }
+
+            // Version 10 could retain replayed parent history when an inherited
+            // checkpoint had no persisted replay boundary. Rebuild every derived
+            // row once so all existing installations use the corrected classifier.
+            // Source JSONL files and user preferences in app_metadata are preserved.
+            try execute("DELETE FROM usage_events", on: database)
+            try execute("DELETE FROM session_counters", on: database)
+            try execute("DELETE FROM parsing_state", on: database)
+            try execute(
+                """
+                INSERT INTO app_metadata(key, value) VALUES('data_epoch', '1')
+                ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1
+                """,
+                on: database
+            )
+            try execute("PRAGMA user_version = 11", on: database)
             try execute("COMMIT", on: database)
         } catch {
             try? execute("ROLLBACK", on: database)
