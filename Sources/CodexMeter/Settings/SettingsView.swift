@@ -346,7 +346,7 @@ private struct AboutSettingsView: View {
             .disabled(!UpdateService.shared.isAvailable)
             HStack(spacing: 16) {
                 Link("GitHub", destination: URL(string: "https://github.com/HechoLP/CodexMeter")!)
-                Link("Releases", destination: URL(string: "https://github.com/HechoLP/CodexMeter/releases")!)
+                Link("Releases", destination: URL(string: "https://github.com/HechoLP/CodexMeter-Releases/releases")!)
                 Link("MIT License", destination: URL(string: "https://github.com/HechoLP/CodexMeter/blob/main/LICENSE")!)
             }
             .font(.caption)

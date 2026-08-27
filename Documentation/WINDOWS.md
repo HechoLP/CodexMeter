@@ -4,11 +4,11 @@ CodexMeter for Windows is a native .NET 8 WPF tray application for Windows 10 an
 
 ## Install
 
-1. Download the x64 or ARM64 ZIP and `SHA256SUMS-windows.txt` from the `windows-v0.1.0` GitHub release.
+1. Download the x64 or ARM64 ZIP and `SHA256SUMS-windows.txt` from the public [`windows-v0.1.1` GitHub release](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/windows-v0.1.1).
 2. Verify the downloaded ZIP in PowerShell:
 
    ```powershell
-   Get-FileHash .\CodexMeter-Windows-0.1.0-x64.zip -Algorithm SHA256
+   Get-FileHash .\CodexMeter-Windows-0.1.1-x64.zip -Algorithm SHA256
    Get-Content .\SHA256SUMS-windows.txt
    ```
 

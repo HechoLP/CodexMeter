@@ -8,7 +8,7 @@ final class UpdateServiceTests: XCTestCase {
             UpdateService.canStartUpdater(
                 bundleURL: URL(fileURLWithPath: "/Applications/CodexMeter.app"),
                 infoDictionary: [
-                    "SUFeedURL": "https://raw.githubusercontent.com/HechoLP/CodexMeter/update-feed/appcast.xml",
+                    "SUFeedURL": "https://raw.githubusercontent.com/HechoLP/CodexMeter-Releases/update-feed/appcast.xml",
                     "SUPublicEDKey": "public-key"
                 ]
             )

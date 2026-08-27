@@ -1,7 +1,7 @@
 param(
     [ValidateSet("win-x64", "win-arm64")]
     [string]$RuntimeIdentifier = "win-x64",
-    [string]$Version = "0.1.0",
+    [string]$Version,
     [switch]$ResetManifest
 )
 
@@ -9,6 +9,10 @@ $ErrorActionPreference = "Stop"
 $windowsRoot = Split-Path -Parent $PSScriptRoot
 $projectRoot = Split-Path -Parent $windowsRoot
 $projectPath = Join-Path $windowsRoot "src\CodexMeter.Windows\CodexMeter.Windows.csproj"
+$project = [xml](Get-Content $projectPath)
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = $project.Project.PropertyGroup.Version
+}
 $publishRoot = Join-Path $windowsRoot "artifacts\publish\$RuntimeIdentifier"
 $artifactRoot = Join-Path $projectRoot "Artifacts"
 $architecture = $RuntimeIdentifier.Replace("win-", "")
