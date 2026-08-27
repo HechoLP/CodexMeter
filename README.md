@@ -4,7 +4,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
-[![Release](https://img.shields.io/badge/release-v0.1.0%20preview-6e5aff?style=flat-square)](https://github.com/HechoLP/CodexMeter/releases/tag/v0.1.0)
+[![Release](https://img.shields.io/badge/release-preview%20only-6e5aff?style=flat-square)](Documentation/ReleaseNotes/0.1.0.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -28,17 +28,11 @@ Tiny, native macOS 14+ menu bar app that turns **local Codex session history** i
 - macOS 14 Sonoma or later
 - Local Codex session history under `~/.codex`
 
-### Direct download
+### Public binary status
 
-Homebrew is not required. Download [CodexMeter 0.1.0](https://github.com/HechoLP/CodexMeter/releases/tag/v0.1.0), then:
+CodexMeter does not yet provide a generally trusted binary download. The v0.1.0 ZIP and DMG are Apple Development-signed maintainer previews, not Developer ID-signed or notarized public releases. Do not bypass Gatekeeper to install those preview artifacts.
 
-1. Open `CodexMeter-0.1.0.dmg`.
-2. Drag `CodexMeter.app` into **Applications**.
-3. Control-click the installed app and choose **Open** on the first launch.
-
-The ZIP asset contains the same Universal 2 app for manual installation. SHA-256 checksum files are included with both downloads.
-
-This preview is Apple Development-signed because a Developer ID certificate and Apple notarization profile are not yet available. macOS may ask you to confirm the first launch; if it remains blocked, use **System Settings → Privacy & Security → Open Anyway**. A future stable release will use Developer ID signing and notarization.
+Until a build passes the repository's Developer ID, notarization, stapling, and Gatekeeper release checks, use the [source build](#build-from-source) below. A direct-download installation will be documented here only after the exact published artifact passes that public release gate.
 
 ## First run
 
@@ -105,7 +99,7 @@ Codex is the first supported data source. Future releases are planned to expand 
 
 ## Privacy
 
-CodexMeter processes usage entirely on-device. Its only network feature is Sparkle's signed update check against this repository's GitHub Release feed; it never attaches token totals, prompts, source paths, credentials, or database contents. Automatic checks can be disabled under **Settings → General**. CodexMeter stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
+CodexMeter processes usage entirely on-device. Its only network feature is Sparkle's signed update check against the repository's dedicated `update-feed` branch and its GitHub Release archive; it never attaches token totals, prompts, source paths, credentials, or database contents. Automatic checks can be disabled under **Settings → General**. CodexMeter stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 

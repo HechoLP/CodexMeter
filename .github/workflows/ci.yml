@@ -19,14 +19,8 @@ jobs:
         run: swift --version
       - name: Unit and integration tests
         run: swift test
-      - name: Validate release and Homebrew files
-        run: |
-          zsh -n Scripts/*.sh
-          set +e
-          HOMEBREW_NO_AUTO_UPDATE=1 brew style Casks/codexmeter.rb
-          style_status=$?
-          brew developer off >/dev/null 2>&1 || true
-          exit "$style_status"
+      - name: Validate release scripts
+        run: zsh -n Scripts/*.sh
       - name: Universal release build
         run: swift build -c release --arch arm64 --arch x86_64
       - name: Verify architectures

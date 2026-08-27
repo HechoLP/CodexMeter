@@ -20,6 +20,8 @@ Scripts/release.sh
 
 This produces an Apple Development-signed Universal 2 app in the per-user build cache plus ZIP, DMG, and SHA-256 files under `Artifacts/`. The host app, Sparkle framework, helper app, and XPC services must all have the same Team ID; the verifier fails if any nested code is ad-hoc or signed by another team. The cache staging location avoids cloud-file-provider metadata that can invalidate macOS code signatures. Gatekeeper distribution trust and notarization remain intentionally incomplete, so this path is only for a clearly labeled preview release.
 
+Preview artifacts are for maintainer testing only. Do not advertise them as a normal first-install download, publish Gatekeeper-bypass instructions, or copy their checksum into a public Cask. Only the signed and notarized public workflow below may produce an end-user installation artifact.
+
 Generate the signed update feed only on a maintainer Mac that has the Sparkle key:
 
 ```bash
@@ -43,22 +45,16 @@ After verification, confirm the version in `Config/Release.env`, the Git tag, ar
 
 ## Homebrew Cask
 
-`Casks/codexmeter.rb` uses the stable release URL and artifact name:
-
-```text
-https://github.com/HechoLP/CodexMeter/releases/download/vVERSION/CodexMeter-VERSION.zip
-```
-
-For a public Homebrew release:
+The repository intentionally does not contain a public Cask while only maintainer previews exist. For a public Homebrew release:
 
 1. Run `Scripts/release_public.sh` and confirm the ZIP passes Developer ID, notarization, stapling, Gatekeeper, metadata, architecture, entitlement, and checksum verification.
 2. Publish that exact ZIP at tag `vVERSION`; do not rebuild it after calculating the Cask checksum.
-3. Update the Cask `version` and `sha256` from the published ZIP.
-4. Copy the Cask to `Casks/codexmeter.rb` in the public `HechoLP/homebrew-tap` repository.
+3. Create a Cask in the public Tap using the published ZIP URL, `version`, and `sha256`.
+4. Keep that Cask only in the public `HechoLP/homebrew-tap` repository after the release gate passes.
 5. Run `brew style`, `brew audit --cask --online HechoLP/tap/codexmeter`, and a clean install/uninstall cycle.
 6. Only then change the README wording from the source-build path to the public `brew install --cask HechoLP/tap/codexmeter` path.
 
-For local pre-release verification, `Scripts/install_homebrew_local.sh` creates a local Tap backed by the already verified ZIP and runs the normal Homebrew Cask installer. This path does not make an ad-hoc-signed build a public release.
+For local maintainer verification, `Scripts/install_homebrew_local.sh` generates an ephemeral local-only Cask backed by the already verified ZIP and runs the normal Homebrew installer. This path does not create or advertise a public Cask and does not make an Apple Development-signed build a public release.
 
 ## Rollback
 
