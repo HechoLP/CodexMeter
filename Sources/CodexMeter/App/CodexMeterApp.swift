@@ -75,5 +75,6 @@ struct CodexMeterApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
+        UpdateService.shared.start()
     }
 }
