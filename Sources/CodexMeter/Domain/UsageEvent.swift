@@ -18,6 +18,7 @@ struct SessionMetadata: Equatable, Sendable {
     let forkedFromID: String?
     let parentThreadID: String?
     let subagentHistoryStartOrdinal: Int64?
+    let occurredAt: Date?
 
     init(
         id: String?,
@@ -25,7 +26,8 @@ struct SessionMetadata: Equatable, Sendable {
         workingDirectory: String?,
         forkedFromID: String? = nil,
         parentThreadID: String? = nil,
-        subagentHistoryStartOrdinal: Int64? = nil
+        subagentHistoryStartOrdinal: Int64? = nil,
+        occurredAt: Date? = nil
     ) {
         self.id = id
         self.model = model
@@ -33,6 +35,7 @@ struct SessionMetadata: Equatable, Sendable {
         self.forkedFromID = forkedFromID
         self.parentThreadID = parentThreadID
         self.subagentHistoryStartOrdinal = subagentHistoryStartOrdinal
+        self.occurredAt = occurredAt
     }
 
     var inheritsHistory: Bool {

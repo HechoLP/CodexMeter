@@ -545,6 +545,82 @@ final class CodexUsageCollectorTests: XCTestCase {
         XCTAssertEqual(eventCount, 1)
     }
 
+    func testInheritedParentReplayIsSeededButNotCounted() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        let childID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        let source = sessions.appendingPathComponent("rollout-2026-08-27T00-00-00-\(childID).jsonl")
+        let lines = [
+            #"{"timestamp":"2026-08-27T00:00:10.000Z","type":"session_meta","payload":{"id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","forked_from_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","parent_thread_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}"#,
+            #"{"timestamp":"2026-08-27T00:00:10.000Z","type":"session_meta","payload":{"id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}}"#,
+            #"{"timestamp":"2026-08-27T00:00:10.001Z","type":"event_msg","payload":{"type":"task_started","started_at":1}}"#,
+            tokenLineWithoutOrdinal(
+                timestamp: "2026-08-27T00:00:10.002Z",
+                input: 5_000, cached: 4_000, output: 500,
+                lastInput: 5_000, lastCached: 4_000, lastOutput: 500
+            ),
+            #"{"timestamp":"2026-08-27T00:00:10.100Z","type":"event_msg","payload":{"type":"task_started","started_at":4000000000}}"#,
+            tokenLineWithoutOrdinal(
+                timestamp: "2026-08-27T00:00:20Z",
+                input: 5_100, cached: 4_080, output: 520,
+                lastInput: 100, lastCached: 80, lastOutput: 20
+            ),
+            tokenLineWithoutOrdinal(
+                timestamp: "2026-08-27T00:00:30Z",
+                input: 5_150, cached: 4_120, output: 530,
+                lastInput: 50, lastCached: 40, lastOutput: 10
+            )
+        ]
+        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: source)
+
+        let database = try SQLiteDatabase(url: root.appendingPathComponent("usage.sqlite"))
+        let collector = CodexUsageCollector(database: database, roots: [sessions])
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        let result = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+
+        XCTAssertEqual(
+            result.snapshot.allTime,
+            TokenUsage(inputTokens: 150, cachedInputTokens: 120, outputTokens: 30)
+        )
+        let eventCount = try await database.eventCount()
+        XCTAssertEqual(eventCount, 2)
+        let checkpoint = try await database.checkpoint(for: storageIdentifier(source.path))
+        XCTAssertEqual(checkpoint?.historyReplayComplete, true)
+    }
+
+    func testHistoryStartOrdinalExcludesCopiedPrefix() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        let childID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+        let source = sessions.appendingPathComponent("rollout-2026-08-27T00-00-00-\(childID).jsonl")
+        let lines = [
+            #"{"timestamp":"2026-08-27T00:00:10Z","type":"session_meta","ordinal":0,"payload":{"id":"dddddddd-dddd-dddd-dddd-dddddddddddd","parent_thread_id":"cccccccc-cccc-cccc-cccc-cccccccccccc","subagent_history_start_ordinal":4}}"#,
+            #"{"timestamp":"2026-08-27T00:00:10Z","type":"session_meta","ordinal":1,"payload":{"id":"cccccccc-cccc-cccc-cccc-cccccccccccc"}}"#,
+            #"{"timestamp":"2026-08-27T00:00:10Z","type":"event_msg","ordinal":3,"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":5000,"cached_input_tokens":4000,"output_tokens":500},"last_token_usage":{"input_tokens":5000,"cached_input_tokens":4000,"output_tokens":500}}}}"#,
+            #"{"timestamp":"2026-08-27T00:00:11Z","type":"event_msg","ordinal":5,"payload":{"type":"task_started","started_at":4000000000}}"#,
+            #"{"timestamp":"2026-08-27T00:00:20Z","type":"event_msg","ordinal":6,"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":5100,"cached_input_tokens":4080,"output_tokens":520},"last_token_usage":{"input_tokens":100,"cached_input_tokens":80,"output_tokens":20}}}}"#
+        ]
+        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: source)
+
+        let database = try SQLiteDatabase(url: root.appendingPathComponent("usage.sqlite"))
+        let collector = CodexUsageCollector(database: database, roots: [sessions])
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        let result = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+
+        XCTAssertEqual(
+            result.snapshot.allTime,
+            TokenUsage(inputTokens: 100, cachedInputTokens: 80, outputTokens: 20)
+        )
+        let eventCount = try await database.eventCount()
+        XCTAssertEqual(eventCount, 1)
+    }
+
     private var utcCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

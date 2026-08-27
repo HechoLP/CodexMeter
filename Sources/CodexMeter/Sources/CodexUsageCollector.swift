@@ -210,7 +210,9 @@ actor CodexUsageCollector {
             id: checkpoint.sessionID,
             model: nil,
             workingDirectory: nil,
-            forkedFromID: checkpoint.inheritsHistory ? "inherited" : nil
+            forkedFromID: checkpoint.inheritsHistory ? "inherited" : nil,
+            subagentHistoryStartOrdinal: checkpoint.inheritedHistoryEndOrdinal,
+            occurredAt: checkpoint.sessionStartedAt
         )
         var normalizationState = if let sessionID = checkpoint.sessionID {
             try await database.normalizationState(for: sessionID)
@@ -450,12 +452,18 @@ actor CodexUsageCollector {
     ) async throws {
         guard line.containsASCII("\"token_count\"")
                 || line.containsASCII("\"session_meta\"")
+                || line.containsASCII("\"task_started\"")
                 || line.containsASCII("\"turn_context\"")
         else { return }
 
         switch parser.parse(line) {
         case let .sessionMetadata(parsed):
-            guard checkpoint.committedOffset == 0 else { return }
+            guard checkpoint.committedOffset == 0 else {
+                if checkpoint.inheritsHistory {
+                    checkpoint.historyReplayComplete = false
+                }
+                return
+            }
             let resolvedID = parsed.id.map(storageIdentifier) ?? checkpoint.sessionID
             metadata = SessionMetadata(
                 id: resolvedID,
@@ -463,10 +471,14 @@ actor CodexUsageCollector {
                 workingDirectory: nil,
                 forkedFromID: parsed.forkedFromID,
                 parentThreadID: parsed.parentThreadID,
-                subagentHistoryStartOrdinal: parsed.subagentHistoryStartOrdinal
+                subagentHistoryStartOrdinal: parsed.subagentHistoryStartOrdinal,
+                occurredAt: parsed.occurredAt
             )
             checkpoint.sessionID = resolvedID
             checkpoint.inheritsHistory = parsed.inheritsHistory
+            checkpoint.sessionStartedAt = parsed.occurredAt
+            checkpoint.inheritedHistoryEndOrdinal = parsed.subagentHistoryStartOrdinal
+            checkpoint.historyReplayComplete = parsed.subagentHistoryStartOrdinal == nil
             checkpoint.model = nil
             checkpoint.projectPath = nil
             if resolvedID != loadedStateSessionID, let resolvedID {
@@ -475,12 +487,42 @@ actor CodexUsageCollector {
                 loadedStateSessionID = resolvedID
             }
 
+        case let .taskStarted(task):
+            guard checkpoint.inheritsHistory, !checkpoint.historyReplayComplete else { return }
+            if let inheritedHistoryEndOrdinal = checkpoint.inheritedHistoryEndOrdinal,
+               let ordinal = task.ordinal,
+               ordinal > inheritedHistoryEndOrdinal {
+                checkpoint.historyReplayComplete = true
+                return
+            }
+            if checkpoint.inheritedHistoryEndOrdinal == nil,
+               let sessionStartedAt = checkpoint.sessionStartedAt,
+               let taskStartedAt = task.startedAt,
+               taskStartedAt.timeIntervalSince1970.rounded(.down)
+                   >= sessionStartedAt.timeIntervalSince1970.rounded(.down) {
+                checkpoint.historyReplayComplete = true
+            }
+
         case .turnContext:
             break
 
         case let .token(observation):
+            let isInheritedReplay: Bool
+            if checkpoint.inheritsHistory, !checkpoint.historyReplayComplete {
+                if let inheritedHistoryEndOrdinal = checkpoint.inheritedHistoryEndOrdinal,
+                   let ordinal = observation.ordinal,
+                   ordinal > inheritedHistoryEndOrdinal {
+                    checkpoint.historyReplayComplete = true
+                    isInheritedReplay = false
+                } else {
+                    isInheritedReplay = true
+                }
+            } else {
+                isInheritedReplay = false
+            }
             let result = normalizer.normalize(observation, metadata: metadata, state: normalizationState)
             normalizationState = result.state
+            guard !isInheritedReplay else { return }
             guard let delta = result.delta, delta != .zero else { return }
             if let importCutoff, observation.occurredAt <= importCutoff { return }
             let sessionID = checkpoint.sessionID

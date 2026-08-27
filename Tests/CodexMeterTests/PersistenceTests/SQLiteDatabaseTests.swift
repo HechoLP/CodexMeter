@@ -242,6 +242,67 @@ final class SQLiteDatabaseTests: XCTestCase {
         XCTAssertNil(migratedCheckpoint?.projectPath)
     }
 
+    func testVersion10MigrationInvalidatesOnlyInheritedAccounting() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("db.sqlite")
+        let rootUsage = TokenUsage(inputTokens: 100, cachedInputTokens: 60, outputTokens: 20)
+        let inheritedUsage = TokenUsage(inputTokens: 5_000, cachedInputTokens: 4_000, outputTokens: 500)
+        let occurredAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+        do {
+            let database = try SQLiteDatabase(url: url)
+            for (path, sessionID, inheritsHistory, usage) in [
+                ("root-source", "root-session", false, rootUsage),
+                ("child-source", "child-session", true, inheritedUsage)
+            ] {
+                let checkpoint = SourceCheckpoint(
+                    sourcePath: path,
+                    fileIdentity: path,
+                    generation: 0,
+                    committedOffset: 100,
+                    sessionID: sessionID,
+                    inheritsHistory: inheritsHistory,
+                    model: nil,
+                    projectPath: nil
+                )
+                let event = UsageEvent(
+                    eventKey: path,
+                    occurredAt: occurredAt,
+                    sessionID: sessionID,
+                    model: nil,
+                    projectPath: nil,
+                    usage: usage,
+                    sourcePath: path,
+                    sourcePosition: 10
+                )
+                try await database.commit(
+                    events: [event],
+                    checkpoint: checkpoint,
+                    normalizationState: UsageNormalizationState(
+                        cumulativeHighWaterMark: usage,
+                        lastObservedAt: occurredAt,
+                        quality: .exact
+                    )
+                )
+            }
+            try await database.prepareVersion9FixtureForTesting()
+        }
+
+        let migrated = try SQLiteDatabase(url: url)
+        let eventCount = try await migrated.eventCount()
+        let rootCheckpoint = try await migrated.checkpoint(for: "root-source")
+        let childCheckpoint = try await migrated.checkpoint(for: "child-source")
+        let rootState = try await migrated.normalizationState(for: "root-session")
+        let childState = try await migrated.normalizationState(for: "child-session")
+        XCTAssertEqual(eventCount, 1)
+        XCTAssertNotNil(rootCheckpoint)
+        XCTAssertNil(childCheckpoint)
+        XCTAssertEqual(rootState.cumulativeHighWaterMark, rootUsage)
+        XCTAssertEqual(childState, .empty)
+    }
+
     func testDatabaseFilesUseOwnerOnlyPermissions() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

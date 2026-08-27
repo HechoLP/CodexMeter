@@ -53,9 +53,34 @@ final class CodexJSONLParserTests: XCTestCase {
 
     func testParsesSessionMetadataWithoutConversationContent() {
         let line = #"{"timestamp":"2026-08-27T01:02:03Z","type":"session_meta","payload":{"id":"session-1","cwd":"/tmp/project","model":"gpt-example","unrelated":"ignored"}}"#
+        let occurredAt = try! Date.ISO8601FormatStyle().parse("2026-08-27T01:02:03Z")
         XCTAssertEqual(
             parser.parse(Data(line.utf8)),
-            .sessionMetadata(SessionMetadata(id: "session-1", model: "gpt-example", workingDirectory: "/tmp/project"))
+            .sessionMetadata(
+                SessionMetadata(
+                    id: "session-1",
+                    model: "gpt-example",
+                    workingDirectory: "/tmp/project",
+                    occurredAt: occurredAt
+                )
+            )
+        )
+    }
+
+    func testParsesTaskStartBoundaryWithoutConversationContent() throws {
+        let line = #"{"timestamp":"2026-08-27T01:02:03.456Z","type":"event_msg","ordinal":10,"payload":{"type":"task_started","turn_id":"ignored","started_at":1787792523}}"#
+        let occurredAt = try Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+            .parse("2026-08-27T01:02:03.456Z")
+
+        XCTAssertEqual(
+            parser.parse(Data(line.utf8)),
+            .taskStarted(
+                TaskStartedMetadata(
+                    occurredAt: occurredAt,
+                    startedAt: Date(timeIntervalSince1970: 1_787_792_523),
+                    ordinal: 10
+                )
+            )
         )
     }
 
