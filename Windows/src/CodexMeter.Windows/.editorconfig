@@ -1,3 +1,0 @@
-# WPF and XAML instantiate application types through generated markup and runtime activation.
-[*.cs]
-dotnet_diagnostic.CA1812.severity = none

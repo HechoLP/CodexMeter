@@ -28,7 +28,7 @@ jobs:
       - name: Restore and test
         run: |
           dotnet restore Windows/CodexMeter.Windows.sln
-          dotnet format Windows/CodexMeter.Windows.sln --verify-no-changes --no-restore --severity warn
+          dotnet format whitespace Windows/CodexMeter.Windows.sln --verify-no-changes --no-restore
           dotnet test Windows/CodexMeter.Windows.sln --configuration Release --no-restore
       - name: Package x64 and ARM64
         shell: pwsh

@@ -45,7 +45,7 @@ jobs:
       - name: Restore Windows solution
         run: dotnet restore Windows/CodexMeter.Windows.sln
       - name: Validate Windows formatting
-        run: dotnet format Windows/CodexMeter.Windows.sln --verify-no-changes --no-restore --severity warn
+        run: dotnet format whitespace Windows/CodexMeter.Windows.sln --verify-no-changes --no-restore
       - name: Test Windows core
         run: dotnet test Windows/CodexMeter.Windows.sln --configuration Release --no-restore
       - name: Read Windows version
