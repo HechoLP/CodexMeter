@@ -17,6 +17,8 @@ All notable changes to CodexMeter will be documented in this file.
 
 ### Fixed
 
+- Excluded replayed parent history from forked and subagent sessions, with a targeted database migration that rebuilds affected local totals.
+- Defaulted fresh installs to a logo-only menu bar item and made the Settings button reliably activate a native window.
 - Prevented duplicate accounting after database migration, session archival, counter races, and same-inode file rewrites.
 - Preserved oversized-line quarantine and complete snapshot consistency across refreshes and concurrent writers.
 - Corrected automatic discovery fallback, manual wake behavior, calendar-boundary refreshes, loading states, actual update time, menu-bar display accessibility, and data-maintenance feedback.
