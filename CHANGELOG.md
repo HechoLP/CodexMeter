@@ -4,6 +4,16 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Isolated unreadable or concurrently replaced Codex session files so one source cannot abort the full refresh; affected snapshots are marked partial while healthy sources continue importing.
+- Replaced per-checkpoint full-prefix fingerprint recomputation with a versioned incremental accumulator and explicit fingerprint I/O accounting.
+- Kept the data folder owner-only when it is created from Settings and aligned CI and release documentation with the preview-only distribution boundary.
+
+### Security
+
+- Removed the Gatekeeper-bypass installation path for the non-notarized v0.1.0 maintainer preview and reserved public binary installation for Developer ID-signed, notarized artifacts.
+
 ## [0.1.0] - 2026-08-27
 
 ### Added
@@ -14,7 +24,7 @@ All notable changes to CodexMeter will be documented in this file.
 - Launch at Login, data rebuild/clear controls, and privacy-safe opt-in diagnostics.
 - Universal 2 ZIP/DMG release pipeline, checksums, CI, and release documentation.
 - Resumable 10,000/100,000-event stress coverage and fail-closed public-release verification.
-- Versioned Homebrew Cask and a verified local-Tap installation path.
+- Local-only Homebrew Tap verification for maintainer preview builds.
 - Product-focused README artwork and installation documentation.
 - Sparkle 2.9.6 automatic updates, daily checks, a user preference, and manual update checks.
 

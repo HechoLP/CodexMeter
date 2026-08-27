@@ -529,8 +529,21 @@ final class CodexUsageCollectorTests: XCTestCase {
         var result = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
         XCTAssertTrue(result.hasMoreWork)
         XCTAssertEqual(result.snapshot.allTime.inputTokens, 100)
-        let firstCheckpoint = try await database.checkpoint(for: storageIdentifier(source.path))
-        XCTAssertEqual(firstCheckpoint?.hasPendingImport, true)
+        let savedFirstCheckpoint = try await database.checkpoint(for: storageIdentifier(source.path))
+        var firstCheckpoint = try XCTUnwrap(savedFirstCheckpoint)
+        XCTAssertTrue(firstCheckpoint.hasPendingImport)
+
+        // Simulate interruption immediately after an intermediate batch commit, before
+        // the final pass can persist hasPendingImport. Offset, not that hint, must govern resumption.
+        firstCheckpoint.hasPendingImport = false
+        _ = try await database.commit(
+            events: [],
+            checkpoint: firstCheckpoint,
+            normalizationState: nil
+        )
+        result = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+        XCTAssertGreaterThan(result.processedBytes, 0)
+
         var continuationCount = 0
         while result.hasMoreWork {
             continuationCount += 1
@@ -619,6 +632,103 @@ final class CodexUsageCollectorTests: XCTestCase {
         )
         let eventCount = try await database.eventCount()
         XCTAssertEqual(eventCount, 1)
+    }
+
+    func testUnreadableSourceDoesNotAbortOtherSourcesAndMarksSnapshotPartial() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+
+        let unreadable = sessions.appendingPathComponent("000-unreadable.jsonl")
+        try Data("unreadable\n".utf8).write(to: unreadable)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o000],
+            ofItemAtPath: unreadable.path
+        )
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: unreadable.path
+            )
+        }
+
+        let sessionID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+        let valid = sessions.appendingPathComponent(
+            "zzz-rollout-2026-08-27T00-00-00-\(sessionID).jsonl"
+        )
+        let metadata =
+            #"{"timestamp":"2026-08-27T00:00:00Z","type":"session_meta","payload":{"id":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"}}"#
+        let event = tokenLineWithoutOrdinal(
+            timestamp: "2026-08-27T00:01:00Z",
+            input: 100,
+            cached: 50,
+            output: 20,
+            lastInput: 100,
+            lastCached: 50,
+            lastOutput: 20
+        )
+        try Data((metadata + "\n" + event + "\n").utf8).write(to: valid)
+
+        let database = try SQLiteDatabase(url: root.appendingPathComponent("usage.sqlite"))
+        let collector = CodexUsageCollector(database: database, roots: [sessions])
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        let result = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+
+        XCTAssertEqual(result.sourceCount, 2)
+        XCTAssertEqual(result.snapshot.quality, .partial)
+        XCTAssertEqual(
+            result.snapshot.allTime,
+            TokenUsage(inputTokens: 100, cachedInputTokens: 50, outputTokens: 20)
+        )
+        let eventCount = try await database.eventCount()
+        XCTAssertEqual(eventCount, 1)
+    }
+
+    func testCheckpointFingerprintsReadEachFreshSourceByteOnce() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+
+        let sessionID = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+        let source = sessions.appendingPathComponent(
+            "rollout-2026-08-27T00-00-00-\(sessionID).jsonl"
+        )
+        let metadata =
+            #"{"timestamp":"2026-08-27T00:00:00Z","type":"session_meta","payload":{"id":"ffffffff-ffff-ffff-ffff-ffffffffffff"}}"#
+        let event = tokenLineWithoutOrdinal(
+            timestamp: "2026-08-27T00:01:00Z",
+            input: 100,
+            cached: 50,
+            output: 20,
+            lastInput: 100,
+            lastCached: 50,
+            lastOutput: 20
+        )
+        let filler = String(repeating: "x", count: 96) + "\n"
+        var sourceData = Data((metadata + "\n" + event + "\n").utf8)
+        for _ in 0..<3_500 {
+            sourceData.append(contentsOf: filler.utf8)
+        }
+        try sourceData.write(to: source)
+
+        let database = try SQLiteDatabase(url: root.appendingPathComponent("usage.sqlite"))
+        let collector = CodexUsageCollector(
+            database: database,
+            roots: [sessions],
+            maximumRefreshDuration: .seconds(30)
+        )
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        let result = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+
+        XCTAssertFalse(result.hasMoreWork)
+        XCTAssertEqual(result.processedBytes, Int64(sourceData.count))
+        XCTAssertEqual(result.fingerprintBytesRead, Int64(sourceData.count))
+        let checkpoint = try await database.checkpoint(for: storageIdentifier(source.path))
+        XCTAssertTrue(checkpoint?.contentFingerprint.hasPrefix("v2:") == true)
     }
 
     private var utcCalendar: Calendar {

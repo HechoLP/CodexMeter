@@ -41,4 +41,21 @@ final class AppPreferencesTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "menuBarDisplay"), MenuBarDisplay.total.rawValue)
         XCTAssertTrue(defaults.bool(forKey: "showMenuBarText"))
     }
+
+    func testPreparingDataDirectoryEnforcesOwnerOnlyPermissions() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: root.path
+        )
+
+        try AppPaths.prepareOwnerOnlyDirectory(at: root)
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: root.path)
+        let permissions = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(permissions.intValue & 0o777, 0o700)
+    }
 }

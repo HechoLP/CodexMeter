@@ -259,9 +259,12 @@ private struct DataSettingsView: View {
     }
 
     private func openDataFolder() {
-        let directory = AppPaths.applicationSupportDirectory
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(directory)
+        do {
+            let directory = try AppPaths.prepareApplicationSupportDirectory()
+            NSWorkspace.shared.open(directory)
+        } catch {
+            NSSound.beep()
+        }
     }
 
     private func formattedBytes(_ bytes: Int64) -> String {
