@@ -1,26 +1,21 @@
 # Releasing CodexMeter
 
-## Prerequisites
+## Certificate-free preview prerequisites
 
-- A `Developer ID Application` certificate in the login Keychain
-- A notarytool Keychain profile created locally with `xcrun notarytool store-credentials`
-- The Apple Developer Team ID associated with the signing certificate
-- The Sparkle Ed25519 private key in the login Keychain under account `HechoLP`
+- The Sparkle Ed25519 private key in the login Keychain under account `HechoLP` when generating the update feed
 - GitHub write permission for tags and releases
 
 Do not store certificate exports, Apple credentials, the Sparkle private key, notary private keys, or Keychain profiles in the repository. The Sparkle public key is expected in `Config/Info.plist` and `Config/Release.env`.
 
-## Development-signed preview build
+## Certificate-free preview build
 
 ```bash
-export CODE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
-export CODE_SIGN_TEAM_ID="TEAMID"
-Scripts/release.sh
+Scripts/release_unsigned.sh
 ```
 
-This produces an Apple Development-signed Universal 2 app in the per-user build cache plus ZIP, DMG, per-artifact SHA-256 files, and a consolidated `SHA256SUMS.txt` under `Artifacts/`. The host app, Sparkle framework, helper app, and XPC services must all have the same Team ID; the verifier fails if any nested code is ad-hoc or signed by another team. The cache staging location avoids cloud-file-provider metadata that can invalidate macOS code signatures. Gatekeeper distribution trust and notarization remain intentionally incomplete, so this path is only for a clearly labeled preview release.
+This produces an ad-hoc-signed Universal 2 app in the per-user build cache plus ZIP, DMG, per-artifact SHA-256 files, and a consolidated `SHA256SUMS.txt` under `Artifacts/`. It does not read or use an Apple signing identity. Hardened Runtime is intentionally disabled for this build because an ad-hoc-signed host cannot reliably load the separately signed Sparkle framework under library validation. The verifier requires the host to be ad-hoc signed, rejects an Apple certificate authority, checks that Hardened Runtime is absent, and still validates the app, framework, architectures, metadata, and packaged checksums.
 
-Preview artifacts are for maintainer testing only. If a preview release includes first-run instructions, require verification against the uploaded `SHA256SUMS.txt`, identify the quarantine-removal effect explicitly, and limit the command to `/Applications/CodexMeter.app`. Do not advertise a preview as a trusted first-install download or copy its checksum into a public Cask. Only the signed and notarized public workflow below may produce a generally trusted end-user installation artifact.
+Certificate-free artifacts must remain clearly labeled as unnotarized previews. Require verification against the uploaded `SHA256SUMS.txt`, identify the quarantine-removal effect explicitly, and limit the command to `/Applications/CodexMeter.app`. Do not advertise the preview as Apple-trusted or copy its checksum into a public Cask.
 
 Generate the signed update feed only on a maintainer Mac that has the Sparkle key:
 
@@ -30,7 +25,9 @@ Scripts/generate_appcast.sh
 
 The command validates the feed signature, archive signature, byte length, and download URL before writing `Artifacts/appcast.xml`.
 
-## Signed and notarized public build
+## Optional Apple-trusted public build
+
+This path additionally requires a `Developer ID Application` certificate, the associated Apple Developer Team ID, and a notarytool Keychain profile. It is not required for the certificate-free preview above.
 
 Public builds are accepted only from a clean worktree whose `vVERSION` tag points exactly to `HEAD`, with matching release notes under `Documentation/ReleaseNotes/`. The configured GitHub release repository must also be public. This prevents a binary built from different source from being published under an existing version.
 
@@ -52,7 +49,7 @@ Scripts/release_public.sh
 
 The public command fails closed unless all three values are present. It requires a Developer ID signature, Hardened Runtime, the expected Team ID, an empty host-app entitlement allowlist, notarization, stapling, Gatekeeper acceptance, matching bundle metadata, Universal 2 architectures, embedded Sparkle verification, ZIP/DMG checksums, a signed appcast, and verification of each packaged app.
 
-After verification, confirm the version in `Config/Release.env`, the immutable Git tag, artifact names, appcast enclosure URL, and release notes match. Upload `appcast.xml`, the ZIP, DMG, per-artifact checksums, and `SHA256SUMS.txt`, then publish the exact same signed file as `appcast.xml` on the configured dedicated `update-feed` branch. The branch must contain no private key material. Create the GitHub Release from the already verified tag only after the final independent audit passes. `Scripts/release.sh` remains a local candidate command and can never satisfy the public stable-release gate; it may be used only for a clearly labeled maintainer preview.
+After verification, confirm the version in `Config/Release.env`, the immutable Git tag, artifact names, appcast enclosure URL, and release notes match. Upload `appcast.xml`, the ZIP, DMG, per-artifact checksums, and `SHA256SUMS.txt`, then publish the exact same signed file as `appcast.xml` on the configured dedicated `update-feed` branch. The branch must contain no private key material. Create the GitHub Release from the already verified tag only after the final independent audit passes. `Scripts/release_unsigned.sh` may produce only a clearly labeled certificate-free preview and can never satisfy the Apple-trusted release gate.
 
 ## Homebrew Cask
 
@@ -65,7 +62,7 @@ The repository intentionally does not contain a public Cask while only maintaine
 5. Run `brew style`, `brew audit --cask --online HechoLP/tap/codexmeter`, and a clean install/uninstall cycle.
 6. Only then change the README wording from the source-build path to the public `brew install --cask HechoLP/tap/codexmeter` path.
 
-For local maintainer verification, `Scripts/install_homebrew_local.sh` generates an ephemeral local-only Cask backed by the already verified ZIP and runs the normal Homebrew installer. This path does not create or advertise a public Cask and does not make an Apple Development-signed build a public release.
+For local maintainer verification, `Scripts/install_homebrew_local.sh` generates an ephemeral local-only Cask backed by the already verified ZIP and runs the normal Homebrew installer. This path does not create or advertise a public Cask and does not make an ad-hoc-signed build Apple-trusted.
 
 ## Rollback
 

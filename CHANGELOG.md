@@ -4,6 +4,12 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-27
+
+### Added
+
+- Added a certificate-free Universal 2 release workflow that produces an ad-hoc-signed ZIP, DMG, and checksum manifest without an Apple signing identity.
+
 ### Fixed
 
 - Isolated unreadable or concurrently replaced Codex session files so one source cannot abort the full refresh; affected snapshots are marked partial while healthy sources continue importing.
@@ -14,7 +20,7 @@ All notable changes to CodexMeter will be documented in this file.
 
 ### Security
 
-- Removed the Gatekeeper-bypass installation path for the non-notarized v0.1.0 maintainer preview and reserved public binary installation for Developer ID-signed, notarized artifacts.
+- Kept certificate-free first launch explicitly checksum-gated, restricted quarantine removal to `/Applications/CodexMeter.app`, and separated Ed25519 update authentication from Apple first-install trust.
 
 ## [0.1.0] - 2026-08-27
 
