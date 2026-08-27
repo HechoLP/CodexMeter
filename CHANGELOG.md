@@ -4,6 +4,14 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-28
+
+### Fixed
+
+- Separated menu-bar text visibility from its content format so **Show token text** can be enabled from the default icon-only presentation.
+- Migrated the legacy `Icon Only` display value to an independent icon-on/text-off preference without changing the first-launch appearance.
+- Renamed the local-only lifetime row to **Local History** and clarified why it can differ from the ChatGPT account's cloud lifetime total.
+
 ## [1.0.0] - 2026-08-28
 
 ### Added

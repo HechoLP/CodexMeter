@@ -103,33 +103,28 @@ private struct AppearanceSettingsView: View {
 
     var body: some View {
         Form {
-            Picker("Menu bar display", selection: $display) {
-                ForEach(MenuBarDisplay.allCases) { option in
-                    Text(option.title).tag(option.rawValue)
+            Section("Menu Bar") {
+                Toggle("Show icon", isOn: iconVisibility)
+                    .disabled(!showMenuBarText)
+                Toggle("Show token text", isOn: textVisibility)
+            }
+            Section("Token Text") {
+                Picker("Content", selection: $display) {
+                    ForEach(MenuBarDisplay.allCases) { option in
+                        Text(option.title).tag(option.rawValue)
+                    }
+                }
+                Picker("Period", selection: $period) {
+                    Text("Today").tag(UsagePeriod.today.rawValue)
+                    Text("This Week").tag(UsagePeriod.week.rawValue)
+                    Text("This Month").tag(UsagePeriod.month.rawValue)
+                }
+                Picker("Number format", selection: $numberStyle) {
+                    Text("Compact").tag(TokenNumberStyle.compact.rawValue)
+                    Text("Detailed").tag(TokenNumberStyle.detailed.rawValue)
                 }
             }
-            Picker("Menu bar period", selection: $period) {
-                Text("Today").tag(UsagePeriod.today.rawValue)
-                Text("This Week").tag(UsagePeriod.week.rawValue)
-                Text("This Month").tag(UsagePeriod.month.rawValue)
-            }
-            Picker("Number format", selection: $numberStyle) {
-                Text("Compact").tag(TokenNumberStyle.compact.rawValue)
-                Text("Detailed").tag(TokenNumberStyle.detailed.rawValue)
-            }
-            Section("Menu bar elements") {
-                Toggle("Show icon", isOn: iconVisibility)
-                    .disabled(isIconOnly)
-                Toggle("Show text", isOn: textVisibility)
-                    .disabled(isIconOnly)
-                Text(
-                    isIconOnly
-                        ? "Icon Only always shows the CodexMeter icon without token text."
-                        : "CodexMeter keeps at least one menu bar element visible."
-                )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .disabled(!showMenuBarText)
             Section("Popover") {
                 Toggle("Show cached input", isOn: $showCachedInput)
                 Toggle("Show last updated", isOn: $showLastUpdated)
@@ -137,23 +132,12 @@ private struct AppearanceSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
-        .onAppear { enforceIconOnlyVisibility() }
-        .onChange(of: display) { _, _ in enforceIconOnlyVisibility() }
-    }
-
-    private var isIconOnly: Bool { display == MenuBarDisplay.iconOnly.rawValue }
-
-    private func enforceIconOnlyVisibility() {
-        guard isIconOnly else { return }
-        showMenuBarIcon = true
-        showMenuBarText = false
     }
 
     private var iconVisibility: Binding<Bool> {
         Binding(
-            get: { isIconOnly ? true : showMenuBarIcon },
+            get: { showMenuBarIcon },
             set: { newValue in
-                guard !isIconOnly else { return }
                 showMenuBarIcon = newValue
                 if !newValue && !showMenuBarText {
                     showMenuBarText = true
@@ -164,9 +148,8 @@ private struct AppearanceSettingsView: View {
 
     private var textVisibility: Binding<Bool> {
         Binding(
-            get: { isIconOnly ? false : showMenuBarText },
+            get: { showMenuBarText },
             set: { newValue in
-                guard !isIconOnly else { return }
                 showMenuBarText = newValue
                 if !newValue && !showMenuBarIcon {
                     showMenuBarIcon = true
@@ -185,7 +168,7 @@ private struct UsageSettingsView: View {
                 Label("Output is counted independently", systemImage: "arrow.down")
                 Label("Total equals all three components", systemImage: "sum")
             }
-            Text("The displayed total adds input, cached input, and output so it follows the token-activity total shown in the ChatGPT profile. All periods follow your Mac's current calendar and time zone.")
+            Text("The displayed total adds input, cached input, and output from records currently present in local Codex history. It uses the same activity formula as the ChatGPT profile, but the account total can be higher when older logs or activity from another computer are unavailable on this Mac. Calendar periods use your Mac's current time zone.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

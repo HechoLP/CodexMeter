@@ -12,4 +12,4 @@ CodexMeter does not store or log prompts, responses, reasoning text, source code
 
 macOS debug logging is off by default. When enabled, it records only timestamps, fixed operational event names, data-quality state, source counts, and processed-byte totals. It never records source paths or raw error descriptions, and rotates at 1 MiB. The Windows release does not write a diagnostic log.
 
-“All Time” is limited to records observable in local Codex session history. Deleted logs and usage from other computers are not recoverable.
+“Local History” is limited to records observable in local Codex session history. Deleted logs and usage from other computers are not recoverable.

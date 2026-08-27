@@ -5,8 +5,8 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=flat-square&logo=windows11&logoColor=white)](Documentation/WINDOWS.md)
-[![macOS Release](https://img.shields.io/badge/macOS-v1.0.0-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.0.0.md)
-[![Windows Release](https://img.shields.io/badge/Windows-v1.0.0-0078D4?style=flat-square)](Documentation/ReleaseNotes/1.0.0.md)
+[![macOS Release](https://img.shields.io/badge/macOS-v1.0.1-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.0.1.md)
+[![Windows Release](https://img.shields.io/badge/Windows-v1.0.1-0078D4?style=flat-square)](Documentation/ReleaseNotes/1.0.1.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -49,9 +49,9 @@ Homebrew 6 no longer provides the old `--no-quarantine` installation option. The
 
 ### Direct download
 
-CodexMeter v1.0.0 is available from the public [CodexMeter Releases repository](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v1.0.0) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
+CodexMeter v1.0.1 is available from the public [CodexMeter Releases repository](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v1.0.1) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
 
-This is the stable 1.0.0 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
+This is the stable 1.0.1 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
 
 ### macOS에서 인증서 없는 릴리스를 처음 실행할 때
 
@@ -59,8 +59,8 @@ This is the stable 1.0.0 application release, but it is not Apple-trusted or not
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.0.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.0.0.dmg
+grep ' CodexMeter-1.0.1.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.0.1.dmg
 ```
 
 열린 DMG에서 `CodexMeter.app`을 `Applications` 폴더로 복사합니다. 체크섬이 일치하고 공식 릴리스임을 확인한 경우에만 아래 명령으로 해당 앱의 격리 속성을 제거하고 실행하세요.
@@ -74,7 +74,7 @@ open /Applications/CodexMeter.app
 
 ### Windows portable release
 
-Windows 10/11 users can download the x64 or ARM64 portable ZIP from the same public [`v1.0.0` release](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v1.0.0). The package is self-contained, so a separate .NET installation is not required.
+Windows 10/11 users can download the x64 or ARM64 portable ZIP from the same public [`v1.0.1` release](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v1.0.1). The package is self-contained, so a separate .NET installation is not required.
 
 Verify the ZIP against `SHA256SUMS-windows.txt`, extract it to a permanent folder, and run `CodexMeter.exe`. This release is not publisher-signed, so Windows SmartScreen may require **Properties → Unblock** or the following command after the hash is confirmed:
 
@@ -96,7 +96,7 @@ No Codex account sign-in is required.
 
 ## Features
 
-- Today, week, month, and locally observable all-time totals
+- Today, week, month, and **Local History** totals
 - Input, cached input, output, and total-token breakdowns
 - Automatic file-event refresh with a lightweight configurable fallback
 - Manual, 30-second, one-minute, and five-minute refresh modes
@@ -141,7 +141,7 @@ It does not use an official account-usage API and does not scan unrelated folder
 
 ## Accuracy and limitations
 
-- **All Time** means the oldest token record still present in local Codex session history through now.
+- **Local History** means the oldest token record still present in local Codex session history through now. It is not the cloud account's lifetime total.
 - Deleted logs cannot be reconstructed.
 - Activity from another computer is not included unless its session history exists locally.
 - A future Codex session-schema change may require a CodexMeter update.

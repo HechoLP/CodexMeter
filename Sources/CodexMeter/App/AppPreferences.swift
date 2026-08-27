@@ -1,9 +1,10 @@
 import Foundation
 
 enum AppPreferences {
-    static let defaultMenuBarDisplay = MenuBarDisplay.iconOnly.rawValue
+    static let defaultMenuBarDisplay = MenuBarDisplay.total.rawValue
     static let defaultShowMenuBarIcon = true
     static let defaultShowMenuBarText = false
+    private static let legacyIconOnlyDisplay = "iconOnly"
 
     static func registerDefaults(in defaults: UserDefaults = .standard) {
         defaults.register(
@@ -13,21 +14,29 @@ enum AppPreferences {
                 "showMenuBarText": defaultShowMenuBarText
             ]
         )
+        migrateLegacyIconOnlyPreference(in: defaults)
     }
 
     static func shouldShowMenuBarIcon(
-        display: String,
+        display _: String,
         showIcon: Bool,
         showText: Bool
     ) -> Bool {
-        display == MenuBarDisplay.iconOnly.rawValue || showIcon || !showText
+        showIcon || !showText
     }
 
     static func shouldShowMenuBarText(
-        display: String,
+        display _: String,
         showText: Bool,
         text: String
     ) -> Bool {
-        display != MenuBarDisplay.iconOnly.rawValue && showText && !text.isEmpty
+        showText && !text.isEmpty
+    }
+
+    private static func migrateLegacyIconOnlyPreference(in defaults: UserDefaults) {
+        guard defaults.string(forKey: "menuBarDisplay") == legacyIconOnlyDisplay else { return }
+        defaults.set(MenuBarDisplay.total.rawValue, forKey: "menuBarDisplay")
+        defaults.set(true, forKey: "showMenuBarIcon")
+        defaults.set(false, forKey: "showMenuBarText")
     }
 }
