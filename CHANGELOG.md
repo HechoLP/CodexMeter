@@ -4,9 +4,14 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-28
+
 ### Added
 
-- Added a native Windows 10/11 tray application with x64 and ARM64 self-contained packages, local Codex accounting, settings, tests, CI, and a certificate-free release workflow.
+- Published the first stable CodexMeter release for macOS 14+ and Windows 10/11 under one `v1.0.0` tag.
+- Added a native Windows notification-area application with x64 and ARM64 self-contained packages, local Codex accounting, persistent settings, tests, CI, and certificate-free release artifacts.
+- Added a clean-tag stable release gate that builds the Universal 2 macOS packages, verifies checksums and metadata, and creates the Ed25519-signed Sparkle update feed without an Apple certificate.
+- Added a unified Windows tag workflow that tests, formats, packages, smoke-tests, verifies hashes, and uploads release artifacts without creating a mismatched source-repository release.
 
 ### Fixed
 
@@ -14,6 +19,19 @@ All notable changes to CodexMeter will be documented in this file.
 - Rebuilt Windows session watchers safely, including when `.codex` is created after launch, and kept the last good snapshot when a non-fatal source read fails.
 - Made Windows settings saves atomic, prevented repeated startup-registry writes, and made the Settings window reopen reliably without duplicate event handlers.
 - Derived Windows package versions from the project metadata so CI and release artifacts cannot silently reuse an older release version.
+- Added continuous refresh-button rotation on Windows while a reconciliation is running, matching the existing bounded-turn macOS feedback.
+- Bounded macOS streaming fingerprint verification, made it resume across refreshes, charged its reads to the refresh budget, and rejected resumed state after same-size rewrites even when modification time is restored.
+- Bounded the Windows raw-event cache, per-source reads, per-pass reads, and accepted history size; deduplicated hard-linked sources and retained every changed path within the watcher debounce window.
+
+### Changed
+
+- Upgraded the Windows build and test target to .NET 10 LTS.
+- Documented macOS and Windows as stable, certificate-free packages with mandatory first-download checksum verification and explicit Gatekeeper/SmartScreen limitations.
+
+### Security
+
+- Prevented large committed prefixes and duplicate source aliases from causing unbounded repeated work or process-memory growth.
+- Kept source-file mutation checks, event deduplication, signed macOS updates, owner-only local storage, and release-context verification fail-closed.
 
 ## [0.1.6] - 2026-08-27
 

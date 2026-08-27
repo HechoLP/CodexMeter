@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1f # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
       - name: Restore Windows solution
         run: dotnet restore Windows/CodexMeter.Windows.sln
       - name: Validate Windows formatting
@@ -53,7 +53,7 @@ jobs:
         run: |
           $version = ([xml](Get-Content Windows/src/CodexMeter.Windows/CodexMeter.Windows.csproj)).Project.PropertyGroup.Version
           "WINDOWS_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Package Windows x64 preview
+      - name: Package Windows x64 release
         shell: pwsh
         run: Windows/Scripts/package.ps1 -RuntimeIdentifier win-x64 -Version $env:WINDOWS_VERSION -ResetManifest
       - name: Smoke test Windows tray process

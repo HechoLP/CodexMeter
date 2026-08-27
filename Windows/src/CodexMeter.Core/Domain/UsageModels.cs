@@ -63,4 +63,5 @@ public sealed record UsageEvent(
 public sealed record ScanResult(
     UsageSnapshot Snapshot,
     int SourceCount,
-    string StatusMessage);
+    string StatusMessage,
+    bool HasMoreWork);

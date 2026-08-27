@@ -5,13 +5,15 @@ namespace CodexMeter.Windows.Services;
 
 internal sealed class SessionWatcher : IDisposable
 {
-    private readonly Action onChange;
+    private readonly Action<IReadOnlyCollection<string>?> onChange;
     private readonly List<FileSystemWatcher> watchers = [];
+    private readonly HashSet<string> pendingChangedPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly object stateLock = new();
     private System.Threading.Timer? debounceTimer;
+    private bool requiresFullRefresh;
     private bool disposed;
 
-    public SessionWatcher(Action onChange)
+    public SessionWatcher(Action<IReadOnlyCollection<string>?> onChange)
     {
         this.onChange = onChange;
         Rebuild();
@@ -49,6 +51,7 @@ internal sealed class SessionWatcher : IDisposable
             DisposeWatchers();
             debounceTimer?.Dispose();
             debounceTimer = null;
+            pendingChangedPaths.Clear();
         }
     }
 
@@ -91,23 +94,34 @@ internal sealed class SessionWatcher : IDisposable
             && Directory.Exists(e.FullPath))
         {
             Rebuild();
+            onChange(null);
+            return;
         }
-        ScheduleRefresh();
+        ScheduleRefresh(e.FullPath);
     }
 
     private void HandleError(object sender, ErrorEventArgs e)
     {
         ThreadPool.QueueUserWorkItem(_ => Rebuild());
-        ScheduleRefresh();
+        ScheduleRefresh(null);
     }
 
-    private void ScheduleRefresh()
+    private void ScheduleRefresh(string? changedPath)
     {
         lock (stateLock)
         {
             if (disposed)
             {
                 return;
+            }
+            if (changedPath is null)
+            {
+                requiresFullRefresh = true;
+                pendingChangedPaths.Clear();
+            }
+            else if (!requiresFullRefresh)
+            {
+                pendingChangedPaths.Add(Path.GetFullPath(changedPath));
             }
             debounceTimer?.Dispose();
             debounceTimer = new System.Threading.Timer(
@@ -120,12 +134,19 @@ internal sealed class SessionWatcher : IDisposable
 
     private void NotifyChangeIfActive()
     {
+        IReadOnlyCollection<string>? changedPaths;
         lock (stateLock)
         {
-            if (!disposed)
+            if (disposed)
             {
-                onChange();
+                return;
             }
+
+            changedPaths = requiresFullRefresh ? null : pendingChangedPaths.ToArray();
+            requiresFullRefresh = false;
+            pendingChangedPaths.Clear();
         }
+
+        onChange(changedPaths);
     }
 }

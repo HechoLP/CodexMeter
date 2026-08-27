@@ -1,7 +1,11 @@
 using System.Buffers;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 using CodexMeter.Core.Domain;
 using CodexMeter.Core.Parsing;
 
@@ -10,17 +14,59 @@ namespace CodexMeter.Core.Services;
 public sealed class UsageScanner
 {
     public const int MaximumSourceCount = 50_000;
-    public const int MaximumEventCount = 5_000_000;
+    public const int MaximumEventCount = 1_000_000;
     public const int MaximumEventsPerSource = 500_000;
+    public const long MaximumSourceBytes = 512L * 1_024 * 1_024;
+    public const long MaximumBytesPerScan = 4L * 1_024 * 1_024 * 1_024;
+    public const long MaximumTotalSourceBytes = 32L * 1_024 * 1_024 * 1_024;
+    public static readonly TimeSpan MaximumScanDuration = TimeSpan.FromSeconds(30);
 
     private readonly IReadOnlyList<string> roots;
     private readonly Dictionary<string, CachedFile> cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentQueue<string> invalidatedPaths = new();
+    private readonly int maximumSourceCount;
+    private readonly int maximumEventCount;
+    private readonly int maximumEventsPerSource;
+    private readonly long maximumSourceBytes;
+    private readonly long maximumBytesPerScan;
+    private readonly long maximumTotalSourceBytes;
+    private readonly TimeSpan maximumScanDuration;
     private int invalidationGeneration;
     private int appliedInvalidationGeneration;
 
     public UsageScanner(IEnumerable<string>? roots = null)
+        : this(
+            roots,
+            MaximumSourceCount,
+            MaximumEventCount,
+            MaximumEventsPerSource,
+            MaximumSourceBytes,
+            MaximumBytesPerScan,
+            MaximumScanDuration,
+            MaximumTotalSourceBytes)
+    {
+    }
+
+    internal UsageScanner(
+        IEnumerable<string>? roots,
+        int maximumSourceCount,
+        int maximumEventCount,
+        int maximumEventsPerSource,
+        long maximumSourceBytes,
+        long maximumBytesPerScan,
+        TimeSpan maximumScanDuration,
+        long maximumTotalSourceBytes = MaximumTotalSourceBytes)
     {
         this.roots = (roots ?? DefaultRoots()).Select(Path.GetFullPath).ToArray();
+        this.maximumSourceCount = Math.Max(1, maximumSourceCount);
+        this.maximumEventCount = Math.Max(1, maximumEventCount);
+        this.maximumEventsPerSource = Math.Max(1, maximumEventsPerSource);
+        this.maximumSourceBytes = Math.Max(CodexJsonlParser.MaximumLineBytes + 1L, maximumSourceBytes);
+        this.maximumBytesPerScan = Math.Max(this.maximumSourceBytes, maximumBytesPerScan);
+        this.maximumTotalSourceBytes = Math.Max(this.maximumSourceBytes, maximumTotalSourceBytes);
+        this.maximumScanDuration = maximumScanDuration > TimeSpan.Zero
+            ? maximumScanDuration
+            : TimeSpan.FromSeconds(1);
     }
 
     public static IReadOnlyList<string> DefaultRoots()
@@ -47,6 +93,12 @@ public sealed class UsageScanner
 
     public void InvalidateCachedSources() => Interlocked.Increment(ref invalidationGeneration);
 
+    public void InvalidateCachedSource(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        invalidatedPaths.Enqueue(Path.GetFullPath(path));
+    }
+
     internal ScanResult Scan(
         WeekStart weekStart,
         DateTimeOffset now,
@@ -56,17 +108,33 @@ public sealed class UsageScanner
         if (currentInvalidationGeneration != appliedInvalidationGeneration)
         {
             cache.Clear();
+            while (invalidatedPaths.TryDequeue(out _))
+            {
+            }
             appliedInvalidationGeneration = currentInvalidationGeneration;
         }
+        else
+        {
+            while (invalidatedPaths.TryDequeue(out var invalidatedPath))
+            {
+                cache.Remove(invalidatedPath);
+            }
+        }
 
-        var sources = DiscoverSources(cancellationToken);
+        var discovery = DiscoverSources(cancellationToken);
+        var sources = discovery.Sources;
         var activePaths = new HashSet<string>(sources, StringComparer.OrdinalIgnoreCase);
-        var partial = false;
+        var partial = discovery.ResourceLimitReached;
+        var hasMoreWork = false;
+        var resourceLimitReached = discovery.ResourceLimitReached;
+        var scannedBytes = 0L;
+        var scanStartedAt = Stopwatch.GetTimestamp();
 
         foreach (var stale in cache.Keys.Where(path => !activePaths.Contains(path)).ToArray())
         {
             cache.Remove(stale);
         }
+        var cachedEventCount = cache.Values.Sum(value => value.Events.Count);
 
         foreach (var source in sources)
         {
@@ -80,16 +148,59 @@ public sealed class UsageScanner
                     continue;
                 }
 
-                var parsed = ParseFile(source, cancellationToken);
+                var previousEventCount = cached?.Events.Count ?? 0;
+                var retainedEventCount = cachedEventCount - previousEventCount;
+                if (before.Length > maximumSourceBytes)
+                {
+                    cache.Remove(source);
+                    cachedEventCount = retainedEventCount;
+                    partial = true;
+                    resourceLimitReached = true;
+                    continue;
+                }
+                if (scannedBytes > 0
+                    && (scannedBytes + before.Length > maximumBytesPerScan
+                        || Stopwatch.GetElapsedTime(scanStartedAt) >= maximumScanDuration))
+                {
+                    hasMoreWork = true;
+                    break;
+                }
+                var remainingEventCapacity = maximumEventCount - retainedEventCount;
+                if (remainingEventCapacity <= 0)
+                {
+                    cache.Remove(source);
+                    cachedEventCount = retainedEventCount;
+                    partial = true;
+                    resourceLimitReached = true;
+                    break;
+                }
+
+                var parsed = ParseFile(
+                    source,
+                    Math.Min(maximumEventsPerSource, remainingEventCapacity),
+                    before.Length,
+                    cancellationToken);
+                scannedBytes += before.Length;
                 var after = FileStamp.Read(source);
                 if (before != after)
                 {
                     cache.Remove(source);
+                    cachedEventCount = retainedEventCount;
                     partial = true;
                     continue;
                 }
 
+                if (parsed.ResourceLimitReached)
+                {
+                    cache.Remove(source);
+                    cachedEventCount = retainedEventCount;
+                    partial = true;
+                    resourceLimitReached = true;
+                    break;
+                }
+
                 cache[source] = new CachedFile(after, parsed.Events, parsed.Partial);
+                cachedEventCount = retainedEventCount + parsed.Events.Count;
                 partial |= parsed.Partial;
             }
             catch (Exception error) when (error is IOException
@@ -97,6 +208,7 @@ public sealed class UsageScanner
                                           or System.Security.SecurityException)
             {
                 cache.Remove(source);
+                cachedEventCount = cache.Values.Sum(value => value.Events.Count);
                 partial = true;
             }
         }
@@ -112,10 +224,11 @@ public sealed class UsageScanner
                     continue;
                 }
 
-                if (events.Count >= MaximumEventCount)
+                if (events.Count >= maximumEventCount)
                 {
-                    throw new InvalidOperationException(
-                        $"More than {MaximumEventCount:N0} normalized token events were found.");
+                    partial = true;
+                    resourceLimitReached = true;
+                    break;
                 }
 
                 events.Add(usageEvent);
@@ -123,19 +236,26 @@ public sealed class UsageScanner
         }
 
         var snapshot = Aggregate(events, now, weekStart, partial);
-        var status = snapshot.Quality switch
-        {
-            DataQuality.Exact => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
-            DataQuality.Partial => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
-            DataQuality.Unavailable => sources.Count == 0 ? "Codex sessions not found" : "No Codex usage found",
-            _ => "Unable to read local usage"
-        };
-        return new ScanResult(snapshot, sources.Count, status);
+        var status = resourceLimitReached
+            ? "Local session data limit reached"
+            : hasMoreWork
+                ? "Importing local history…"
+                : snapshot.Quality switch
+                {
+                    DataQuality.Exact => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
+                    DataQuality.Partial => snapshot.UpdatedAt is null ? "No Codex usage found" : "Updated just now",
+                    DataQuality.Unavailable => sources.Count == 0 ? "Codex sessions not found" : "No Codex usage found",
+                    _ => "Unable to read local usage"
+                };
+        return new ScanResult(snapshot, sources.Count, status, hasMoreWork);
     }
 
-    private List<string> DiscoverSources(CancellationToken cancellationToken)
+    private DiscoveryResult DiscoverSources(CancellationToken cancellationToken)
     {
         var sources = new List<string>();
+        var identities = new HashSet<FileIdentity>();
+        var totalSourceBytes = 0L;
+        var resourceLimitReached = false;
         var options = new EnumerationOptions
         {
             RecurseSubdirectories = true,
@@ -166,21 +286,43 @@ public sealed class UsageScanner
                     continue;
                 }
 
-                if (sources.Count >= MaximumSourceCount)
+                if (sources.Count >= maximumSourceCount)
                 {
-                    throw new InvalidOperationException(
-                        $"More than {MaximumSourceCount:N0} Codex session files were found.");
+                    resourceLimitReached = true;
+                    break;
+                }
+
+                var info = new FileInfo(fullPath);
+                if (info.Length > maximumSourceBytes)
+                {
+                    resourceLimitReached = true;
+                    continue;
+                }
+                var identity = FileIdentity.TryRead(fullPath);
+                if (identity is { } value && !identities.Add(value))
+                {
+                    continue;
+                }
+                if (info.Length > maximumTotalSourceBytes - totalSourceBytes)
+                {
+                    resourceLimitReached = true;
+                    continue;
                 }
 
                 sources.Add(fullPath);
+                totalSourceBytes += info.Length;
             }
         }
 
         sources.Sort(StringComparer.OrdinalIgnoreCase);
-        return sources;
+        return new DiscoveryResult(sources, resourceLimitReached);
     }
 
-    private static ParsedFile ParseFile(string path, CancellationToken cancellationToken)
+    private static ParsedFile ParseFile(
+        string path,
+        int maximumEvents,
+        long maximumBytes,
+        CancellationToken cancellationToken)
     {
         var events = new List<UsageEvent>();
         var partial = false;
@@ -200,7 +342,7 @@ public sealed class UsageScanner
             bufferSize: 64 * 1024,
             FileOptions.SequentialScan);
 
-        foreach (var boundedLine in BoundedLineReader.Read(stream, cancellationToken))
+        foreach (var boundedLine in BoundedLineReader.Read(stream, maximumBytes, cancellationToken))
         {
             if (boundedLine.Oversized)
             {
@@ -288,10 +430,9 @@ public sealed class UsageScanner
                         break;
                     }
 
-                    if (events.Count >= MaximumEventsPerSource)
+                    if (events.Count >= maximumEvents)
                     {
-                        throw new InvalidOperationException(
-                            $"More than {MaximumEventsPerSource:N0} token events were found in one session.");
+                        return new ParsedFile([], true, true);
                     }
 
                     events.Add(new UsageEvent(
@@ -306,7 +447,7 @@ public sealed class UsageScanner
             }
         }
 
-        return new ParsedFile(events, partial);
+        return new ParsedFile(events, partial, false);
     }
 
     private static UsageSnapshot Aggregate(
@@ -420,7 +561,11 @@ public sealed class UsageScanner
     private static string HashIdentifier(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
-    private sealed record ParsedFile(IReadOnlyList<UsageEvent> Events, bool Partial);
+    private sealed record ParsedFile(
+        IReadOnlyList<UsageEvent> Events,
+        bool Partial,
+        bool ResourceLimitReached);
+    private sealed record DiscoveryResult(List<string> Sources, bool ResourceLimitReached);
     private sealed record CachedFile(FileStamp Stamp, IReadOnlyList<UsageEvent> Events, bool Partial);
     private readonly record struct FileStamp(long Length, long LastWriteTicks, long CreationTimeTicks)
     {
@@ -430,6 +575,65 @@ public sealed class UsageScanner
             return new FileStamp(info.Length, info.LastWriteTimeUtc.Ticks, info.CreationTimeUtc.Ticks);
         }
     }
+
+    private readonly record struct FileIdentity(uint VolumeSerialNumber, ulong FileIndex)
+    {
+        public static FileIdentity? TryRead(string path)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return null;
+            }
+
+            try
+            {
+                using var handle = File.OpenHandle(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete,
+                    FileOptions.None);
+                if (!GetFileInformationByHandle(handle, out var information))
+                {
+                    return null;
+                }
+
+                return new FileIdentity(
+                    information.VolumeSerialNumber,
+                    ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow);
+            }
+            catch (Exception error) when (error is IOException
+                                          or UnauthorizedAccessException
+                                          or System.Security.SecurityException)
+            {
+                return null;
+            }
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ByHandleFileInformation
+    {
+        internal uint FileAttributes;
+        internal System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+        internal System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+        internal System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+        internal uint VolumeSerialNumber;
+        internal uint FileSizeHigh;
+        internal uint FileSizeLow;
+        internal uint NumberOfLinks;
+        internal uint FileIndexHigh;
+        internal uint FileIndexLow;
+    }
+
+#pragma warning disable SYSLIB1054 // This small blittable Win32 call avoids enabling unsafe source-generated interop.
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandle(
+        SafeFileHandle file,
+        out ByHandleFileInformation fileInformation);
+#pragma warning restore SYSLIB1054
 }
 
 internal sealed record BoundedLine(byte[]? Bytes, bool Oversized);
@@ -438,17 +642,31 @@ internal static class BoundedLineReader
 {
     public static IEnumerable<BoundedLine> Read(
         Stream stream,
+        long maximumBytes,
         CancellationToken cancellationToken)
     {
         var readBuffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
         var lineBuffer = new ArrayBufferWriter<byte>(64 * 1024);
         var oversized = false;
+        var totalBytesRead = 0L;
         try
         {
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var read = stream.Read(readBuffer, 0, readBuffer.Length);
+                var remainingBytes = maximumBytes - totalBytesRead;
+                if (remainingBytes <= 0)
+                {
+                    if (oversized || lineBuffer.WrittenCount > 0)
+                    {
+                        yield return new BoundedLine(null, true);
+                    }
+                    yield break;
+                }
+                var read = stream.Read(
+                    readBuffer,
+                    0,
+                    (int)Math.Min(readBuffer.Length, remainingBytes));
                 if (read == 0)
                 {
                     if (oversized || lineBuffer.WrittenCount > 0)
@@ -457,6 +675,7 @@ internal static class BoundedLineReader
                     }
                     yield break;
                 }
+                totalBytesRead += read;
 
                 for (var index = 0; index < read; index++)
                 {

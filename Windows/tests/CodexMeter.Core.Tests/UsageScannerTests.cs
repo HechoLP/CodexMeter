@@ -1,4 +1,5 @@
 using CodexMeter.Core.Domain;
+using CodexMeter.Core.Parsing;
 using CodexMeter.Core.Services;
 using System.Text.Json;
 
@@ -181,6 +182,152 @@ public sealed class UsageScannerTests
             Assert.Equal(
                 new DateTimeOffset(2026, 8, 27, 1, 0, 1, TimeSpan.Zero),
                 monday.Snapshot.UpdatedAt);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DuplicateSourcesCannotBypassTheRawEventCacheLimit()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var first = Path.Combine(root, "a.jsonl");
+            var duplicate = Path.Combine(root, "b.jsonl");
+            var lines = new[]
+            {
+                "{\"timestamp\":\"2026-08-27T01:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"bounded-cache\"}}",
+                TokenLineWithLast("2026-08-27T01:00:01Z", 100, 60, 20, 100, 60, 20, 1),
+                TokenLineWithLast("2026-08-27T01:00:02Z", 150, 90, 30, 50, 30, 10, 2)
+            };
+            await File.WriteAllLinesAsync(first, lines, cancellationToken).ConfigureAwait(true);
+            await File.WriteAllLinesAsync(duplicate, lines, cancellationToken).ConfigureAwait(true);
+
+            var scanner = new UsageScanner(
+                [root],
+                maximumSourceCount: 10,
+                maximumEventCount: 2,
+                maximumEventsPerSource: 2,
+                maximumSourceBytes: 2 * 1024 * 1024,
+                maximumBytesPerScan: 8 * 1024 * 1024,
+                maximumScanDuration: TimeSpan.FromSeconds(5));
+            var result = await scanner.ScanAsync(
+                WeekStart.Monday,
+                new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero),
+                cancellationToken).ConfigureAwait(true);
+
+            Assert.Equal(new TokenUsage(150, 90, 30), result.Snapshot.AllTime);
+            Assert.Equal(DataQuality.Partial, result.Snapshot.Quality);
+            Assert.Equal("Local session data limit reached", result.StatusMessage);
+            Assert.False(result.HasMoreWork);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ScanByteBudgetContinuesWithoutReprocessingCachedSources()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var first = Path.Combine(root, "a.jsonl");
+            var second = Path.Combine(root, "b.jsonl");
+            var filler = new string('x', 600_000);
+            await File.WriteAllLinesAsync(first,
+            [
+                "{\"timestamp\":\"2026-08-27T01:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"budget-a\"}}",
+                TokenLine("2026-08-27T01:00:01Z", 1, 100, 60, 20),
+                filler
+            ], cancellationToken).ConfigureAwait(true);
+            await File.WriteAllLinesAsync(second,
+            [
+                "{\"timestamp\":\"2026-08-27T01:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"budget-b\"}}",
+                TokenLine("2026-08-27T01:00:02Z", 1, 200, 120, 40),
+                filler
+            ], cancellationToken).ConfigureAwait(true);
+
+            var minimumSourceBudget = CodexJsonlParser.MaximumLineBytes + 1L;
+            var scanner = new UsageScanner(
+                [root],
+                maximumSourceCount: 10,
+                maximumEventCount: 10,
+                maximumEventsPerSource: 10,
+                maximumSourceBytes: minimumSourceBudget,
+                maximumBytesPerScan: minimumSourceBudget,
+                maximumScanDuration: TimeSpan.FromSeconds(5));
+            var now = new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
+
+            var firstPass = await scanner.ScanAsync(
+                WeekStart.Monday,
+                now,
+                cancellationToken).ConfigureAwait(true);
+            Assert.True(firstPass.HasMoreWork);
+            Assert.Equal(new TokenUsage(100, 60, 20), firstPass.Snapshot.AllTime);
+            Assert.Equal("Importing local history…", firstPass.StatusMessage);
+
+            var completed = await scanner.ScanAsync(
+                WeekStart.Monday,
+                now,
+                cancellationToken).ConfigureAwait(true);
+            Assert.False(completed.HasMoreWork);
+            Assert.Equal(new TokenUsage(300, 180, 60), completed.Snapshot.AllTime);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task TotalSourceByteLimitStopsBeforeUnboundedHistoryIsRead()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = CreateTemporaryDirectory();
+        try
+        {
+            var first = Path.Combine(root, "a.jsonl");
+            var second = Path.Combine(root, "b.jsonl");
+            var filler = new string('x', 600_000);
+            await File.WriteAllLinesAsync(first,
+            [
+                "{\"timestamp\":\"2026-08-27T01:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"total-budget-a\"}}",
+                TokenLine("2026-08-27T01:00:01Z", 1, 100, 60, 20),
+                filler
+            ], cancellationToken).ConfigureAwait(true);
+            await File.WriteAllLinesAsync(second,
+            [
+                "{\"timestamp\":\"2026-08-27T01:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"total-budget-b\"}}",
+                TokenLine("2026-08-27T01:00:02Z", 1, 200, 120, 40),
+                filler
+            ], cancellationToken).ConfigureAwait(true);
+
+            var minimumSourceBudget = CodexJsonlParser.MaximumLineBytes + 1L;
+            var scanner = new UsageScanner(
+                [root],
+                maximumSourceCount: 10,
+                maximumEventCount: 10,
+                maximumEventsPerSource: 10,
+                maximumSourceBytes: minimumSourceBudget,
+                maximumBytesPerScan: 8 * 1024 * 1024,
+                maximumScanDuration: TimeSpan.FromSeconds(5),
+                maximumTotalSourceBytes: minimumSourceBudget);
+            var result = await scanner.ScanAsync(
+                WeekStart.Monday,
+                new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero),
+                cancellationToken).ConfigureAwait(true);
+
+            Assert.Equal(new TokenUsage(100, 60, 20), result.Snapshot.AllTime);
+            Assert.Equal(DataQuality.Partial, result.Snapshot.Quality);
+            Assert.Equal("Local session data limit reached", result.StatusMessage);
+            Assert.False(result.HasMoreWork);
         }
         finally
         {

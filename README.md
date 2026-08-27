@@ -5,8 +5,8 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=flat-square&logo=windows11&logoColor=white)](Documentation/WINDOWS.md)
-[![macOS Release](https://img.shields.io/badge/macOS-v0.1.6%20preview-6e5aff?style=flat-square)](Documentation/ReleaseNotes/0.1.6.md)
-[![Windows Release](https://img.shields.io/badge/Windows-v0.1.1%20preview-0078D4?style=flat-square)](Documentation/ReleaseNotes/windows-0.1.1.md)
+[![macOS Release](https://img.shields.io/badge/macOS-v1.0.0-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.0.0.md)
+[![Windows Release](https://img.shields.io/badge/Windows-v1.0.0-0078D4?style=flat-square)](Documentation/ReleaseNotes/1.0.0.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -32,7 +32,7 @@ Tiny native macOS menu bar and Windows notification-area apps that turn **local 
 
 ### Homebrew Tap
 
-Install the current certificate-free preview from the public personal Tap:
+Install the certificate-free stable release from the public personal Tap:
 
 ```bash
 brew install --cask HechoLP/tap/codexmeter
@@ -49,18 +49,18 @@ Homebrew 6 no longer provides the old `--no-quarantine` installation option. The
 
 ### Direct download
 
-CodexMeter v0.1.6 is available from the public [CodexMeter Releases repository](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v0.1.6) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
+CodexMeter v1.0.0 is available from the public [CodexMeter Releases repository](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v1.0.0) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
 
-This is an unnotarized preview, not an Apple-trusted release. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
+This is the stable 1.0.0 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
 
-### macOS에서 미공증 프리뷰를 처음 실행할 때
+### macOS에서 인증서 없는 릴리스를 처음 실행할 때
 
-미공증 프리뷰를 테스트해야 한다면 공식 GitHub 릴리스에서 DMG와 `SHA256SUMS.txt`를 같은 폴더에 받은 뒤, 먼저 체크섬을 확인하세요. 다음 명령이 `OK`를 출력하지 않으면 앱을 실행하지 마세요.
+공식 GitHub 릴리스에서 DMG와 `SHA256SUMS.txt`를 같은 폴더에 받은 뒤, 먼저 체크섬을 확인하세요. 다음 명령이 `OK`를 출력하지 않으면 앱을 실행하지 마세요.
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-0.1.6.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-0.1.6.dmg
+grep ' CodexMeter-1.0.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.0.0.dmg
 ```
 
 열린 DMG에서 `CodexMeter.app`을 `Applications` 폴더로 복사합니다. 체크섬이 일치하고 공식 릴리스임을 확인한 경우에만 아래 명령으로 해당 앱의 격리 속성을 제거하고 실행하세요.
@@ -72,11 +72,11 @@ open /Applications/CodexMeter.app
 
 `xattr` 명령은 이 앱에 대한 macOS의 다운로드 격리 검사를 제거합니다. 출처가 다르거나 체크섬이 일치하지 않는 파일에는 사용하지 마세요. Developer ID 서명과 Apple 공증을 마친 정식 릴리스에서는 이 단계가 필요하지 않습니다.
 
-### Windows portable preview
+### Windows portable release
 
-Windows 10/11 users can download the x64 or ARM64 portable ZIP from the public [`windows-v0.1.1` release](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/windows-v0.1.1). The package is self-contained, so a separate .NET installation is not required.
+Windows 10/11 users can download the x64 or ARM64 portable ZIP from the same public [`v1.0.0` release](https://github.com/HechoLP/CodexMeter-Releases/releases/tag/v1.0.0). The package is self-contained, so a separate .NET installation is not required.
 
-Verify the ZIP against `SHA256SUMS-windows.txt`, extract it to a permanent folder, and run `CodexMeter.exe`. This preview is not code-signed, so Windows SmartScreen may require **Properties → Unblock** or the following command after the hash is confirmed:
+Verify the ZIP against `SHA256SUMS-windows.txt`, extract it to a permanent folder, and run `CodexMeter.exe`. This release is not publisher-signed, so Windows SmartScreen may require **Properties → Unblock** or the following command after the hash is confirmed:
 
 ```powershell
 Unblock-File .\CodexMeter.exe
@@ -186,13 +186,19 @@ swift test
 swift run CodexMeter
 ```
 
-Build and verify a certificate-free Universal 2 preview:
+Build and verify a certificate-free Universal 2 release candidate:
 
 ```bash
 Scripts/release_unsigned.sh
 ```
 
-This produces an ad-hoc-signed ZIP, DMG, per-file checksums, and `SHA256SUMS.txt` without using an Apple certificate. Maintainers who later add a Developer ID Application certificate and notarization profile can use the Apple-trusted workflow:
+For a clean, matching release tag, build the verified artifacts and signed Sparkle feed together:
+
+```bash
+Scripts/release_stable.sh
+```
+
+These commands produce an ad-hoc-signed ZIP, DMG, per-file checksums, and `SHA256SUMS.txt` without using an Apple certificate. Maintainers who later add a Developer ID Application certificate and notarization profile can use the optional Apple-trusted workflow:
 
 ```bash
 export CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
@@ -201,7 +207,7 @@ export NOTARY_PROFILE="codexmeter-notary"
 Scripts/release_public.sh
 ```
 
-Build and test the Windows version with the .NET 8 SDK:
+Build and test the Windows version with the .NET 10 SDK:
 
 ```powershell
 dotnet restore .\Windows\CodexMeter.Windows.sln
