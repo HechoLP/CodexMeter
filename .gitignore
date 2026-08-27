@@ -1,0 +1,13 @@
+.DS_Store
+._*
+/.build/
+/DerivedData/
+/*.xcarchive
+/*.dSYM/
+/Artifacts/
+/.swiftpm/
+xcuserdata/
+*.xcuserstate
+.impeccable/review/
+.impeccable/mocks/
+*.notarytool-profile
