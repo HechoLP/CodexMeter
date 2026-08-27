@@ -8,6 +8,7 @@ source "${project_root}/Config/Release.env"
 release_version=${CODEXMETER_VERSION:-${MARKETING_VERSION}}
 release_tag=${CODEXMETER_RELEASE_TAG:-"v${release_version}"}
 sparkle_account=${CODEXMETER_SPARKLE_ACCOUNT:-${SPARKLE_ACCOUNT}}
+release_repository=${CODEXMETER_RELEASE_REPOSITORY:-${RELEASE_REPOSITORY}}
 artifact_root="${project_root}/Artifacts"
 archive_path="${artifact_root}/${PRODUCT_NAME}-${release_version}.zip"
 appcast_path="${artifact_root}/appcast.xml"
@@ -20,6 +21,7 @@ if [[ ! -f "${archive_path}" ]]; then
   print -u2 "Release archive not found: ${archive_path}"
   exit 1
 fi
+"${script_dir}/verify_release_context.sh"
 if [[ ! -x "${generate_appcast}" || ! -x "${sign_update}" ]]; then
   print -u2 "Sparkle signing tools are missing. Run swift package resolve first."
   exit 1
@@ -33,8 +35,8 @@ if [[ -f "${release_notes_path}" ]]; then
     "${temporary_dir}/${PRODUCT_NAME}-${release_version}.md"
 fi
 
-download_prefix="https://github.com/HechoLP/CodexMeter/releases/download/${release_tag}/"
-release_link="https://github.com/HechoLP/CodexMeter/releases/tag/${release_tag}"
+download_prefix="https://github.com/${release_repository}/releases/download/${release_tag}/"
+release_link="https://github.com/${release_repository}/releases/tag/${release_tag}"
 "${generate_appcast}" \
   --account "${sparkle_account}" \
   --download-url-prefix "${download_prefix}" \

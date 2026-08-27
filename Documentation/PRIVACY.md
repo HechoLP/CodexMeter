@@ -1,6 +1,6 @@
 # Privacy
 
-CodexMeter processes Codex usage locally. Its only network feature is the bundled Sparkle updater, which checks an HTTPS appcast on this repository's dedicated `update-feed` branch and downloads updates from GitHub Releases. Automatic checks run at most once per day by default and can be disabled in **Settings → General**; a manual check is available in **Settings → About**.
+CodexMeter processes Codex usage locally. Its only network feature is the bundled Sparkle updater, which checks an HTTPS appcast on the configured public release repository's dedicated `update-feed` branch and downloads updates from that repository's GitHub Releases. Automatic checks run at most once per day by default and can be disabled in **Settings → General**; a manual check is available in **Settings → About**.
 
 Update requests contain the normal connection metadata needed to reach GitHub, such as the user's IP address and HTTP client information. CodexMeter does not add token totals, prompts, responses, source paths, project metadata, database contents, Codex credentials, or machine profile data to an update request. Update archives and the appcast are verified with the public Ed25519 key embedded in the app before extraction or installation.
 

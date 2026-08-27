@@ -15,7 +15,7 @@ Codex session JSONL
   -> MenuBarExtra popover and Settings
 ```
 
-The updater is isolated from token ingestion. It reads a signed HTTPS appcast from the repository's dedicated `update-feed` branch, verifies the feed and GitHub Release archive with an embedded Ed25519 public key, and verifies the archive before extraction. No usage state is passed to Sparkle.
+The updater is isolated from token ingestion. It reads a signed HTTPS appcast from the configured public release repository's dedicated `update-feed` branch, verifies the feed and GitHub Release archive with an embedded Ed25519 public key, and verifies the archive before extraction. No usage state is passed to Sparkle.
 
 Token-count events are cumulative snapshots. The normalizer ignores identical snapshots, derives component-wise increases, counts a fresh first counter only when `last_token_usage` equals `total_token_usage`, and treats unresolved baselines or ambiguous decreases as partial accuracy. Cached input remains a subset of input; total is always input plus output.
 

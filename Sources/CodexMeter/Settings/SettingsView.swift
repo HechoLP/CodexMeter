@@ -71,7 +71,7 @@ private struct GeneralSettingsView: View {
                     )
                 )
                 .disabled(!UpdateService.shared.isAvailable)
-                Text("Checks the signed GitHub release feed once per day. Token usage data is never sent.")
+                Text("Checks the signed update feed once per day. Token usage data is never sent.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -9,6 +9,10 @@ identity=${CODE_SIGN_IDENTITY:-}
 team_id=${CODE_SIGN_TEAM_ID:-}
 profile=${NOTARY_PROFILE:-}
 
+CODEXMETER_REQUIRE_RELEASE_TAG=1 \
+  CODEXMETER_REQUIRE_PUBLIC_REPOSITORY=1 \
+  "${script_dir}/verify_release_context.sh"
+
 if [[ -z "${identity}" || -z "${team_id}" || -z "${profile}" ]]; then
   print -u2 "Public release requires CODE_SIGN_IDENTITY, CODE_SIGN_TEAM_ID, and NOTARY_PROFILE."
   exit 2

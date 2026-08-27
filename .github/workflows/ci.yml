@@ -20,7 +20,11 @@ jobs:
       - name: Unit and integration tests
         run: swift test
       - name: Validate release scripts
-        run: zsh -n Scripts/*.sh
+        run: |
+          zsh -n Scripts/*.sh Tests/Scripts/*.zsh
+          for test_script in Tests/Scripts/*_tests.zsh; do
+            "$test_script"
+          done
       - name: Universal release build
         run: swift build -c release --arch arm64 --arch x86_64
       - name: Verify architectures

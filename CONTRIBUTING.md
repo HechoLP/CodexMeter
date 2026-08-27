@@ -6,6 +6,7 @@ Before opening a pull request:
 
 ```bash
 swift test
+for test_script in Tests/Scripts/*_tests.zsh; do "$test_script"; done
 Scripts/release.sh
 ```
 

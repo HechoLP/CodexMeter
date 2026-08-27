@@ -9,6 +9,7 @@ All notable changes to CodexMeter will be documented in this file.
 - Isolated unreadable or concurrently replaced Codex session files so one source cannot abort the full refresh; affected snapshots are marked partial while healthy sources continue importing.
 - Replaced per-checkpoint full-prefix fingerprint recomputation with a versioned incremental accumulator and explicit fingerprint I/O accounting.
 - Kept the data folder owner-only when it is created from Settings and aligned CI and release documentation with the preview-only distribution boundary.
+- Made packaging create its artifact directory, made release hosting configurable, and made public builds fail closed unless a clean, matching version tag points to `HEAD` in a public release repository.
 
 ### Security
 

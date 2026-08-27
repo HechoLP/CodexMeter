@@ -99,7 +99,7 @@ Codex is the first supported data source. Future releases are planned to expand 
 
 ## Privacy
 
-CodexMeter processes usage entirely on-device. Its only network feature is Sparkle's signed update check against the repository's dedicated `update-feed` branch and its GitHub Release archive; it never attaches token totals, prompts, source paths, credentials, or database contents. Automatic checks can be disabled under **Settings → General**. CodexMeter stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
+CodexMeter processes usage entirely on-device. Its only network feature is Sparkle's signed update check against the configured public release repository's dedicated `update-feed` branch and GitHub Release archive; it never attaches token totals, prompts, source paths, credentials, or database contents. Automatic checks can be disabled under **Settings → General**. CodexMeter stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 

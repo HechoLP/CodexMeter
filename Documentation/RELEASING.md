@@ -32,6 +32,17 @@ The command validates the feed signature, archive signature, byte length, and do
 
 ## Signed and notarized public build
 
+Public builds are accepted only from a clean worktree whose `vVERSION` tag points exactly to `HEAD`, with matching release notes under `Documentation/ReleaseNotes/`. The configured GitHub release repository must also be public. This prevents a binary built from different source from being published under an existing version.
+
+If releases are hosted separately from the source repository, set both values before building:
+
+```bash
+export CODEXMETER_RELEASE_REPOSITORY="OWNER/PUBLIC-RELEASE-REPOSITORY"
+export CODEXMETER_UPDATE_FEED_BRANCH="update-feed"
+```
+
+The build derives and embeds the appcast URL from those values. Create and review the release commit, update `Config/Release.env` and the release notes, commit everything, then create `vVERSION` at that exact commit before running the public workflow. Never move or replace an existing published tag.
+
 ```bash
 export CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 export CODE_SIGN_TEAM_ID="TEAMID"
@@ -41,7 +52,7 @@ Scripts/release_public.sh
 
 The public command fails closed unless all three values are present. It requires a Developer ID signature, Hardened Runtime, the expected Team ID, an empty host-app entitlement allowlist, notarization, stapling, Gatekeeper acceptance, matching bundle metadata, Universal 2 architectures, embedded Sparkle verification, ZIP/DMG checksums, a signed appcast, and verification of each packaged app.
 
-After verification, confirm the version in `Config/Release.env`, the Git tag, artifact names, appcast enclosure URL, and release notes match. Upload `appcast.xml` alongside the ZIP, DMG, and checksum files, then publish the exact same signed file as `appcast.xml` on the dedicated `update-feed` branch. The branch must contain no private key material. Create the tag and GitHub Release only after the final independent audit passes. `Scripts/release.sh` remains a local, ad-hoc-signed candidate command and can never satisfy the public stable-release gate; it may be used only for a clearly labeled preview release.
+After verification, confirm the version in `Config/Release.env`, the immutable Git tag, artifact names, appcast enclosure URL, and release notes match. Upload `appcast.xml` alongside the ZIP, DMG, and checksum files, then publish the exact same signed file as `appcast.xml` on the configured dedicated `update-feed` branch. The branch must contain no private key material. Create the GitHub Release from the already verified tag only after the final independent audit passes. `Scripts/release.sh` remains a local candidate command and can never satisfy the public stable-release gate; it may be used only for a clearly labeled maintainer preview.
 
 ## Homebrew Cask
 
@@ -58,4 +69,4 @@ For local maintainer verification, `Scripts/install_homebrew_local.sh` generates
 
 ## Rollback
 
-Delete or mark the affected GitHub Release as a pre-release, publish the previous verified artifact again, and document any local-database compatibility implications. Never rewrite a published tag silently.
+Delete or mark the affected GitHub Release as a pre-release, restore the previous signed appcast, and document any local-database compatibility implications. Never rebuild an old version or rewrite a published tag; issue a new patch version instead.

@@ -8,6 +8,9 @@ source "${project_root}/Config/Release.env"
 release_version=${CODEXMETER_VERSION:-${MARKETING_VERSION}}
 release_build=${CODEXMETER_BUILD_NUMBER:-${BUILD_NUMBER}}
 release_bundle_id=${CODEXMETER_BUNDLE_ID:-${BUNDLE_IDENTIFIER}}
+release_repository=${CODEXMETER_RELEASE_REPOSITORY:-${RELEASE_REPOSITORY}}
+update_feed_branch=${CODEXMETER_UPDATE_FEED_BRANCH:-${UPDATE_FEED_BRANCH}}
+expected_sparkle_feed_url="https://raw.githubusercontent.com/${release_repository}/${update_feed_branch}/appcast.xml"
 require_public_release=${CODEXMETER_REQUIRE_PUBLIC_RELEASE:-0}
 require_signed_release=${CODEXMETER_REQUIRE_SIGNED_RELEASE:-0}
 expected_team_id=${CODE_SIGN_TEAM_ID:-}
@@ -58,7 +61,7 @@ verify_app() {
       || "${actual_build}" != "${release_build}" \
       || "${actual_minimum_system}" != "${MINIMUM_SYSTEM_VERSION}" \
       || "${ui_element:l}" != "true" \
-      || "${sparkle_feed_url}" != "${SPARKLE_FEED_URL}" \
+      || "${sparkle_feed_url}" != "${expected_sparkle_feed_url}" \
       || "${sparkle_public_key}" != "${SPARKLE_PUBLIC_KEY}" \
       || "${sparkle_auto_checks:l}" != "true" \
       || "${sparkle_auto_update:l}" != "true" \

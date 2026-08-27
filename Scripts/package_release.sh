@@ -17,6 +17,7 @@ if [[ ! -d "${app_path}" ]]; then
   exit 1
 fi
 
+mkdir -p "${artifact_root}"
 rm -f "${zip_path}" "${zip_path}.sha256" "${dmg_path}" "${dmg_path}.sha256"
 ditto -c -k --norsrc --noextattr --keepParent "${app_path}" "${zip_path}"
 "${script_dir}/make_dmg.sh" "${app_path}" "${dmg_path}"
