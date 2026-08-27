@@ -7,6 +7,7 @@ using CodexMeter.Windows.Views;
 
 namespace CodexMeter.Windows;
 
+#pragma warning disable CA1001 // WPF owns the application lifetime; OnExit disposes every owned resource.
 public partial class App : System.Windows.Application
 {
     private Mutex? singleInstanceMutex;
@@ -31,8 +32,8 @@ public partial class App : System.Windows.Application
         settingsStore = new AppSettingsStore();
         viewModel = new UsageViewModel(settingsStore);
         usageWindow = new UsageWindow(viewModel);
-        usageWindow.SettingsRequested += ShowSettings;
-        usageWindow.QuitRequested += ShutdownApplication;
+        usageWindow.SettingsRequested += (_, _) => ShowSettings();
+        usageWindow.QuitRequested += (_, _) => ShutdownApplication();
 
         trayIcon = new TrayIconHost(
             usageWindow.ToggleNearTray,
@@ -41,8 +42,12 @@ public partial class App : System.Windows.Application
             ShutdownApplication);
 
         sessionWatcher = new SessionWatcher(
-            () => Dispatcher.BeginInvoke(() => _ = viewModel.RefreshAsync()));
-        settingsStore.SettingsChanged += ApplySettings;
+            () => Dispatcher.BeginInvoke(() =>
+            {
+                viewModel.InvalidateCachedSources();
+                _ = viewModel.RefreshAsync();
+            }));
+        settingsStore.SettingsChanged += (_, _) => ApplySettings();
         ApplySettings();
         _ = viewModel.RefreshAsync();
     }
@@ -63,8 +68,11 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        settingsWindow ??= new SettingsWindow(settingsStore, viewModel);
-        settingsWindow.Closed += (_, _) => settingsWindow = null;
+        if (settingsWindow is null)
+        {
+            settingsWindow = new SettingsWindow(settingsStore);
+            settingsWindow.Closed += (_, _) => settingsWindow = null;
+        }
         settingsWindow.Show();
         settingsWindow.Activate();
     }
@@ -77,7 +85,6 @@ public partial class App : System.Windows.Application
         }
 
         viewModel.ApplySettings();
-        sessionWatcher?.Rebuild();
         var seconds = settingsStore.Current.RefreshIntervalSeconds;
         refreshTimer?.Dispose();
         refreshTimer = seconds <= 0
@@ -97,3 +104,4 @@ public partial class App : System.Windows.Application
         Shutdown();
     }
 }
+#pragma warning restore CA1001

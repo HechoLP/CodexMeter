@@ -24,7 +24,7 @@ internal sealed class TrayIconHost : IDisposable
         notifyIcon = new NotifyIcon
         {
             Icon = icon,
-            Text = "CodexMeter",
+            Text = System.Windows.Forms.Application.ProductName,
             Visible = true,
             ContextMenuStrip = BuildMenu(toggleWindow, refresh, showSettings, quit)
         };

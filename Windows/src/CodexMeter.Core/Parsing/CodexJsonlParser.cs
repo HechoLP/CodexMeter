@@ -20,13 +20,13 @@ public sealed record ParsedLine(
     TokenObservation? Token = null,
     string? Diagnostic = null);
 
-public sealed class CodexJsonlParser
+public static class CodexJsonlParser
 {
     public const int MaximumLineBytes = 1_048_576;
     public const long MaximumTokenComponent = 1_000_000_000_000;
     private const int MaximumIdentifierLength = 256;
 
-    public ParsedLine Parse(ReadOnlyMemory<byte> line)
+    public static ParsedLine Parse(ReadOnlyMemory<byte> line)
     {
         if (line.IsEmpty)
         {
@@ -234,7 +234,7 @@ public sealed class CodexJsonlParser
         var value = element.GetString();
         return string.IsNullOrEmpty(value)
             || value.Length > maximumLength
-            || value.Contains('\0')
+            || value.Contains('\0', StringComparison.Ordinal)
             ? null
             : value;
     }

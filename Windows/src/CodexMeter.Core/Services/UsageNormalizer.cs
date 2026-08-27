@@ -15,12 +15,15 @@ public sealed record UsageNormalizationResult(
     UsageNormalizationState State,
     string? Diagnostic);
 
-public sealed class UsageNormalizer
+public static class UsageNormalizer
 {
-    public UsageNormalizationResult Normalize(
+    public static UsageNormalizationResult Normalize(
         TokenObservation observation,
         UsageNormalizationState state)
     {
+        ArgumentNullException.ThrowIfNull(observation);
+        ArgumentNullException.ThrowIfNull(state);
+
         if (state.LastObservedAt is not null
             && observation.OccurredAt < state.LastObservedAt.Value)
         {

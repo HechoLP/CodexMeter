@@ -17,8 +17,8 @@ public partial class UsageWindow : Window
         Deactivated += (_, _) => Hide();
     }
 
-    public event Action? SettingsRequested;
-    public event Action? QuitRequested;
+    public event EventHandler? SettingsRequested;
+    public event EventHandler? QuitRequested;
 
     public void ToggleNearTray()
     {
@@ -44,6 +44,7 @@ public partial class UsageWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        ArgumentNullException.ThrowIfNull(e);
         if (!closingForExit)
         {
             e.Cancel = true;
@@ -58,8 +59,9 @@ public partial class UsageWindow : Window
     private void SettingsClicked(object sender, RoutedEventArgs e)
     {
         Hide();
-        SettingsRequested?.Invoke();
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void QuitClicked(object sender, RoutedEventArgs e) => QuitRequested?.Invoke();
+    private void QuitClicked(object sender, RoutedEventArgs e) =>
+        QuitRequested?.Invoke(this, EventArgs.Empty);
 }

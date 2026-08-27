@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using CodexMeter.Core.Domain;
@@ -13,9 +14,9 @@ public sealed class UsageScanner
     public const int MaximumEventsPerSource = 500_000;
 
     private readonly IReadOnlyList<string> roots;
-    private readonly CodexJsonlParser parser = new();
-    private readonly UsageNormalizer normalizer = new();
     private readonly Dictionary<string, CachedFile> cache = new(StringComparer.OrdinalIgnoreCase);
+    private int invalidationGeneration;
+    private int appliedInvalidationGeneration;
 
     public UsageScanner(IEnumerable<string>? roots = null)
     {
@@ -38,11 +39,26 @@ public sealed class UsageScanner
         CancellationToken cancellationToken = default) =>
         Task.Run(() => Scan(weekStart, DateTimeOffset.Now, cancellationToken), cancellationToken);
 
+    internal Task<ScanResult> ScanAsync(
+        WeekStart weekStart,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => Scan(weekStart, now, cancellationToken), cancellationToken);
+
+    public void InvalidateCachedSources() => Interlocked.Increment(ref invalidationGeneration);
+
     internal ScanResult Scan(
         WeekStart weekStart,
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
+        var currentInvalidationGeneration = Volatile.Read(ref invalidationGeneration);
+        if (currentInvalidationGeneration != appliedInvalidationGeneration)
+        {
+            cache.Clear();
+            appliedInvalidationGeneration = currentInvalidationGeneration;
+        }
+
         var sources = DiscoverSources(cancellationToken);
         var activePaths = new HashSet<string>(sources, StringComparer.OrdinalIgnoreCase);
         var partial = false;
@@ -164,7 +180,7 @@ public sealed class UsageScanner
         return sources;
     }
 
-    private ParsedFile ParseFile(string path, CancellationToken cancellationToken)
+    private static ParsedFile ParseFile(string path, CancellationToken cancellationToken)
     {
         var events = new List<UsageEvent>();
         var partial = false;
@@ -198,7 +214,7 @@ public sealed class UsageScanner
                 continue;
             }
 
-            var parsed = parser.Parse(line);
+            var parsed = CodexJsonlParser.Parse(line);
             switch (parsed.Kind)
             {
                 case ParsedLineKind.SessionMetadata:
@@ -264,7 +280,7 @@ public sealed class UsageScanner
                         }
                     }
 
-                    var normalized = normalizer.Normalize(observation, state);
+                    var normalized = UsageNormalizer.Normalize(observation, state);
                     state = normalized.State;
                     partial |= state.Quality == DataQuality.Partial;
                     if (isInheritedReplay || normalized.Delta is not { } delta || delta == TokenUsage.Zero)
@@ -377,7 +393,7 @@ public sealed class UsageScanner
             "event-v2",
             $"session:{sessionId}",
             $"time:{observation.OccurredAt.UtcDateTime.Ticks}",
-            $"ordinal:{observation.Ordinal?.ToString() ?? "none"}",
+            $"ordinal:{observation.Ordinal?.ToString(CultureInfo.InvariantCulture) ?? "none"}",
             $"last:{UsageIdentity(observation.LastUsage)}",
             $"cumulative:{UsageIdentity(observation.CumulativeUsage)}");
         return HashIdentifier(material);
@@ -402,16 +418,16 @@ public sealed class UsageScanner
     }
 
     private static string HashIdentifier(string value) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     private sealed record ParsedFile(IReadOnlyList<UsageEvent> Events, bool Partial);
     private sealed record CachedFile(FileStamp Stamp, IReadOnlyList<UsageEvent> Events, bool Partial);
-    private readonly record struct FileStamp(long Length, long LastWriteTicks)
+    private readonly record struct FileStamp(long Length, long LastWriteTicks, long CreationTimeTicks)
     {
         public static FileStamp Read(string path)
         {
             var info = new FileInfo(path);
-            return new FileStamp(info.Length, info.LastWriteTimeUtc.Ticks);
+            return new FileStamp(info.Length, info.LastWriteTimeUtc.Ticks, info.CreationTimeUtc.Ticks);
         }
     }
 }
@@ -435,6 +451,10 @@ internal static class BoundedLineReader
                 var read = stream.Read(readBuffer, 0, readBuffer.Length);
                 if (read == 0)
                 {
+                    if (oversized || lineBuffer.WrittenCount > 0)
+                    {
+                        yield return new BoundedLine(null, true);
+                    }
                     yield break;
                 }
 

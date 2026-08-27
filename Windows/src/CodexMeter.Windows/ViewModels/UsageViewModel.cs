@@ -11,7 +11,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 {
     private readonly AppSettingsStore settingsStore;
     private readonly UsageScanner scanner = new();
-    private readonly SemaphoreSlim refreshGate = new(1, 1);
+    private readonly CoalescingRefreshRunner refreshRunner = new();
     private UsageSnapshot snapshot = UsageSnapshot.Empty;
     private string statusMessage = "Reading local Codex usage…";
     private bool isRefreshing;
@@ -43,19 +43,18 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         ? "CodexMeter — no local usage"
         : $"CodexMeter — {TodayTotal} tokens today";
 
-    public async Task RefreshAsync()
-    {
-        if (!await refreshGate.WaitAsync(0).ConfigureAwait(true))
-        {
-            return;
-        }
+    public Task RefreshAsync() => refreshRunner.RunAsync(RefreshCoreAsync);
 
+    public void InvalidateCachedSources() => scanner.InvalidateCachedSources();
+
+    private async Task RefreshCoreAsync()
+    {
         try
         {
             SetRefreshing(true);
             statusMessage = "Reading local Codex usage…";
             RaiseAll();
-            var result = await scanner.ScanAsync(settingsStore.Current.WeekStart);
+            var result = await scanner.ScanAsync(settingsStore.Current.WeekStart).ConfigureAwait(true);
             snapshot = result.Snapshot;
             statusMessage = result.StatusMessage;
             RaiseAll();
@@ -67,7 +66,8 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                 : "Showing the last good update";
             RaiseAll();
         }
-        catch (Exception)
+#pragma warning disable CA1031 // The tray must retain the last good snapshot for any non-fatal source failure.
+        catch (Exception error) when (error is not OutOfMemoryException)
         {
             snapshot = snapshot with
             {
@@ -78,10 +78,10 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                 : "Showing the last good update";
             RaiseAll();
         }
+#pragma warning restore CA1031
         finally
         {
             SetRefreshing(false);
-            refreshGate.Release();
         }
     }
 

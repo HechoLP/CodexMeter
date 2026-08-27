@@ -39,20 +39,56 @@ public sealed class AppSettingsStore
         Current = Load();
     }
 
-    public event Action? SettingsChanged;
+    public event EventHandler? SettingsChanged;
 
     public AppSettings Current { get; private set; }
 
     public void Save(AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
         settings = Normalize(settings);
         var temporaryPath = settingsPath + ".new";
-        var json = JsonSerializer.Serialize(settings, SerializerOptions);
-        File.WriteAllText(temporaryPath, json);
-        File.Move(temporaryPath, settingsPath, true);
-        Current = settings;
-        StartupService.SetEnabled(settings.LaunchAtLogin);
-        SettingsChanged?.Invoke();
+        var previous = Current;
+        var startupChanged = settings.LaunchAtLogin != previous.LaunchAtLogin;
+        try
+        {
+            if (startupChanged)
+            {
+                StartupService.SetEnabled(settings.LaunchAtLogin);
+            }
+
+            var json = JsonSerializer.Serialize(settings, SerializerOptions);
+            File.WriteAllText(temporaryPath, json);
+            File.Move(temporaryPath, settingsPath, true);
+            Current = settings;
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch
+        {
+            if (startupChanged)
+            {
+                try
+                {
+                    StartupService.SetEnabled(previous.LaunchAtLogin);
+                }
+                catch (Exception error) when (error is not OutOfMemoryException)
+                {
+                    // Preserve the original settings error; the UI will ask the user to retry.
+                }
+            }
+            throw;
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporaryPath);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                // A stale temporary file is harmless and will be replaced on the next save.
+            }
+        }
     }
 
     private AppSettings Load()

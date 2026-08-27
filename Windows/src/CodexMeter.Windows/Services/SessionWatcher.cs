@@ -7,8 +7,9 @@ internal sealed class SessionWatcher : IDisposable
 {
     private readonly Action onChange;
     private readonly List<FileSystemWatcher> watchers = [];
-    private readonly object timerLock = new();
+    private readonly object stateLock = new();
     private System.Threading.Timer? debounceTimer;
+    private bool disposed;
 
     public SessionWatcher(Action onChange)
     {
@@ -18,64 +19,113 @@ internal sealed class SessionWatcher : IDisposable
 
     public void Rebuild()
     {
-        foreach (var watcher in watchers)
+        lock (stateLock)
         {
-            watcher.Dispose();
-        }
-        watchers.Clear();
-
-        foreach (var root in UsageScanner.DefaultRoots().Where(Directory.Exists))
-        {
-            var watcher = new FileSystemWatcher(root, "*.jsonl")
+            if (disposed)
             {
-                IncludeSubdirectories = true,
-                NotifyFilter = NotifyFilters.FileName
-                    | NotifyFilters.LastWrite
-                    | NotifyFilters.Size,
-                InternalBufferSize = 16 * 1024,
-                EnableRaisingEvents = true
-            };
-            watcher.Changed += HandleChange;
-            watcher.Created += HandleChange;
-            watcher.Deleted += HandleChange;
-            watcher.Renamed += HandleChange;
-            watcher.Error += HandleError;
-            watchers.Add(watcher);
+                return;
+            }
+
+            DisposeWatchers();
+
+            var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var codexRoot = Path.Combine(profile, ".codex");
+            if (Directory.Exists(codexRoot))
+            {
+                watchers.Add(CreateWatcher(codexRoot, "*.jsonl", includeSubdirectories: true));
+            }
+            else if (Directory.Exists(profile))
+            {
+                watchers.Add(CreateWatcher(profile, ".codex", includeSubdirectories: false));
+            }
         }
     }
 
     public void Dispose()
     {
-        foreach (var watcher in watchers)
+        lock (stateLock)
         {
-            watcher.Dispose();
-        }
-        watchers.Clear();
-        lock (timerLock)
-        {
+            disposed = true;
+            DisposeWatchers();
             debounceTimer?.Dispose();
             debounceTimer = null;
         }
     }
 
-    private void HandleChange(object sender, FileSystemEventArgs e) => ScheduleRefresh();
+    private FileSystemWatcher CreateWatcher(
+        string root,
+        string filter,
+        bool includeSubdirectories)
+    {
+        var watcher = new FileSystemWatcher(root, filter)
+        {
+            IncludeSubdirectories = includeSubdirectories,
+            NotifyFilter = NotifyFilters.DirectoryName
+                | NotifyFilters.FileName
+                | NotifyFilters.LastWrite
+                | NotifyFilters.Size,
+            InternalBufferSize = 16 * 1024,
+            EnableRaisingEvents = false
+        };
+        watcher.Changed += HandleChange;
+        watcher.Created += HandleChange;
+        watcher.Deleted += HandleChange;
+        watcher.Renamed += HandleChange;
+        watcher.Error += HandleError;
+        watcher.EnableRaisingEvents = true;
+        return watcher;
+    }
+
+    private void DisposeWatchers()
+    {
+        foreach (var watcher in watchers)
+        {
+            watcher.Dispose();
+        }
+        watchers.Clear();
+    }
+
+    private void HandleChange(object sender, FileSystemEventArgs e)
+    {
+        if (string.Equals(Path.GetFileName(e.FullPath), ".codex", StringComparison.OrdinalIgnoreCase)
+            && Directory.Exists(e.FullPath))
+        {
+            Rebuild();
+        }
+        ScheduleRefresh();
+    }
 
     private void HandleError(object sender, ErrorEventArgs e)
     {
-        Rebuild();
+        ThreadPool.QueueUserWorkItem(_ => Rebuild());
         ScheduleRefresh();
     }
 
     private void ScheduleRefresh()
     {
-        lock (timerLock)
+        lock (stateLock)
         {
+            if (disposed)
+            {
+                return;
+            }
             debounceTimer?.Dispose();
             debounceTimer = new System.Threading.Timer(
-                _ => onChange(),
+                _ => NotifyChangeIfActive(),
                 null,
                 TimeSpan.FromSeconds(2),
                 Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void NotifyChangeIfActive()
+    {
+        lock (stateLock)
+        {
+            if (!disposed)
+            {
+                onChange();
+            }
         }
     }
 }
