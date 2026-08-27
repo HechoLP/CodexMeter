@@ -627,6 +627,7 @@ public sealed class UsageScanner
     }
 
 #pragma warning disable SYSLIB1054 // This small blittable Win32 call avoids enabling unsafe source-generated interop.
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetFileInformationByHandle(
