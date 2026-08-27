@@ -30,6 +30,25 @@ The public command fails closed unless all three values are present. It requires
 
 After verification, confirm the version in `Config/Release.env`, the Git tag, artifact names, and release notes match. Create the tag and GitHub Release only after the final independent audit passes. `Scripts/release.sh` remains a local, ad-hoc-signed candidate command and can never satisfy the public gate.
 
+## Homebrew Cask
+
+`Casks/codexmeter.rb` uses the stable release URL and artifact name:
+
+```text
+https://github.com/HechoLP/codex-meter/releases/download/vVERSION/CodexMeter-VERSION.zip
+```
+
+For a public Homebrew release:
+
+1. Run `Scripts/release_public.sh` and confirm the ZIP passes Developer ID, notarization, stapling, Gatekeeper, metadata, architecture, entitlement, and checksum verification.
+2. Publish that exact ZIP at tag `vVERSION`; do not rebuild it after calculating the Cask checksum.
+3. Update the Cask `version` and `sha256` from the published ZIP.
+4. Copy the Cask to `Casks/codexmeter.rb` in the public `HechoLP/homebrew-tap` repository.
+5. Run `brew style`, `brew audit --cask --online HechoLP/tap/codexmeter`, and a clean install/uninstall cycle.
+6. Only then change the README wording from the source-build path to the public `brew install --cask HechoLP/tap/codexmeter` path.
+
+For local pre-release verification, `Scripts/install_homebrew_local.sh` creates a local Tap backed by the already verified ZIP and runs the normal Homebrew Cask installer. This path does not make an ad-hoc-signed build a public release.
+
 ## Rollback
 
 Delete or mark the affected GitHub Release as a pre-release, publish the previous verified artifact again, and document any local-database compatibility implications. Never rewrite a published tag silently.
