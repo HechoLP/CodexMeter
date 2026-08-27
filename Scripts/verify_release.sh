@@ -19,6 +19,7 @@ app_path=${1:-"${CODEXMETER_APP_PATH:-${cache_root}/${PRODUCT_NAME}.app}"}
 artifact_root="${project_root}/Artifacts"
 zip_path="${artifact_root}/${PRODUCT_NAME}-${release_version}.zip"
 dmg_path="${artifact_root}/${PRODUCT_NAME}-${release_version}.dmg"
+checksums_path="${artifact_root}/SHA256SUMS.txt"
 temporary_dir=$(mktemp -d)
 mount_dir="${temporary_dir}/mounted"
 mounted=0
@@ -170,8 +171,10 @@ verify_app() {
 
 verify_app "${app_path}"
 
-if [[ ! -f "${zip_path}" || ! -f "${dmg_path}" ]]; then
-  print -u2 "Packaged ZIP or DMG is missing."
+if [[ ! -f "${zip_path}" || ! -f "${dmg_path}" \
+    || ! -f "${zip_path}.sha256" || ! -f "${dmg_path}.sha256" \
+    || ! -f "${checksums_path}" ]]; then
+  print -u2 "Packaged ZIP, DMG, or checksum manifest is missing."
   exit 1
 fi
 
@@ -179,6 +182,7 @@ fi
   cd "${artifact_root}"
   shasum -a 256 -c "${zip_path:t}.sha256"
   shasum -a 256 -c "${dmg_path:t}.sha256"
+  shasum -a 256 -c "${checksums_path:t}"
 )
 
 ditto -x -k "${zip_path}" "${temporary_dir}/zip"

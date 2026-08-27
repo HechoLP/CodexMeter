@@ -39,7 +39,8 @@ for expected in \
     CodexMeter-1.2.3.zip \
     CodexMeter-1.2.3.zip.sha256 \
     CodexMeter-1.2.3.dmg \
-    CodexMeter-1.2.3.dmg.sha256; do
+    CodexMeter-1.2.3.dmg.sha256 \
+    SHA256SUMS.txt; do
   if [[ ! -f "${fixture_root}/Artifacts/${expected}" ]]; then
     print -u2 "Expected package output is missing: ${expected}"
     exit 1
@@ -50,5 +51,7 @@ done
   cd "${fixture_root}/Artifacts"
   shasum -a 256 -c CodexMeter-1.2.3.zip.sha256
   shasum -a 256 -c CodexMeter-1.2.3.dmg.sha256
+  shasum -a 256 -c SHA256SUMS.txt
+  grep ' CodexMeter-1.2.3.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
 )
 print 'Package-release tests passed.'

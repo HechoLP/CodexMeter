@@ -18,9 +18,9 @@ export CODE_SIGN_TEAM_ID="TEAMID"
 Scripts/release.sh
 ```
 
-This produces an Apple Development-signed Universal 2 app in the per-user build cache plus ZIP, DMG, and SHA-256 files under `Artifacts/`. The host app, Sparkle framework, helper app, and XPC services must all have the same Team ID; the verifier fails if any nested code is ad-hoc or signed by another team. The cache staging location avoids cloud-file-provider metadata that can invalidate macOS code signatures. Gatekeeper distribution trust and notarization remain intentionally incomplete, so this path is only for a clearly labeled preview release.
+This produces an Apple Development-signed Universal 2 app in the per-user build cache plus ZIP, DMG, per-artifact SHA-256 files, and a consolidated `SHA256SUMS.txt` under `Artifacts/`. The host app, Sparkle framework, helper app, and XPC services must all have the same Team ID; the verifier fails if any nested code is ad-hoc or signed by another team. The cache staging location avoids cloud-file-provider metadata that can invalidate macOS code signatures. Gatekeeper distribution trust and notarization remain intentionally incomplete, so this path is only for a clearly labeled preview release.
 
-Preview artifacts are for maintainer testing only. Do not advertise them as a normal first-install download, publish Gatekeeper-bypass instructions, or copy their checksum into a public Cask. Only the signed and notarized public workflow below may produce an end-user installation artifact.
+Preview artifacts are for maintainer testing only. If a preview release includes first-run instructions, require verification against the uploaded `SHA256SUMS.txt`, identify the quarantine-removal effect explicitly, and limit the command to `/Applications/CodexMeter.app`. Do not advertise a preview as a trusted first-install download or copy its checksum into a public Cask. Only the signed and notarized public workflow below may produce a generally trusted end-user installation artifact.
 
 Generate the signed update feed only on a maintainer Mac that has the Sparkle key:
 
@@ -52,7 +52,7 @@ Scripts/release_public.sh
 
 The public command fails closed unless all three values are present. It requires a Developer ID signature, Hardened Runtime, the expected Team ID, an empty host-app entitlement allowlist, notarization, stapling, Gatekeeper acceptance, matching bundle metadata, Universal 2 architectures, embedded Sparkle verification, ZIP/DMG checksums, a signed appcast, and verification of each packaged app.
 
-After verification, confirm the version in `Config/Release.env`, the immutable Git tag, artifact names, appcast enclosure URL, and release notes match. Upload `appcast.xml` alongside the ZIP, DMG, and checksum files, then publish the exact same signed file as `appcast.xml` on the configured dedicated `update-feed` branch. The branch must contain no private key material. Create the GitHub Release from the already verified tag only after the final independent audit passes. `Scripts/release.sh` remains a local candidate command and can never satisfy the public stable-release gate; it may be used only for a clearly labeled maintainer preview.
+After verification, confirm the version in `Config/Release.env`, the immutable Git tag, artifact names, appcast enclosure URL, and release notes match. Upload `appcast.xml`, the ZIP, DMG, per-artifact checksums, and `SHA256SUMS.txt`, then publish the exact same signed file as `appcast.xml` on the configured dedicated `update-feed` branch. The branch must contain no private key material. Create the GitHub Release from the already verified tag only after the final independent audit passes. `Scripts/release.sh` remains a local candidate command and can never satisfy the public stable-release gate; it may be used only for a clearly labeled maintainer preview.
 
 ## Homebrew Cask
 

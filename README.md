@@ -30,9 +30,28 @@ Tiny, native macOS 14+ menu bar app that turns **local Codex session history** i
 
 ### Public binary status
 
-CodexMeter does not yet provide a generally trusted binary download. The v0.1.0 ZIP and DMG are Apple Development-signed maintainer previews, not Developer ID-signed or notarized public releases. Do not bypass Gatekeeper to install those preview artifacts.
+CodexMeter does not yet provide a generally trusted binary download. The v0.1.0 ZIP and DMG are Apple Development-signed maintainer previews, not Developer ID-signed or notarized public releases. Prefer the source build below; if you intentionally test the preview, follow the checksum-gated procedure in the next section.
 
-Until a build passes the repository's Developer ID, notarization, stapling, and Gatekeeper release checks, use the [source build](#build-from-source) below. A direct-download installation will be documented here only after the exact published artifact passes that public release gate.
+Until a build passes the repository's Developer ID, notarization, stapling, and Gatekeeper release checks, prefer the [source build](#build-from-source) below. A generally trusted direct-download installation will be documented only after the exact published artifact passes that public release gate; the workflow below is limited to intentional preview testing.
+
+### macOS에서 미공증 프리뷰를 처음 실행할 때
+
+미공증 프리뷰를 테스트해야 한다면 공식 GitHub 릴리스에서 DMG와 `SHA256SUMS.txt`를 같은 폴더에 받은 뒤, 먼저 체크섬을 확인하세요. 다음 명령이 `OK`를 출력하지 않으면 앱을 실행하지 마세요.
+
+```bash
+cd ~/Downloads
+grep ' CodexMeter-0.1.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-0.1.0.dmg
+```
+
+열린 DMG에서 `CodexMeter.app`을 `Applications` 폴더로 복사합니다. 체크섬이 일치하고 공식 릴리스임을 확인한 경우에만 아래 명령으로 해당 앱의 격리 속성을 제거하고 실행하세요.
+
+```bash
+xattr -dr com.apple.quarantine /Applications/CodexMeter.app
+open /Applications/CodexMeter.app
+```
+
+`xattr` 명령은 이 앱에 대한 macOS의 다운로드 격리 검사를 제거합니다. 출처가 다르거나 체크섬이 일치하지 않는 파일에는 사용하지 마세요. Developer ID 서명과 Apple 공증을 마친 정식 릴리스에서는 이 단계가 필요하지 않습니다.
 
 ## First run
 
