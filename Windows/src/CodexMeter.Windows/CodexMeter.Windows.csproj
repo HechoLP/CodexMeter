@@ -8,6 +8,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- WPF/XAML generated markup and runtime activation require these application types to remain public. -->
+    <NoWarn>$(NoWarn);CA1515</NoWarn>
     <LangVersion>12.0</LangVersion>
     <AssemblyName>CodexMeter</AssemblyName>
     <RootNamespace>CodexMeter.Windows</RootNamespace>
