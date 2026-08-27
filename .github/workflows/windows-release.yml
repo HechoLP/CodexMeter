@@ -45,6 +45,16 @@ jobs:
       - name: Verify Windows package checksums
         shell: pwsh
         run: |
+          $checksumFiles = @(
+            "Artifacts/SHA256SUMS-windows.txt",
+            "Artifacts/CodexMeter-Windows-$env:WINDOWS_VERSION-x64.zip.sha256",
+            "Artifacts/CodexMeter-Windows-$env:WINDOWS_VERSION-arm64.zip.sha256"
+          )
+          foreach ($checksumFile in $checksumFiles) {
+            if ([System.IO.File]::ReadAllBytes($checksumFile) -contains 13) {
+              throw "$checksumFile contains CRLF instead of portable LF line endings"
+            }
+          }
           foreach ($architecture in @("x64", "arm64")) {
             $archive = "Artifacts/CodexMeter-Windows-$env:WINDOWS_VERSION-$architecture.zip"
             $expected = (Get-Content "$archive.sha256").Split()[0]
