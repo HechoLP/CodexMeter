@@ -4,6 +4,23 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Added a native Windows 10/11 tray application with x64 and ARM64 self-contained packages, local Codex accounting, settings, tests, CI, and a certificate-free release workflow.
+
+### Fixed
+
+- Coalesced overlapping Windows refreshes, invalidated changed-file caches on file-system events, and retried unterminated final JSONL records after they become complete.
+- Rebuilt Windows session watchers safely, including when `.codex` is created after launch, and kept the last good snapshot when a non-fatal source read fails.
+- Made Windows settings saves atomic, prevented repeated startup-registry writes, and made the Settings window reopen reliably without duplicate event handlers.
+- Derived Windows package versions from the project metadata so CI and release artifacts cannot silently reuse an older release version.
+
+## [0.1.2] - 2026-08-27
+
+### Fixed
+
+- Moved certificate-free downloads and the signed Sparkle appcast to a dedicated public release repository so installation and automatic update checks work without GitHub authentication while the source repository remains private.
+
 ## [0.1.1] - 2026-08-27
 
 ### Added

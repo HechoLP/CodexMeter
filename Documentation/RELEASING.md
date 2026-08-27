@@ -31,12 +31,14 @@ This path additionally requires a `Developer ID Application` certificate, the as
 
 Public builds are accepted only from a clean worktree whose `vVERSION` tag points exactly to `HEAD`, with matching release notes under `Documentation/ReleaseNotes/`. The configured GitHub release repository must also be public. This prevents a binary built from different source from being published under an existing version.
 
-If releases are hosted separately from the source repository, set both values before building:
+Production previews use the public `HechoLP/CodexMeter-Releases` repository so the source repository can remain private while downloads and the update feed stay anonymously accessible. To override that destination, set both values before building:
 
 ```bash
 export CODEXMETER_RELEASE_REPOSITORY="OWNER/PUBLIC-RELEASE-REPOSITORY"
 export CODEXMETER_UPDATE_FEED_BRANCH="update-feed"
 ```
+
+The source repository's tag workflow may be used as a private build staging job. Upload the exact verified artifacts to the matching immutable tag in the public release repository; do not rebuild or rename them while mirroring. Publish the signed `appcast.xml` on that public repository's `update-feed` branch only after the corresponding ZIP is available anonymously.
 
 The build derives and embeds the appcast URL from those values. Create and review the release commit, update `Config/Release.env` and the release notes, commit everything, then create `vVERSION` at that exact commit before running the public workflow. Never move or replace an existing published tag.
 
