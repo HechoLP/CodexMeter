@@ -27,3 +27,5 @@ If macOS requires approval, use Settings > General > Open Login Items Settings a
 ## Database issue
 
 Use Settings > Data > Open Data Folder to inspect the CodexMeter Application Support directory. Rebuild Statistics is the first recovery step. Before reporting a problem, enable debug logging, reproduce it, then use Settings > Advanced > Open Log Folder. Debug logs contain operational event names and aggregate counts only.
+
+CodexMeter stops adding rows if its local database reaches the 1 GiB safety limit, and it refuses to enumerate more than 50,000 session files in one installation. The app reports either condition instead of deleting data automatically. Clear Local History is the explicit recovery option after you have confirmed you no longer need the locally derived totals.

@@ -18,3 +18,7 @@ xcuserdata/
 *.provisionprofile
 *.cer
 *.key
+*.p8
+*.pem
+*.jks
+*.keystore

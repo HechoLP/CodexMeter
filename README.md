@@ -44,6 +44,8 @@ open "$(getconf DARWIN_USER_CACHE_DIR)/dev.codexmeter.release/CodexMeter.app"
 
 The release script builds and verifies a Universal 2 app, then creates ZIP, DMG, and SHA-256 artifacts under `Artifacts/`. The local candidate is ad-hoc signed; Developer ID signing and Apple notarization are still required for public distribution.
 
+Maintainers use `Scripts/release_public.sh` for the fail-closed Developer ID, notarization, stapling, and Gatekeeper path described in the [release guide](Documentation/RELEASING.md).
+
 ## First run
 
 1. Launch CodexMeter after Codex has created local session history.
@@ -89,7 +91,7 @@ CodexMeter performs no network requests. It discovers JSONL files only inside:
 - `~/.codex/sessions`
 - `~/.codex/archived_sessions`
 
-It stores normalized token counts, timestamps, SHA-256-derived identifiers, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, model names, project working directories, authentication tokens, or `~/.codex/auth.json`.
+It stores normalized token counts, timestamps, SHA-256-derived session/source/event identifiers, and parser checkpoints. It does **not** store or log raw session paths, prompts, responses, reasoning text, source code, tool input or output, terminal output, model names, project working directories, authentication tokens, or `~/.codex/auth.json`.
 
 The Application Support directory is restricted to the current user (`0700`), and SQLite files are restricted to the current user (`0600`). See the full [privacy design](Documentation/PRIVACY.md).
 
