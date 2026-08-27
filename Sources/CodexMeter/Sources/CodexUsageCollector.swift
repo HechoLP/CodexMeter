@@ -1,10 +1,20 @@
 import CryptoKit
+import Darwin
 import Foundation
 
 struct CollectorRefreshResult: Sendable {
     let snapshot: UsageSnapshot
     let sourceCount: Int
     let processedBytes: Int64
+    let statistics: DataStatistics
+}
+
+struct DataStatistics: Equatable, Sendable {
+    let databaseBytes: Int64
+    let oldestRecord: Date?
+    let newestRecord: Date?
+
+    static let empty = DataStatistics(databaseBytes: 0, oldestRecord: nil, newestRecord: nil)
 }
 
 actor CodexUsageCollector {
@@ -19,23 +29,49 @@ actor CodexUsageCollector {
         self.roots = roots
     }
 
+    func cachedSnapshot(now: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> UsageSnapshot {
+        try await database.usageSnapshot(now: now, calendar: calendar, weekStart: weekStart)
+    }
+
     func refresh(now: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
         let sources = try discovery.discover(in: roots)
+        let importCutoff = try await database.importCutoff()
+        let dataEpoch = try await database.dataEpoch()
         var processedBytes: Int64 = 0
         for source in sources {
             try Task.checkCancellation()
-            processedBytes += try await process(source)
+            processedBytes += try await process(
+                source,
+                importCutoff: importCutoff,
+                expectedEpoch: dataEpoch
+            )
         }
 
         let snapshot = try await database.usageSnapshot(now: now, calendar: calendar, weekStart: weekStart)
+        let statistics = try await database.dataStatistics()
         return CollectorRefreshResult(
             snapshot: snapshot,
             sourceCount: sources.count,
-            processedBytes: processedBytes
+            processedBytes: processedBytes,
+            statistics: statistics
         )
     }
 
-    private func process(_ source: CodexSessionSource) async throws -> Int64 {
+    func rebuild(now: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
+        try await database.rebuildStatistics()
+        return try await refresh(now: now, calendar: calendar, weekStart: weekStart)
+    }
+
+    func clearLocalHistory(at cutoff: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
+        try await database.clearLocalHistory(at: cutoff)
+        return try await refresh(now: cutoff, calendar: calendar, weekStart: weekStart)
+    }
+
+    private func process(
+        _ source: CodexSessionSource,
+        importCutoff: Date?,
+        expectedEpoch: Int64
+    ) async throws -> Int64 {
         var checkpoint = try await database.checkpoint(for: source.url.path)
             ?? SourceCheckpoint.fresh(sourcePath: source.url.path, fileIdentity: source.identity)
 
@@ -54,8 +90,8 @@ actor CodexUsageCollector {
 
         var metadata = SessionMetadata(
             id: checkpoint.sessionID,
-            model: checkpoint.model,
-            workingDirectory: checkpoint.projectPath,
+            model: nil,
+            workingDirectory: nil,
             forkedFromID: checkpoint.inheritsHistory ? "inherited" : nil
         )
         var normalizationState = if let sessionID = checkpoint.sessionID {
@@ -71,6 +107,11 @@ actor CodexUsageCollector {
 
         let handle = try FileHandle(forReadingFrom: source.url)
         defer { try? handle.close() }
+        var openedStat = stat()
+        guard fstat(handle.fileDescriptor, &openedStat) == 0,
+              (openedStat.st_mode & S_IFMT) == S_IFREG,
+              "\(UInt64(openedStat.st_dev)):\(UInt64(openedStat.st_ino))" == source.identity
+        else { return 0 }
         try handle.seek(toOffset: UInt64(checkpoint.committedOffset))
 
         var lineBuffer = Data()
@@ -111,7 +152,8 @@ actor CodexUsageCollector {
                     metadata: &metadata,
                     normalizationState: &normalizationState,
                     loadedStateSessionID: &loadedStateSessionID,
-                    pendingEvents: &pendingEvents
+                    pendingEvents: &pendingEvents,
+                    importCutoff: importCutoff
                 )
                 completedLineCount += 1
                 consumedThrough = lineBuffer.index(after: newline)
@@ -122,7 +164,8 @@ actor CodexUsageCollector {
                     try await database.commit(
                         events: pendingEvents,
                         checkpoint: checkpoint,
-                        normalizationState: checkpoint.sessionID == nil ? nil : normalizationState
+                        normalizationState: checkpoint.sessionID == nil ? nil : normalizationState,
+                        expectedEpoch: expectedEpoch
                     )
                     pendingEvents.removeAll(keepingCapacity: true)
                     completedLineCount = 0
@@ -141,11 +184,16 @@ actor CodexUsageCollector {
             }
         }
 
+        if skippingOversizedLine {
+            checkpoint.committedOffset = readOffset
+        }
+
         if checkpoint.committedOffset > startingOffset {
             try await database.commit(
                 events: pendingEvents,
                 checkpoint: checkpoint,
-                normalizationState: checkpoint.sessionID == nil ? nil : normalizationState
+                normalizationState: checkpoint.sessionID == nil ? nil : normalizationState,
+                expectedEpoch: expectedEpoch
             )
         }
         return checkpoint.committedOffset - startingOffset
@@ -159,7 +207,8 @@ actor CodexUsageCollector {
         metadata: inout SessionMetadata,
         normalizationState: inout UsageNormalizationState,
         loadedStateSessionID: inout String?,
-        pendingEvents: inout [UsageEvent]
+        pendingEvents: inout [UsageEvent],
+        importCutoff: Date?
     ) async throws {
         guard line.containsASCII("\"token_count\"")
                 || line.containsASCII("\"session_meta\"")
@@ -169,84 +218,79 @@ actor CodexUsageCollector {
         switch parser.parse(line) {
         case let .sessionMetadata(parsed):
             guard checkpoint.committedOffset == 0 else { return }
-            let resolvedID = parsed.id ?? checkpoint.sessionID
+            let resolvedID = parsed.id.map(storageIdentifier) ?? checkpoint.sessionID
             metadata = SessionMetadata(
                 id: resolvedID,
-                model: parsed.model,
-                workingDirectory: parsed.workingDirectory,
+                model: nil,
+                workingDirectory: nil,
                 forkedFromID: parsed.forkedFromID,
                 parentThreadID: parsed.parentThreadID,
                 subagentHistoryStartOrdinal: parsed.subagentHistoryStartOrdinal
             )
             checkpoint.sessionID = resolvedID
             checkpoint.inheritsHistory = parsed.inheritsHistory
-            checkpoint.model = parsed.model
-            checkpoint.projectPath = parsed.workingDirectory
+            checkpoint.model = nil
+            checkpoint.projectPath = nil
             if resolvedID != loadedStateSessionID, let resolvedID {
                 normalizationState = try await database.normalizationState(for: resolvedID)
                 loadedStateSessionID = resolvedID
             }
 
-        case let .turnContext(context):
-            checkpoint.model = context.model ?? checkpoint.model
-            checkpoint.projectPath = context.workingDirectory ?? checkpoint.projectPath
-            metadata = SessionMetadata(
-                id: checkpoint.sessionID,
-                model: checkpoint.model,
-                workingDirectory: checkpoint.projectPath,
-                forkedFromID: checkpoint.inheritsHistory ? "inherited" : nil
-            )
+        case .turnContext:
+            break
 
         case let .token(observation):
             let result = normalizer.normalize(observation, metadata: metadata, state: normalizationState)
             normalizationState = result.state
             guard let delta = result.delta, delta != .zero else { return }
+            if let importCutoff, observation.occurredAt <= importCutoff { return }
             let sessionID = checkpoint.sessionID
             pendingEvents.append(
                 UsageEvent(
                     eventKey: eventKey(
                         sessionID: sessionID,
-                        ordinal: observation.ordinal,
-                        sourceIdentity: source.identity,
-                        generation: checkpoint.generation,
-                        position: position
+                        line: line
                     ),
                     occurredAt: observation.occurredAt,
                     sessionID: sessionID,
-                    model: checkpoint.model,
-                    projectPath: checkpoint.projectPath,
+                    model: nil,
+                    projectPath: nil,
                     usage: delta,
-                    sourcePath: source.url.path,
+                    sourcePath: storageIdentifier(source.url.standardizedFileURL.path),
                     sourcePosition: position
                 )
             )
 
-        case .ignored, .malformed:
+        case .malformed:
+            normalizationState.quality = .partial
+
+        case .ignored:
             break
         }
     }
 
     private func eventKey(
         sessionID: String?,
-        ordinal: Int64?,
-        sourceIdentity: String,
-        generation: Int64,
-        position: Int64
+        line: Data
     ) -> String {
-        let material: String
-        if let sessionID, let ordinal {
-            material = "session:\(sessionID)|ordinal:\(ordinal)"
-        } else {
-            material = "file:\(sourceIdentity)|generation:\(generation)|offset:\(position)"
-        }
-        return SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
+        let material = "session:\(sessionID ?? "unknown")|line:\(storageIdentifier(line))"
+        return storageIdentifier(Data(material.utf8))
     }
 
     private func sessionIdentifierFromFilename(_ url: URL) -> String? {
         let stem = url.deletingPathExtension().lastPathComponent
         guard stem.count >= 36 else { return nil }
         let suffix = String(stem.suffix(36))
-        return UUID(uuidString: suffix)?.uuidString.lowercased()
+        guard let identifier = UUID(uuidString: suffix)?.uuidString.lowercased() else { return nil }
+        return storageIdentifier(identifier)
+    }
+
+    private func storageIdentifier(_ value: String) -> String {
+        storageIdentifier(Data(value.utf8))
+    }
+
+    private func storageIdentifier(_ value: Data) -> String {
+        SHA256.hash(data: value).map { String(format: "%02x", $0) }.joined()
     }
 }
 

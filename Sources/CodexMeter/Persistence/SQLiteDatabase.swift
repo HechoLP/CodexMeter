@@ -1,4 +1,5 @@
 import CSQLite
+import CryptoKit
 import Foundation
 
 struct SourceCheckpoint: Equatable, Sendable {
@@ -30,6 +31,7 @@ enum SQLiteDatabaseError: Error, LocalizedError {
     case statement(String)
     case step(String)
     case migration(String)
+    case staleScan
 
     var errorDescription: String? {
         switch self {
@@ -37,17 +39,25 @@ enum SQLiteDatabaseError: Error, LocalizedError {
         case let .statement(message): "Database statement failed: \(message)"
         case let .step(message): "Database operation failed: \(message)"
         case let .migration(message): "Database migration failed: \(message)"
+        case .staleScan: "The source scan was superseded by a data maintenance operation"
         }
     }
 }
 
 actor SQLiteDatabase {
+    private let databaseURL: URL
     private var connection: SQLiteConnection?
 
     init(url: URL) throws {
+        databaseURL = url
+        let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
+            at: directory,
             withIntermediateDirectories: true
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: directory.path
         )
 
         var database: OpaquePointer?
@@ -62,6 +72,7 @@ actor SQLiteDatabase {
         do {
             try Self.configure(database)
             try Self.migrate(database)
+            try Self.protectDatabaseFiles(at: url)
         } catch {
             sqlite3_close(database)
             connection = nil
@@ -109,7 +120,7 @@ actor SQLiteDatabase {
     func normalizationState(for sessionID: String) throws -> UsageNormalizationState {
         let statement = try prepare(
             """
-            SELECT input_tokens, cached_input_tokens, output_tokens, quality
+            SELECT input_tokens, cached_input_tokens, output_tokens, last_observed_at, quality
             FROM session_counters
             WHERE session_id = ?1
             """
@@ -125,7 +136,10 @@ actor SQLiteDatabase {
                     cachedInputTokens: sqlite3_column_int64(statement, 1),
                     outputTokens: sqlite3_column_int64(statement, 2)
                 ),
-                quality: DataQuality(rawValue: text(statement, column: 3) ?? "") ?? .partial
+                lastObservedAt: sqlite3_column_type(statement, 3) == SQLITE_NULL
+                    ? nil
+                    : Date(timeIntervalSince1970: sqlite3_column_double(statement, 3)),
+                quality: DataQuality(rawValue: text(statement, column: 4) ?? "") ?? .partial
             )
         case SQLITE_DONE:
             return .empty
@@ -137,10 +151,15 @@ actor SQLiteDatabase {
     func commit(
         events: [UsageEvent],
         checkpoint: SourceCheckpoint,
-        normalizationState: UsageNormalizationState?
+        normalizationState: UsageNormalizationState?,
+        expectedEpoch: Int64? = nil
     ) throws {
         try execute("BEGIN IMMEDIATE")
         do {
+            if let expectedEpoch, try dataEpochWithinTransaction() != expectedEpoch {
+                throw SQLiteDatabaseError.staleScan
+            }
+            var insertedEventCount = 0
             let insert = try prepare(
                 """
                 INSERT INTO usage_events (
@@ -170,19 +189,25 @@ actor SQLiteDatabase {
                 guard sqlite3_step(insert) == SQLITE_DONE else {
                     throw SQLiteDatabaseError.step(errorMessage)
                 }
+                if let connection {
+                    insertedEventCount += Int(sqlite3_changes(connection.rawValue))
+                }
             }
 
-            if let sessionID = checkpoint.sessionID, let normalizationState,
+            if (events.isEmpty || insertedEventCount > 0),
+               let sessionID = checkpoint.sessionID, let normalizationState,
                let highWaterMark = normalizationState.cumulativeHighWaterMark {
                 let counter = try prepare(
                     """
                     INSERT INTO session_counters (
-                        session_id, input_tokens, cached_input_tokens, output_tokens, quality
-                    ) VALUES (?1, ?2, ?3, ?4, ?5)
+                        session_id, input_tokens, cached_input_tokens, output_tokens,
+                        last_observed_at, quality
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                     ON CONFLICT(session_id) DO UPDATE SET
                         input_tokens = excluded.input_tokens,
                         cached_input_tokens = excluded.cached_input_tokens,
                         output_tokens = excluded.output_tokens,
+                        last_observed_at = excluded.last_observed_at,
                         quality = excluded.quality
                     """
                 )
@@ -191,7 +216,12 @@ actor SQLiteDatabase {
                 sqlite3_bind_int64(counter, 2, highWaterMark.inputTokens)
                 sqlite3_bind_int64(counter, 3, highWaterMark.cachedInputTokens)
                 sqlite3_bind_int64(counter, 4, highWaterMark.outputTokens)
-                try bind(normalizationState.quality.rawValue, at: 5, to: counter)
+                if let lastObservedAt = normalizationState.lastObservedAt {
+                    sqlite3_bind_double(counter, 5, lastObservedAt.timeIntervalSince1970)
+                } else {
+                    sqlite3_bind_null(counter, 5)
+                }
+                try bind(normalizationState.quality.rawValue, at: 6, to: counter)
                 guard sqlite3_step(counter) == SQLITE_DONE else {
                     throw SQLiteDatabaseError.step(errorMessage)
                 }
@@ -259,6 +289,24 @@ actor SQLiteDatabase {
         )
     }
 
+    func dataStatistics() throws -> DataStatistics {
+        let statement = try prepare("SELECT MIN(occurred_at), MAX(occurred_at) FROM usage_events")
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            throw SQLiteDatabaseError.step(errorMessage)
+        }
+        let oldest = sqlite3_column_type(statement, 0) == SQLITE_NULL
+            ? nil
+            : Date(timeIntervalSince1970: sqlite3_column_double(statement, 0))
+        let newest = sqlite3_column_type(statement, 1) == SQLITE_NULL
+            ? nil
+            : Date(timeIntervalSince1970: sqlite3_column_double(statement, 1))
+        let size = [databaseURL.path, databaseURL.path + "-wal", databaseURL.path + "-shm"]
+            .compactMap { try? FileManager.default.attributesOfItem(atPath: $0)[.size] as? NSNumber }
+            .reduce(Int64(0)) { $0 + $1.int64Value }
+        return DataStatistics(databaseBytes: size, oldestRecord: oldest, newestRecord: newest)
+    }
+
     func eventCount() throws -> Int64 {
         let statement = try prepare("SELECT COUNT(*) FROM usage_events")
         defer { sqlite3_finalize(statement) }
@@ -268,14 +316,104 @@ actor SQLiteDatabase {
         return sqlite3_column_int64(statement, 0)
     }
 
+#if DEBUG
+    func prepareVersion2FixtureForTesting() throws {
+        try execute("ALTER TABLE session_counters DROP COLUMN last_observed_at")
+        try execute("PRAGMA user_version = 2")
+    }
+#endif
+
+    func importCutoff() throws -> Date? {
+        let statement = try prepare("SELECT value FROM app_metadata WHERE key = 'import_cutoff'")
+        defer { sqlite3_finalize(statement) }
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW:
+            guard let value = text(statement, column: 0), let seconds = TimeInterval(value) else {
+                return nil
+            }
+            return Date(timeIntervalSince1970: seconds)
+        case SQLITE_DONE:
+            return nil
+        default:
+            throw SQLiteDatabaseError.step(errorMessage)
+        }
+    }
+
+    func dataEpoch() throws -> Int64 {
+        try dataEpochWithinTransaction()
+    }
+
+    func rebuildStatistics() throws {
+        try execute("BEGIN IMMEDIATE")
+        do {
+            try incrementDataEpoch()
+            try execute("DELETE FROM usage_events")
+            try execute("DELETE FROM parsing_state")
+            try execute("DELETE FROM session_counters")
+            try execute("COMMIT")
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
+    func clearLocalHistory(at cutoff: Date) throws {
+        try execute("BEGIN IMMEDIATE")
+        do {
+            try incrementDataEpoch()
+            try execute("DELETE FROM usage_events")
+            try execute("DELETE FROM parsing_state")
+            try execute("DELETE FROM session_counters")
+            do {
+                let statement = try prepare(
+                    """
+                    INSERT INTO app_metadata(key, value) VALUES('import_cutoff', ?1)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                    """
+                )
+                defer { sqlite3_finalize(statement) }
+                try bind(String(cutoff.timeIntervalSince1970), at: 1, to: statement)
+                guard sqlite3_step(statement) == SQLITE_DONE else {
+                    throw SQLiteDatabaseError.step(errorMessage)
+                }
+            }
+            try execute("COMMIT")
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+        try execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        try execute("VACUUM")
+    }
+
+    private func dataEpochWithinTransaction() throws -> Int64 {
+        let statement = try prepare("SELECT value FROM app_metadata WHERE key = 'data_epoch'")
+        defer { sqlite3_finalize(statement) }
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW:
+            return text(statement, column: 0).flatMap(Int64.init) ?? 0
+        case SQLITE_DONE:
+            return 0
+        default:
+            throw SQLiteDatabaseError.step(errorMessage)
+        }
+    }
+
+    private func incrementDataEpoch() throws {
+        try execute(
+            """
+            INSERT INTO app_metadata(key, value) VALUES('data_epoch', '1')
+            ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+            """
+        )
+    }
+
     private func sum(from start: Date?, through end: Date) throws -> TokenUsage {
         let statement: OpaquePointer
         if start != nil {
             statement = try prepare(
                 """
-                SELECT COALESCE(SUM(input_tokens), 0),
-                       COALESCE(SUM(cached_input_tokens), 0),
-                       COALESCE(SUM(output_tokens), 0)
+                SELECT input_tokens, cached_input_tokens, output_tokens
                 FROM usage_events
                 WHERE occurred_at >= ?1 AND occurred_at <= ?2
                 """
@@ -283,9 +421,7 @@ actor SQLiteDatabase {
         } else {
             statement = try prepare(
                 """
-                SELECT COALESCE(SUM(input_tokens), 0),
-                       COALESCE(SUM(cached_input_tokens), 0),
-                       COALESCE(SUM(output_tokens), 0)
+                SELECT input_tokens, cached_input_tokens, output_tokens
                 FROM usage_events
                 WHERE occurred_at <= ?1
                 """
@@ -299,14 +435,30 @@ actor SQLiteDatabase {
         } else {
             sqlite3_bind_double(statement, 1, end.timeIntervalSince1970)
         }
-        guard sqlite3_step(statement) == SQLITE_ROW else {
-            throw SQLiteDatabaseError.step(errorMessage)
+        var total = TokenUsage.zero
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                let input = sqlite3_column_int64(statement, 0)
+                let cached = sqlite3_column_int64(statement, 1)
+                let output = sqlite3_column_int64(statement, 2)
+                let (newInput, inputOverflow) = total.inputTokens.addingReportingOverflow(input)
+                let (newCached, cachedOverflow) = total.cachedInputTokens.addingReportingOverflow(cached)
+                let (newOutput, outputOverflow) = total.outputTokens.addingReportingOverflow(output)
+                guard !inputOverflow, !cachedOverflow, !outputOverflow else {
+                    throw SQLiteDatabaseError.step("token aggregate exceeds the supported range")
+                }
+                total = TokenUsage(
+                    inputTokens: newInput,
+                    cachedInputTokens: newCached,
+                    outputTokens: newOutput
+                )
+            case SQLITE_DONE:
+                return total
+            default:
+                throw SQLiteDatabaseError.step(errorMessage)
+            }
         }
-        return TokenUsage(
-            inputTokens: sqlite3_column_int64(statement, 0),
-            cachedInputTokens: sqlite3_column_int64(statement, 1),
-            outputTokens: sqlite3_column_int64(statement, 2)
-        )
     }
 
     private func maximumEventDate() throws -> Date? {
@@ -331,15 +483,39 @@ actor SQLiteDatabase {
     }
 
     private static func configure(_ database: OpaquePointer) throws {
-        try execute("PRAGMA foreign_keys = ON", on: database)
-        try execute("PRAGMA journal_mode = WAL", on: database)
-        try execute("PRAGMA synchronous = NORMAL", on: database)
         guard sqlite3_busy_timeout(database, 2_000) == SQLITE_OK else {
             throw SQLiteDatabaseError.statement(String(cString: sqlite3_errmsg(database)))
         }
+        try execute("PRAGMA foreign_keys = ON", on: database)
+        try execute("PRAGMA journal_mode = WAL", on: database)
+        try execute("PRAGMA synchronous = NORMAL", on: database)
+        try execute("PRAGMA secure_delete = ON", on: database)
     }
 
     private static func migrate(_ database: OpaquePointer) throws {
+        var version = try userVersion(database)
+        guard version <= 4 else {
+            throw SQLiteDatabaseError.migration("database schema is newer than this app supports")
+        }
+
+        if version == 0 {
+            try migrateToVersion1(database)
+            version = 1
+        }
+        if version == 1 {
+            try migrateToVersion2(database)
+            version = 2
+        }
+        if version == 2 {
+            try migrateToVersion3(database)
+            version = 3
+        }
+        if version == 3 {
+            try migrateToVersion4(database)
+        }
+    }
+
+    private static func userVersion(_ database: OpaquePointer) throws -> Int32 {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(database, "PRAGMA user_version", -1, &statement, nil) == SQLITE_OK,
               let statement else {
@@ -349,14 +525,16 @@ actor SQLiteDatabase {
         guard sqlite3_step(statement) == SQLITE_ROW else {
             throw SQLiteDatabaseError.migration(String(cString: sqlite3_errmsg(database)))
         }
-        let version = sqlite3_column_int(statement, 0)
-        guard version <= 1 else {
-            throw SQLiteDatabaseError.migration("database schema is newer than this app supports")
-        }
-        guard version == 0 else { return }
+        return sqlite3_column_int(statement, 0)
+    }
 
+    private static func migrateToVersion1(_ database: OpaquePointer) throws {
         try execute("BEGIN IMMEDIATE", on: database)
         do {
+            if try userVersion(database) >= 1 {
+                try execute("COMMIT", on: database)
+                return
+            }
             try execute(
                 """
                 CREATE TABLE usage_events (
@@ -416,6 +594,157 @@ actor SQLiteDatabase {
         }
     }
 
+    private static func migrateToVersion2(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 2 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute(
+                """
+                CREATE TABLE app_metadata (
+                    key TEXT PRIMARY KEY NOT NULL,
+                    value TEXT NOT NULL
+                )
+                """,
+                on: database
+            )
+            try execute("PRAGMA user_version = 2", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion3(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 3 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            let sessionIDs = try distinctTextValues(
+                """
+                SELECT session_id FROM usage_events WHERE session_id IS NOT NULL
+                UNION SELECT session_id FROM parsing_state WHERE session_id IS NOT NULL
+                UNION SELECT session_id FROM session_counters
+                """,
+                on: database
+            )
+            for sessionID in sessionIDs {
+                let digest = stableDigest(sessionID)
+                try updateText(
+                    "UPDATE usage_events SET session_id = ?1 WHERE session_id = ?2",
+                    newValue: digest,
+                    oldValue: sessionID,
+                    on: database
+                )
+                try updateText(
+                    "UPDATE parsing_state SET session_id = ?1 WHERE session_id = ?2",
+                    newValue: digest,
+                    oldValue: sessionID,
+                    on: database
+                )
+                try updateText(
+                    "UPDATE session_counters SET session_id = ?1 WHERE session_id = ?2",
+                    newValue: digest,
+                    oldValue: sessionID,
+                    on: database
+                )
+            }
+
+            let eventSourcePaths = try distinctTextValues(
+                "SELECT DISTINCT source_path FROM usage_events",
+                on: database
+            )
+            for sourcePath in eventSourcePaths {
+                try updateText(
+                    "UPDATE usage_events SET source_path = ?1 WHERE source_path = ?2",
+                    newValue: stableDigest(sourcePath),
+                    oldValue: sourcePath,
+                    on: database
+                )
+            }
+
+            try execute("UPDATE usage_events SET model = NULL, project_path = NULL", on: database)
+            try execute("UPDATE parsing_state SET model = NULL, project_path = NULL", on: database)
+            try execute("PRAGMA user_version = 3", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion4(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 4 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute("ALTER TABLE session_counters ADD COLUMN last_observed_at REAL", on: database)
+            try execute("PRAGMA user_version = 4", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func distinctTextValues(_ sql: String, on database: OpaquePointer) throws -> [String] {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            throw SQLiteDatabaseError.migration(String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        var values: [String] = []
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                guard let pointer = sqlite3_column_text(statement, 0) else { continue }
+                let count = Int(sqlite3_column_bytes(statement, 0))
+                values.append(String(decoding: UnsafeBufferPointer(start: pointer, count: count), as: UTF8.self))
+            case SQLITE_DONE:
+                return values
+            default:
+                throw SQLiteDatabaseError.migration(String(cString: sqlite3_errmsg(database)))
+            }
+        }
+    }
+
+    private static func updateText(
+        _ sql: String,
+        newValue: String,
+        oldValue: String,
+        on database: OpaquePointer
+    ) throws {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            throw SQLiteDatabaseError.migration(String(cString: sqlite3_errmsg(database)))
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let newResult = newValue.withCString {
+            sqlite3_bind_text(statement, 1, $0, Int32(newValue.utf8.count), sqliteTransient)
+        }
+        let oldResult = oldValue.withCString {
+            sqlite3_bind_text(statement, 2, $0, Int32(oldValue.utf8.count), sqliteTransient)
+        }
+        guard newResult == SQLITE_OK, oldResult == SQLITE_OK, sqlite3_step(statement) == SQLITE_DONE else {
+            throw SQLiteDatabaseError.migration(String(cString: sqlite3_errmsg(database)))
+        }
+    }
+
+    private static func stableDigest(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
     private func prepare(_ sql: String) throws -> OpaquePointer {
         guard let connection else { throw SQLiteDatabaseError.statement("database is closed") }
         var statement: OpaquePointer?
@@ -443,7 +772,12 @@ actor SQLiteDatabase {
     private func bind(_ value: String?, at index: Int32, to statement: OpaquePointer) throws {
         let result: Int32
         if let value {
-            result = sqlite3_bind_text(statement, index, value, -1, sqliteTransient)
+            guard !value.contains("\0"), value.utf8.count <= Int(Int32.max) else {
+                throw SQLiteDatabaseError.statement("text value is not safe to store")
+            }
+            result = value.withCString {
+                sqlite3_bind_text(statement, index, $0, Int32(value.utf8.count), sqliteTransient)
+            }
         } else {
             result = sqlite3_bind_null(statement, index)
         }
@@ -452,7 +786,15 @@ actor SQLiteDatabase {
 
     private func text(_ statement: OpaquePointer, column: Int32) -> String? {
         guard let pointer = sqlite3_column_text(statement, column) else { return nil }
-        return String(cString: pointer)
+        let count = Int(sqlite3_column_bytes(statement, column))
+        return String(decoding: UnsafeBufferPointer(start: pointer, count: count), as: UTF8.self)
+    }
+
+    private static func protectDatabaseFiles(at url: URL) throws {
+        let paths = [url.path, url.path + "-wal", url.path + "-shm"]
+        for path in paths where FileManager.default.fileExists(atPath: path) {
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+        }
     }
 
     private var errorMessage: String {

@@ -24,8 +24,15 @@ final class CodexSessionWatcher: @unchecked Sendable {
         var context = FSEventStreamContext(
             version: 0,
             info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: nil,
-            release: nil,
+            retain: { pointer in
+                guard let pointer else { return nil }
+                _ = Unmanaged<CodexSessionWatcher>.fromOpaque(pointer).retain()
+                return UnsafeRawPointer(pointer)
+            },
+            release: { pointer in
+                guard let pointer else { return }
+                Unmanaged<CodexSessionWatcher>.fromOpaque(pointer).release()
+            },
             copyDescription: nil
         )
         let paths = roots.map(\.path) as CFArray

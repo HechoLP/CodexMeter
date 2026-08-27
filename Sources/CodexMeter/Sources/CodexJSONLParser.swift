@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 enum CodexParsedLine: Equatable, Sendable {
@@ -22,6 +23,10 @@ struct TurnContextMetadata: Equatable, Sendable {
 
 struct CodexJSONLParser: Sendable {
     static let maximumLineBytes = 1_048_576
+    static let maximumTokenComponent: Int64 = 1_000_000_000_000
+    private static let maximumIdentifierLength = 256
+    private static let maximumModelLength = 256
+    private static let maximumPathLength = 4_096
 
     func parse(_ line: Data) -> CodexParsedLine {
         guard !line.isEmpty else { return .ignored }
@@ -58,8 +63,8 @@ struct CodexJSONLParser: Sendable {
         }
         return .turnContext(
             TurnContextMetadata(
-                model: payload["model"] as? String,
-                workingDirectory: payload["cwd"] as? String
+                model: sanitized(payload["model"], maximumLength: Self.maximumModelLength),
+                workingDirectory: sanitized(payload["cwd"], maximumLength: Self.maximumPathLength)
             )
         )
     }
@@ -71,11 +76,11 @@ struct CodexJSONLParser: Sendable {
 
         return .sessionMetadata(
             SessionMetadata(
-                id: payload["id"] as? String,
-                model: payload["model"] as? String,
-                workingDirectory: payload["cwd"] as? String,
-                forkedFromID: payload["forked_from_id"] as? String,
-                parentThreadID: payload["parent_thread_id"] as? String,
+                id: sanitized(payload["id"], maximumLength: Self.maximumIdentifierLength),
+                model: sanitized(payload["model"], maximumLength: Self.maximumModelLength),
+                workingDirectory: sanitized(payload["cwd"], maximumLength: Self.maximumPathLength),
+                forkedFromID: sanitized(payload["forked_from_id"], maximumLength: Self.maximumIdentifierLength),
+                parentThreadID: sanitized(payload["parent_thread_id"], maximumLength: Self.maximumIdentifierLength),
                 subagentHistoryStartOrdinal: integer(payload["subagent_history_start_ordinal"])
             )
         )
@@ -97,7 +102,7 @@ struct CodexJSONLParser: Sendable {
         }
 
         guard let info = payload["info"] as? [String: Any] else {
-            return .ignored
+            return .malformed("token event is missing usage info")
         }
 
         let lastUsage = parseUsage(info["last_token_usage"])
@@ -133,13 +138,28 @@ struct CodexJSONLParser: Sendable {
     private func integer(_ value: Any?) -> Int64? {
         switch value {
         case let number as NSNumber:
+            guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+            let floating = number.doubleValue
+            guard floating.isFinite, floating.rounded() == floating else { return nil }
             let result = number.int64Value
-            return result >= 0 ? result : nil
+            return (0...Self.maximumTokenComponent).contains(result) ? result : nil
         case let string as String:
-            return Int64(string).flatMap { $0 >= 0 ? $0 : nil }
+            guard string.count <= 16 else { return nil }
+            return Int64(string).flatMap {
+                (0...Self.maximumTokenComponent).contains($0) ? $0 : nil
+            }
         default:
             return nil
         }
+    }
+
+    private func sanitized(_ value: Any?, maximumLength: Int) -> String? {
+        guard let value = value as? String,
+              !value.isEmpty,
+              value.count <= maximumLength,
+              !value.contains("\0")
+        else { return nil }
+        return value
     }
 
     private func parseTimestamp(_ value: String) -> Date? {

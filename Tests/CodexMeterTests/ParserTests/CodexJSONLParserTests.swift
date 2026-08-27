@@ -36,6 +36,21 @@ final class CodexJSONLParserTests: XCTestCase {
         XCTAssertEqual(parser.parse(Data(line.utf8)), .malformed("token event has no supported usage object"))
     }
 
+    func testRejectsBooleanFractionalAndUnboundedTokenComponents() {
+        for input in ["true", "1.5", "1000000000001"] {
+            let line = "{\"timestamp\":\"2026-08-27T01:02:03Z\",\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{\"input_tokens\":\(input),\"cached_input_tokens\":0,\"output_tokens\":2}}}}"
+            XCTAssertEqual(
+                parser.parse(Data(line.utf8)),
+                .malformed("token event has no supported usage object")
+            )
+        }
+    }
+
+    func testTokenEventWithoutInfoIsMalformed() {
+        let line = #"{"timestamp":"2026-08-27T01:02:03Z","type":"event_msg","payload":{"type":"token_count"}}"#
+        XCTAssertEqual(parser.parse(Data(line.utf8)), .malformed("token event is missing usage info"))
+    }
+
     func testParsesSessionMetadataWithoutConversationContent() {
         let line = #"{"timestamp":"2026-08-27T01:02:03Z","type":"session_meta","payload":{"id":"session-1","cwd":"/tmp/project","model":"gpt-example","unrelated":"ignored"}}"#
         XCTAssertEqual(

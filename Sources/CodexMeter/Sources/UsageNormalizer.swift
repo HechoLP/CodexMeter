@@ -2,9 +2,24 @@ import Foundation
 
 struct UsageNormalizationState: Equatable, Sendable {
     var cumulativeHighWaterMark: TokenUsage?
+    var lastObservedAt: Date?
     var quality: DataQuality
 
-    static let empty = UsageNormalizationState(cumulativeHighWaterMark: nil, quality: .exact)
+    init(
+        cumulativeHighWaterMark: TokenUsage?,
+        lastObservedAt: Date? = nil,
+        quality: DataQuality
+    ) {
+        self.cumulativeHighWaterMark = cumulativeHighWaterMark
+        self.lastObservedAt = lastObservedAt
+        self.quality = quality
+    }
+
+    static let empty = UsageNormalizationState(
+        cumulativeHighWaterMark: nil,
+        lastObservedAt: nil,
+        quality: .exact
+    )
 }
 
 struct UsageNormalizationResult: Equatable, Sendable {
@@ -19,11 +34,21 @@ struct UsageNormalizer: Sendable {
         metadata: SessionMetadata?,
         state: UsageNormalizationState
     ) -> UsageNormalizationResult {
+        if let lastObservedAt = state.lastObservedAt,
+           observation.occurredAt < lastObservedAt {
+            return UsageNormalizationResult(
+                delta: nil,
+                state: state,
+                diagnostic: "out-of-order token snapshot ignored"
+            )
+        }
+
         guard let cumulative = observation.cumulativeUsage else {
             return UsageNormalizationResult(
                 delta: nil,
                 state: UsageNormalizationState(
                     cumulativeHighWaterMark: state.cumulativeHighWaterMark,
+                    lastObservedAt: state.lastObservedAt,
                     quality: .partial
                 ),
                 diagnostic: "missing cumulative token usage"
@@ -31,25 +56,25 @@ struct UsageNormalizer: Sendable {
         }
 
         guard let previous = state.cumulativeHighWaterMark else {
-            if metadata?.inheritsHistory == true {
-                return UsageNormalizationResult(
-                    delta: nil,
-                    state: UsageNormalizationState(cumulativeHighWaterMark: cumulative, quality: .partial),
-                    diagnostic: "inherited history baseline is unresolved"
-                )
-            }
-
             guard observation.lastUsage == cumulative else {
                 return UsageNormalizationResult(
                     delta: nil,
-                    state: UsageNormalizationState(cumulativeHighWaterMark: cumulative, quality: .partial),
+                    state: UsageNormalizationState(
+                        cumulativeHighWaterMark: cumulative,
+                        lastObservedAt: observation.occurredAt,
+                        quality: .partial
+                    ),
                     diagnostic: "initial cumulative baseline is unresolved"
                 )
             }
 
             return UsageNormalizationResult(
                 delta: cumulative == .zero ? nil : cumulative,
-                state: UsageNormalizationState(cumulativeHighWaterMark: cumulative, quality: state.quality),
+                state: UsageNormalizationState(
+                    cumulativeHighWaterMark: cumulative,
+                    lastObservedAt: observation.occurredAt,
+                    quality: state.quality
+                ),
                 diagnostic: nil
             )
         }
@@ -58,7 +83,11 @@ struct UsageNormalizer: Sendable {
             if observation.lastUsage == cumulative {
                 return UsageNormalizationResult(
                     delta: cumulative == .zero ? nil : cumulative,
-                    state: UsageNormalizationState(cumulativeHighWaterMark: cumulative, quality: .partial),
+                    state: UsageNormalizationState(
+                        cumulativeHighWaterMark: cumulative,
+                        lastObservedAt: observation.occurredAt,
+                        quality: .partial
+                    ),
                     diagnostic: "cumulative counter restarted"
                 )
             }
@@ -67,6 +96,7 @@ struct UsageNormalizer: Sendable {
                 delta: nil,
                 state: UsageNormalizationState(
                     cumulativeHighWaterMark: previous.componentWiseMaximum(with: cumulative),
+                    lastObservedAt: observation.occurredAt,
                     quality: .partial
                 ),
                 diagnostic: "cumulative token usage decreased or interleaved"
@@ -76,7 +106,11 @@ struct UsageNormalizer: Sendable {
         let delta = cumulative.subtractingFloorAtZero(previous)
         return UsageNormalizationResult(
             delta: delta == .zero ? nil : delta,
-            state: UsageNormalizationState(cumulativeHighWaterMark: cumulative, quality: state.quality),
+            state: UsageNormalizationState(
+                cumulativeHighWaterMark: cumulative,
+                lastObservedAt: observation.occurredAt,
+                quality: state.quality
+            ),
             diagnostic: nil
         )
     }

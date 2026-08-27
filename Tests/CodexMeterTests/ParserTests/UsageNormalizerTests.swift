@@ -29,7 +29,7 @@ final class UsageNormalizerTests: XCTestCase {
         XCTAssertEqual(increased.delta, usage(30, cached: 20, output: 5))
     }
 
-    func testForkedSessionTreatsFirstSnapshotAsUnresolvedBaseline() {
+    func testForkedSessionCountsFreshCounterWhenLastMatchesCumulative() {
         let metadata = SessionMetadata(
             id: "child",
             model: nil,
@@ -42,9 +42,32 @@ final class UsageNormalizerTests: XCTestCase {
             state: .empty
         )
 
+        XCTAssertEqual(result.delta, usage(5_000, cached: 4_000, output: 500))
+        XCTAssertEqual(result.state.quality, .exact)
+        XCTAssertNil(result.diagnostic)
+    }
+
+    func testForkedSessionSkipsAmbiguousInheritedBaseline() {
+        let metadata = SessionMetadata(
+            id: "child",
+            model: nil,
+            workingDirectory: nil,
+            forkedFromID: "parent"
+        )
+        let result = normalizer.normalize(
+            CodexTokenObservation(
+                occurredAt: timestamp,
+                ordinal: nil,
+                lastUsage: usage(100, cached: 50, output: 20),
+                cumulativeUsage: usage(5_000, cached: 4_000, output: 500)
+            ),
+            metadata: metadata,
+            state: .empty
+        )
+
         XCTAssertNil(result.delta)
         XCTAssertEqual(result.state.quality, .partial)
-        XCTAssertEqual(result.diagnostic, "inherited history baseline is unresolved")
+        XCTAssertEqual(result.diagnostic, "initial cumulative baseline is unresolved")
     }
 
     func testDecreaseDoesNotBecomeFreshUsage() {
@@ -86,6 +109,27 @@ final class UsageNormalizerTests: XCTestCase {
         XCTAssertEqual(result.state.cumulativeHighWaterMark, fresh)
         XCTAssertEqual(result.state.quality, .partial)
         XCTAssertEqual(result.diagnostic, "cumulative counter restarted")
+    }
+
+    func testOlderReplayCannotRegressCurrentSegment() {
+        let latestDate = timestamp.addingTimeInterval(60)
+        let prior = UsageNormalizationState(
+            cumulativeHighWaterMark: usage(150, cached: 90, output: 30),
+            lastObservedAt: latestDate,
+            quality: .exact
+        )
+        let replay = CodexTokenObservation(
+            occurredAt: timestamp,
+            ordinal: nil,
+            lastUsage: usage(100, cached: 60, output: 20),
+            cumulativeUsage: usage(100, cached: 60, output: 20)
+        )
+
+        let result = normalizer.normalize(replay, metadata: rootMetadata, state: prior)
+
+        XCTAssertNil(result.delta)
+        XCTAssertEqual(result.state, prior)
+        XCTAssertEqual(result.diagnostic, "out-of-order token snapshot ignored")
     }
 
     func testUnresolvedInitialBaselineIsNotCounted() {
