@@ -8,11 +8,11 @@
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
-<img src="Assets/README/codexmeter-hero.png" alt="CodexMeter product preview showing its menu bar token totals with example data" width="100%" />
+<img src="Assets/README/codexmeter-hero.png" alt="CodexMeter hero featuring the actual app popover and local token totals" width="100%" />
+
+<p align="center"><sub>The app popover shown above is an actual CodexMeter screen.</sub></p>
 
 Tiny, native macOS 14+ menu bar app that turns **local Codex session history** into clear token totals. Today, this week, this month, and all locally available time stay one click away—without an account login, API key, browser cookie, telemetry, or cloud sync.
-
-> The hero uses representative example values. CodexMeter shows totals calculated from the Codex session files available on your Mac.
 
 ## Why
 
@@ -113,6 +113,10 @@ It does not use an official account-usage API and does not scan unrelated folder
 - Activity from another Mac is not included unless its session history exists locally.
 - A future Codex session-schema change may require a CodexMeter update.
 - Ambiguous counter baselines and malformed records are reported as partial rather than guessed.
+
+## Roadmap
+
+Codex is the first supported data source. Future releases are planned to expand CodexMeter into a multi-service local usage meter, including **Claude** and other AI coding assistants where reliable local usage data is available. Support will be added service by service while preserving CodexMeter's local-first privacy model.
 
 ## Privacy
 
