@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PeriodDetailView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
     @AppStorage("numberStyle") private var numberStyleRawValue = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
@@ -15,6 +16,8 @@ struct PeriodDetailView: View {
                 Text(formatted(usage.totalTokens))
                     .font(.system(size: 30, weight: .semibold, design: .rounded))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.24), value: usage.totalTokens)
                 Text("Total tokens")
                     .foregroundStyle(.secondary)
             }
@@ -29,9 +32,7 @@ struct PeriodDetailView: View {
             }
             detailRow("Output", usage.outputTokens)
 
-            Label(store.statusMessage, systemImage: statusSymbol)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            statusLabel
 
             Spacer(minLength: 0)
         }
@@ -43,6 +44,30 @@ struct PeriodDetailView: View {
 
     private var statusSymbol: String {
         store.operationAwareStatusSymbol
+    }
+
+    @ViewBuilder
+    private var statusLabel: some View {
+        if !store.isRefreshing,
+           !store.isImportingHistory,
+           let lastSourceRefreshAt = store.lastSourceRefreshAt,
+           store.snapshot.quality != .stale,
+           store.snapshot.quality != .error {
+            Label {
+                HStack(spacing: 3) {
+                    Text("Updated")
+                    Text(lastSourceRefreshAt, style: .relative)
+                }
+            } icon: {
+                Image(systemName: statusSymbol)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else {
+            Label(store.statusMessage, systemImage: statusSymbol)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var title: String {
@@ -58,7 +83,10 @@ struct PeriodDetailView: View {
         HStack {
             Text(title).foregroundStyle(.secondary)
             Spacer()
-            Text(formatted(value)).monospacedDigit()
+            Text(formatted(value))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: value)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title), \(formatted(value)) tokens")

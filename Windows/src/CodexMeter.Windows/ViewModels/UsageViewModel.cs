@@ -61,9 +61,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         }
         catch (OperationCanceledException)
         {
-            statusMessage = snapshot.UpdatedAt is null
-                ? "Refresh cancelled"
-                : "Showing the last good update";
+            statusMessage = "Refresh cancelled";
             RaiseAll();
         }
 #pragma warning disable CA1031 // The tray must retain the last good snapshot for any non-fatal source failure.
@@ -75,7 +73,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             };
             statusMessage = snapshot.UpdatedAt is null
                 ? "Unable to read local usage"
-                : "Showing the last good update";
+                : "Refresh failed";
             RaiseAll();
         }
 #pragma warning restore CA1031
