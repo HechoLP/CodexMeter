@@ -27,12 +27,25 @@ struct PeriodDetailView: View {
             }
             detailRow("Output", usage.outputTokens)
 
+            Label(store.statusMessage, systemImage: statusSymbol)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             Spacer(minLength: 0)
         }
         .padding(18)
         .frame(width: 320)
         .frame(minHeight: 240, alignment: .topLeading)
         .navigationTitle(title)
+    }
+
+    private var statusSymbol: String {
+        switch store.snapshot.quality {
+        case .exact: "checkmark.circle"
+        case .partial, .stale: "clock"
+        case .unavailable: "questionmark.circle"
+        case .error: "exclamationmark.triangle"
+        }
     }
 
     private var title: String {
@@ -50,7 +63,8 @@ struct PeriodDetailView: View {
             Spacer()
             Text(formatted(value)).monospacedDigit()
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title), \(formatted(value)) tokens")
     }
 
     private func formatted(_ value: Int64) -> String {

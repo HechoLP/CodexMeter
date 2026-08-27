@@ -28,6 +28,7 @@ struct CodexMeterApp: App {
                 .environmentObject(store)
         } label: {
             Label(store.menuBarText, systemImage: "diamond")
+                .accessibilityLabel(store.menuBarAccessibilityLabel)
         }
         .menuBarExtraStyle(.window)
 

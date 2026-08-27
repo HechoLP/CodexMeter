@@ -11,3 +11,10 @@ xcuserdata/
 .impeccable/review/
 .impeccable/mocks/
 *.notarytool-profile
+.env
+.env.*
+*.p12
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.key

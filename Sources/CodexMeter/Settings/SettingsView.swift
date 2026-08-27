@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -23,9 +24,30 @@ struct SettingsView: View {
 private struct GeneralSettingsView: View {
     @AppStorage("refreshMode") private var refreshMode = "automatic"
     @AppStorage("weekStart") private var weekStart = WeekStart.monday.rawValue
+    @StateObject private var launchAtLogin = LaunchAtLoginService()
 
     var body: some View {
         Form {
+            Section("Startup") {
+                Toggle(
+                    "Launch at Login",
+                    isOn: Binding(
+                        get: { launchAtLogin.isEnabled },
+                        set: { launchAtLogin.setEnabled($0) }
+                    )
+                )
+                LabeledContent("Status", value: launchAtLogin.statusText)
+                if launchAtLogin.status == .requiresApproval {
+                    Button("Open Login Items Settings") {
+                        launchAtLogin.openSystemSettings()
+                    }
+                }
+                if let message = launchAtLogin.errorMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
             Section("Refresh") {
                 Picker("Refresh", selection: $refreshMode) {
                     Text("Automatic").tag("automatic")
@@ -44,6 +66,7 @@ private struct GeneralSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
+        .onAppear { launchAtLogin.refresh() }
     }
 }
 
@@ -99,24 +122,62 @@ private struct UsageSettingsView: View {
 
 private struct DataSettingsView: View {
     @EnvironmentObject private var store: UsageStore
+    @State private var confirmsClear = false
 
     var body: some View {
         Form {
             Section("Codex Local Data") {
-                LabeledContent("Status", value: store.statusMessage)
+                LabeledContent("Status", value: store.sourceCount > 0 ? "Connected" : "Not Found")
+                LabeledContent("Source files", value: store.sourceCount.formatted())
+                LabeledContent("Database size", value: formattedBytes(store.dataStatistics.databaseBytes))
+                LabeledContent("Oldest record", value: formattedDate(store.dataStatistics.oldestRecord))
+                LabeledContent("Newest record", value: formattedDate(store.dataStatistics.newestRecord))
+                Button("Open Data Folder") {
+                    openDataFolder()
+                }
             }
             Section {
-                Button("Rebuild Statistics") {}
-                    .disabled(true)
-                Button("Clear Local History", role: .destructive) {}
-                    .disabled(true)
+                Button("Rebuild Statistics") {
+                    Task { await store.rebuildStatistics() }
+                }
+                .disabled(store.isMaintainingData || store.isRefreshing)
+                Button("Clear Local History", role: .destructive) {
+                    confirmsClear = true
+                }
+                .disabled(store.isMaintainingData || store.isRefreshing)
             }
-            Text("Data maintenance actions become available after the local database is initialized.")
+            Text("Clearing history establishes a new local cutoff. Older Codex logs stay excluded instead of being imported again on the next refresh.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
         .padding()
+        .confirmationDialog(
+            "Clear CodexMeter local history?",
+            isPresented: $confirmsClear,
+            titleVisibility: .visible
+        ) {
+            Button("Clear Local History", role: .destructive) {
+                Task { await store.clearLocalHistory() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This deletes CodexMeter's local statistics. It does not delete Codex session files, and records at or before this time will remain excluded.")
+        }
+    }
+
+    private func openDataFolder() {
+        let directory = AppPaths.applicationSupportDirectory
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(directory)
+    }
+
+    private func formattedBytes(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private func formattedDate(_ date: Date?) -> String {
+        date?.formatted(date: .abbreviated, time: .shortened) ?? "None"
     }
 }
 
@@ -127,6 +188,9 @@ private struct AdvancedSettingsView: View {
         Form {
             Section("Diagnostics") {
                 Toggle("Enable debug logging", isOn: $debugLogging)
+                Button("Open Log Folder") {
+                    openLogFolder()
+                }
             }
             Text("Diagnostics never include prompts, responses, source code, terminal output, or authentication tokens.")
                 .font(.caption)
@@ -135,9 +199,33 @@ private struct AdvancedSettingsView: View {
         .formStyle(.grouped)
         .padding()
     }
+
+    private func openLogFolder() {
+        do {
+            try FileManager.default.createDirectory(
+                at: AppPaths.logDirectory,
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: AppPaths.logDirectory.path
+            )
+            NSWorkspace.shared.open(AppPaths.logDirectory)
+        } catch {
+            NSSound.beep()
+        }
+    }
 }
 
 private struct AboutSettingsView: View {
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
+    }
+
+    private var build: String? {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "diamond")
@@ -145,12 +233,17 @@ private struct AboutSettingsView: View {
                 .accessibilityHidden(true)
             Text("CodexMeter")
                 .font(.title2.bold())
-            Text("Version 0.1.0")
+            Text(build.map { "Version \(version) (\($0))" } ?? "Version \(version)")
                 .foregroundStyle(.secondary)
             Text("Unofficial utility. Not affiliated with or endorsed by OpenAI.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            HStack(spacing: 16) {
+                Link("GitHub", destination: URL(string: "https://github.com/HechoLP/codex-meter")!)
+                Link("MIT License", destination: URL(string: "https://github.com/HechoLP/codex-meter/blob/main/LICENSE")!)
+            }
+            .font(.caption)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Unit and integration tests
+        run: swift test
+      - name: Universal release build
+        run: swift build -c release --arch arm64 --arch x86_64
+      - name: Verify architectures
+        run: |
+          architectures=$(lipo -archs .build/apple/Products/Release/CodexMeter)
+          echo "$architectures"
+          grep -q arm64 <<< "$architectures"
+          grep -q x86_64 <<< "$architectures"

@@ -32,7 +32,15 @@ swift test
 swift run CodexMeter
 ```
 
-Release packaging and verification instructions will be added with the first release candidate.
+See [Privacy](Documentation/PRIVACY.md), [Architecture](Documentation/ARCHITECTURE.md), and [Troubleshooting](Documentation/TROUBLESHOOTING.md) for operating details.
+
+Build a verified local release candidate with:
+
+```bash
+Scripts/release.sh
+```
+
+The script builds a Universal 2 app, validates its property list and signature, and creates ZIP, DMG, and SHA-256 artifacts. Developer ID signing and notarization remain required before public distribution; see [Documentation/RELEASING.md](Documentation/RELEASING.md).
 
 ## Trademark
 

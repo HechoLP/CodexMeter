@@ -26,9 +26,6 @@ struct MenuPopoverView: View {
                     .environmentObject(store)
             }
         }
-        .task {
-            await store.refresh()
-        }
     }
 
     private var header: some View {
@@ -46,24 +43,49 @@ struct MenuPopoverView: View {
     }
 
     private var usageSummary: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(formatted(store.snapshot.today.totalTokens))
-                    .font(.system(size: 32, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                Text("Total tokens today")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
-
-            VStack(spacing: 8) {
-                metricRow("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")
-                if showCachedInput {
-                    metricRow("Cached input", value: store.snapshot.today.cachedInputTokens, symbol: "bolt.horizontal")
+        Group {
+            if store.snapshot.updatedAt == nil {
+                HStack(spacing: 12) {
+                    if store.isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "chart.bar.xaxis")
+                            .foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(store.isRefreshing ? "Reading local usage" : "No local usage yet")
+                            .font(.headline)
+                        Text(store.statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
                 }
-                metricRow("Output", value: store.snapshot.today.outputTokens, symbol: "arrow.down")
+                .frame(minHeight: 96)
+                .accessibilityElement(children: .combine)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(formatted(store.snapshot.today.totalTokens))
+                            .font(.system(size: 32, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                        Text("Total tokens today")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Total tokens today, \(formatted(store.snapshot.today.totalTokens))")
+
+                    VStack(spacing: 8) {
+                        metricRow("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")
+                        if showCachedInput {
+                            metricRow("Cached input", value: store.snapshot.today.cachedInputTokens, symbol: "bolt.horizontal")
+                        }
+                        metricRow("Output", value: store.snapshot.today.outputTokens, symbol: "arrow.down")
+                    }
+                }
             }
         }
         .padding(.horizontal, 18)
@@ -81,7 +103,7 @@ struct MenuPopoverView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            if showLastUpdated {
+            if shouldShowStatus {
                 Label(store.statusMessage, systemImage: statusSymbol)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -94,7 +116,9 @@ struct MenuPopoverView: View {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.plain)
-            .disabled(store.isRefreshing)
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
+            .disabled(store.isRefreshing || store.isMaintainingData)
             .help("Refresh usage")
             .accessibilityLabel("Refresh usage")
 
@@ -104,11 +128,17 @@ struct MenuPopoverView: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.plain)
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
             .help("Open Settings")
             .accessibilityLabel("Open Settings")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
+    }
+
+    private var shouldShowStatus: Bool {
+        showLastUpdated || store.isRefreshing || store.snapshot.quality != .exact
     }
 
     private var statusSymbol: String {
@@ -133,7 +163,8 @@ struct MenuPopoverView: View {
                 .monospacedDigit()
         }
         .font(.subheadline)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title), \(formatted(value)) tokens")
     }
 
     private func periodLink(_ title: String, period: UsagePeriod, value: Int64) -> some View {
@@ -153,6 +184,7 @@ struct MenuPopoverView: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(title), \(formatted(value)) tokens")
     }
 
     private func formatted(_ value: Int64) -> String {
