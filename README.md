@@ -120,12 +120,13 @@ Codex session JSONL
   → menu bar or notification-area totals
 ```
 
-Codex token-count events are cumulative snapshots. CodexMeter derives component-wise increases and ignores repeated snapshots. Cached input is a subset of input and is never added twice:
+Codex token-count events are cumulative snapshots. CodexMeter derives component-wise increases and ignores repeated snapshots. The displayed activity total follows the ChatGPT profile by counting every reported component:
 
 ```text
-Total = Input + Output
-Cached Input ⊆ Input
+Activity Total = Input + Cached Input + Output
 ```
+
+The raw Codex event field named `total_tokens` uses `Input + Output`; CodexMeter does not use that field for the displayed total because it would not match the ChatGPT profile activity figure. Input, cached input, and output remain visible separately so the accounting can be audited.
 
 ## Data sources
 

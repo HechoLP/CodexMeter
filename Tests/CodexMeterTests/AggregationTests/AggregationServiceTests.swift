@@ -3,6 +3,12 @@ import XCTest
 @testable import CodexMeter
 
 final class AggregationServiceTests: XCTestCase {
+    func testTotalMatchesChatGPTProfileActivityAccounting() {
+        let usage = TokenUsage(inputTokens: 1_200, cachedInputTokens: 800, outputTokens: 300)
+
+        XCTAssertEqual(usage.totalTokens, 2_300)
+    }
+
     func testMondayWeekAndPeriodBoundaries() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Seoul"))

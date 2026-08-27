@@ -8,7 +8,9 @@ struct TokenUsage: Codable, Equatable, Sendable {
     static let zero = TokenUsage(inputTokens: 0, cachedInputTokens: 0, outputTokens: 0)
 
     var totalTokens: Int64 {
-        inputTokens.saturatedAdding(outputTokens)
+        inputTokens
+            .saturatedAdding(cachedInputTokens)
+            .saturatedAdding(outputTokens)
     }
 
     var isValid: Bool {

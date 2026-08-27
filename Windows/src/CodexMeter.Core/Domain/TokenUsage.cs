@@ -7,7 +7,9 @@ public readonly record struct TokenUsage(
 {
     public static TokenUsage Zero { get; } = new(0, 0, 0);
 
-    public long TotalTokens => SaturatingAdd(InputTokens, OutputTokens);
+    public long TotalTokens => SaturatingAdd(
+        SaturatingAdd(InputTokens, CachedInputTokens),
+        OutputTokens);
 
     public bool IsValid => InputTokens >= 0
         && CachedInputTokens >= 0

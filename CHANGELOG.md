@@ -10,6 +10,7 @@ All notable changes to CodexMeter will be documented in this file.
 
 ### Fixed
 
+- Aligned displayed totals with ChatGPT profile token activity by including input, cached input, and output while preserving the three auditable components.
 - Coalesced overlapping Windows refreshes, invalidated changed-file caches on file-system events, and retried unterminated final JSONL records after they become complete.
 - Rebuilt Windows session watchers safely, including when `.codex` is created after launch, and kept the last good snapshot when a non-fatal source read fails.
 - Made Windows settings saves atomic, prevented repeated startup-registry writes, and made the Settings window reopen reliably without duplicate event handlers.

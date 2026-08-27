@@ -180,12 +180,12 @@ private struct UsageSettingsView: View {
     var body: some View {
         Form {
             Section("Accounting") {
-                Label("Input includes cached input", systemImage: "arrow.up")
-                Label("Cached input is reported separately", systemImage: "bolt.horizontal")
+                Label("Input is counted", systemImage: "arrow.up")
+                Label("Cached input is counted", systemImage: "bolt.horizontal")
                 Label("Output is counted independently", systemImage: "arrow.down")
-                Label("Total equals input plus output", systemImage: "sum")
+                Label("Total equals all three components", systemImage: "sum")
             }
-            Text("Cached input is a subset of input and is never added to the total a second time. All periods follow your Mac's current calendar and time zone.")
+            Text("The displayed total adds input, cached input, and output so it follows the token-activity total shown in the ChatGPT profile. All periods follow your Mac's current calendar and time zone.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

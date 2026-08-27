@@ -5,7 +5,7 @@ import XCTest
 final class CodexJSONLParserTests: XCTestCase {
     private let parser = CodexJSONLParser()
 
-    func testParsesObservedTokenEventAndDoesNotDoubleCountCachedInput() throws {
+    func testParsesObservedTokenEventAndUsesProfileActivityTotal() throws {
         let line = #"{"timestamp":"2026-08-27T01:02:03.456Z","type":"event_msg","ordinal":42,"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1200,"cached_input_tokens":800,"output_tokens":300,"total_tokens":1500},"last_token_usage":{"input_tokens":200,"cached_input_tokens":150,"output_tokens":50,"total_tokens":250}}}}"#
 
         guard case let .token(event) = parser.parse(Data(line.utf8)) else {
@@ -14,8 +14,8 @@ final class CodexJSONLParserTests: XCTestCase {
 
         XCTAssertEqual(event.ordinal, 42)
         XCTAssertEqual(event.lastUsage, TokenUsage(inputTokens: 200, cachedInputTokens: 150, outputTokens: 50))
-        XCTAssertEqual(event.lastUsage?.totalTokens, 250)
-        XCTAssertEqual(event.cumulativeUsage?.totalTokens, 1_500)
+        XCTAssertEqual(event.lastUsage?.totalTokens, 400)
+        XCTAssertEqual(event.cumulativeUsage?.totalTokens, 2_300)
     }
 
     func testUnknownEventIsIgnored() {
