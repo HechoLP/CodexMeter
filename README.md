@@ -2,7 +2,7 @@
 
 > Local Codex token usage, always one click away in your macOS menu bar.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/codex-meter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/codex-meter/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
 [![Release](https://img.shields.io/badge/release-v0.1.0%20preview-6e5aff?style=flat-square)](https://github.com/HechoLP/CodexMeter/releases/tag/v0.1.0)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
@@ -19,7 +19,7 @@ Tiny, native macOS 14+ menu bar app that turns **local Codex session history** i
 - **Glanceable totals.** See input, cached input, output, and total tokens without leaving the menu bar.
 - **Honest accounting.** Cumulative snapshots are normalized into increases instead of being added repeatedly.
 - **Local by design.** Prompts, responses, source code, credentials, and raw session paths are not stored in CodexMeter's database.
-- **Native and quiet.** Swift and SwiftUI, no third-party runtime, no Dock icon, and no background network traffic.
+- **Native and quiet.** Swift and SwiftUI, no Dock icon, no telemetry, and a narrowly scoped signed-update connection to GitHub.
 
 ## Install
 
@@ -38,7 +38,7 @@ Homebrew is not required. Download [CodexMeter 0.1.0](https://github.com/HechoLP
 
 The ZIP asset contains the same Universal 2 app for manual installation. SHA-256 checksum files are included with both downloads.
 
-This preview is ad-hoc signed because a Developer ID certificate and Apple notarization profile are not yet available. macOS may ask you to confirm the first launch; if it remains blocked, use **System Settings → Privacy & Security → Open Anyway**. A future stable release will use Developer ID signing and notarization.
+This preview is Apple Development-signed because a Developer ID certificate and Apple notarization profile are not yet available. macOS may ask you to confirm the first launch; if it remains blocked, use **System Settings → Privacy & Security → Open Anyway**. A future stable release will use Developer ID signing and notarization.
 
 ## First run
 
@@ -60,6 +60,7 @@ No Codex account sign-in is required.
 - Resumable 32 MiB / roughly five-second import slices for large histories
 - Native menu bar popover, Settings window, VoiceOver labels, and keyboard-accessible controls
 - Optional Launch at Login through macOS Service Management
+- Daily signed update checks with automatic download/install and a manual check button
 - Secure local-history clearing with a persistent re-import cutoff
 - No notifications, advertising, analytics, or cloud account
 
@@ -104,7 +105,7 @@ Codex is the first supported data source. Future releases are planned to expand 
 
 ## Privacy
 
-CodexMeter performs no network requests. It stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
+CodexMeter processes usage entirely on-device. Its only network feature is Sparkle's signed update check against this repository's GitHub Release feed; it never attaches token totals, prompts, source paths, credentials, or database contents. Automatic checks can be disabled under **Settings → General**. CodexMeter stores normalized counts, timestamps, SHA-256-derived identifiers, keyed continuity fingerprints, and parser checkpoints. It does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, or `~/.codex/auth.json`.
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 
@@ -122,7 +123,7 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 
 | Pane | Controls |
 | --- | --- |
-| General | Launch at Login, refresh mode, week start |
+| General | Launch at Login, refresh mode, week start, automatic updates |
 | Appearance | Period, metric, number style, icon/text visibility, popover details |
 | Usage | Accounting semantics and cached-input explanation |
 | Data | Source status, database statistics, rebuild, clear history |
@@ -140,6 +141,8 @@ swift run CodexMeter
 Build and verify the Universal 2 local candidate:
 
 ```bash
+export CODE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
+export CODE_SIGN_TEAM_ID="TEAMID"
 Scripts/release.sh
 ```
 
@@ -173,7 +176,7 @@ See the complete [Troubleshooting guide](Documentation/TROUBLESHOOTING.md).
 
 ## Acknowledgements
 
-README presentation inspired by [CodexBar](https://github.com/steipete/CodexBar). CodexMeter is an independent implementation focused on local Codex token accounting.
+README presentation inspired by [CodexBar](https://github.com/steipete/CodexBar). Automatic updates use [Sparkle](https://sparkle-project.org/). CodexMeter is an independent implementation focused on local Codex token accounting.
 
 ## Disclaimer
 

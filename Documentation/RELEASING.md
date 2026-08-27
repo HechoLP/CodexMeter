@@ -5,17 +5,28 @@
 - A `Developer ID Application` certificate in the login Keychain
 - A notarytool Keychain profile created locally with `xcrun notarytool store-credentials`
 - The Apple Developer Team ID associated with the signing certificate
+- The Sparkle Ed25519 private key in the login Keychain under account `HechoLP`
 - GitHub write permission for tags and releases
 
-Do not store certificate exports, Apple credentials, notary private keys, or Keychain profiles in the repository.
+Do not store certificate exports, Apple credentials, the Sparkle private key, notary private keys, or Keychain profiles in the repository. The Sparkle public key is expected in `Config/Info.plist` and `Config/Release.env`.
 
-## Build and verify without release credentials
+## Development-signed preview build
 
 ```bash
+export CODE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
+export CODE_SIGN_TEAM_ID="TEAMID"
 Scripts/release.sh
 ```
 
-This produces an ad-hoc signed Universal 2 app in the per-user build cache plus ZIP, DMG, and SHA-256 files under `Artifacts/`. The cache staging location avoids cloud-file-provider metadata that can invalidate macOS code signatures. Gatekeeper and notarization remain intentionally incomplete.
+This produces an Apple Development-signed Universal 2 app in the per-user build cache plus ZIP, DMG, and SHA-256 files under `Artifacts/`. The host app, Sparkle framework, helper app, and XPC services must all have the same Team ID; the verifier fails if any nested code is ad-hoc or signed by another team. The cache staging location avoids cloud-file-provider metadata that can invalidate macOS code signatures. Gatekeeper distribution trust and notarization remain intentionally incomplete, so this path is only for a clearly labeled preview release.
+
+Generate the signed update feed only on a maintainer Mac that has the Sparkle key:
+
+```bash
+Scripts/generate_appcast.sh
+```
+
+The command validates the feed signature, archive signature, byte length, and download URL before writing `Artifacts/appcast.xml`.
 
 ## Signed and notarized public build
 
@@ -26,16 +37,16 @@ export NOTARY_PROFILE="codexmeter-notary"
 Scripts/release_public.sh
 ```
 
-The public command fails closed unless all three values are present. It requires a Developer ID signature, Hardened Runtime, the expected Team ID, an empty entitlement allowlist, notarization, stapling, Gatekeeper acceptance, matching bundle metadata, Universal 2 architectures, ZIP/DMG checksums, and verification of each packaged app.
+The public command fails closed unless all three values are present. It requires a Developer ID signature, Hardened Runtime, the expected Team ID, an empty host-app entitlement allowlist, notarization, stapling, Gatekeeper acceptance, matching bundle metadata, Universal 2 architectures, embedded Sparkle verification, ZIP/DMG checksums, a signed appcast, and verification of each packaged app.
 
-After verification, confirm the version in `Config/Release.env`, the Git tag, artifact names, and release notes match. Create the tag and GitHub Release only after the final independent audit passes. `Scripts/release.sh` remains a local, ad-hoc-signed candidate command and can never satisfy the public gate.
+After verification, confirm the version in `Config/Release.env`, the Git tag, artifact names, appcast enclosure URL, and release notes match. Upload `appcast.xml` alongside the ZIP, DMG, and checksum files, then publish the exact same signed file as `appcast.xml` on the dedicated `update-feed` branch. The branch must contain no private key material. Create the tag and GitHub Release only after the final independent audit passes. `Scripts/release.sh` remains a local, ad-hoc-signed candidate command and can never satisfy the public stable-release gate; it may be used only for a clearly labeled preview release.
 
 ## Homebrew Cask
 
 `Casks/codexmeter.rb` uses the stable release URL and artifact name:
 
 ```text
-https://github.com/HechoLP/codex-meter/releases/download/vVERSION/CodexMeter-VERSION.zip
+https://github.com/HechoLP/CodexMeter/releases/download/vVERSION/CodexMeter-VERSION.zip
 ```
 
 For a public Homebrew release:

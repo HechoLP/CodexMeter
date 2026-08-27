@@ -16,6 +16,7 @@ All notable changes to CodexMeter will be documented in this file.
 - Resumable 10,000/100,000-event stress coverage and fail-closed public-release verification.
 - Versioned Homebrew Cask and a verified local-Tap installation path.
 - Product-focused README artwork and installation documentation.
+- Sparkle 2.9.6 automatic updates, daily checks, a user preference, and manual update checks.
 
 ### Fixed
 
@@ -32,3 +33,4 @@ All notable changes to CodexMeter will be documented in this file.
 - Hashed session/event identifiers and no persisted model or project metadata.
 - Secure-delete, WAL truncation, and vacuum behavior for local-history clearing.
 - Per-install keyed rewrite fingerprints, owner-only lock/key files, source/refresh/database resource limits, pinned CI actions, and strict Developer ID/notarization gates.
+- HTTPS update delivery with Ed25519 archive signatures, signed appcast verification, and verification before extraction.

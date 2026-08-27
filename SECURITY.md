@@ -8,4 +8,4 @@ CodexMeter has not published its first stable release. Security fixes currently 
 
 Please use GitHub's private vulnerability reporting for this repository. Do not include real prompts, responses, source code, terminal output, authentication files, or session archives in a report. A minimal synthetic fixture and the affected CodexMeter version are preferred.
 
-CodexMeter intentionally has no network client, telemetry, analytics, or updater. Its primary trust boundary is the local Codex session-data directory and its own SQLite database under Application Support.
+CodexMeter has no telemetry or analytics. Its local-accounting trust boundary is the Codex session-data directory and its own SQLite database under Application Support. The separate Sparkle updater is restricted to an HTTPS GitHub Release feed and requires both a signed appcast and an Ed25519-signed update archive before extraction.
