@@ -15,6 +15,13 @@ All notable changes to CodexMeter will be documented in this file.
 - Made Windows settings saves atomic, prevented repeated startup-registry writes, and made the Settings window reopen reliably without duplicate event handlers.
 - Derived Windows package versions from the project metadata so CI and release artifacts cannot silently reuse an older release version.
 
+## [0.1.4] - 2026-08-27
+
+### Fixed
+
+- Excluded copied parent token history from inherited sessions even when Codex omits an explicit replay ordinal or a second copied session-metadata record.
+- Added a one-time derived-statistics rebuild so existing installations discard stale duplicated rows while preserving source JSONL files, settings, and the local-history cutoff.
+
 ## [0.1.3] - 2026-08-27
 
 ### Added
