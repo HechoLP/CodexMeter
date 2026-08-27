@@ -15,6 +15,13 @@ All notable changes to CodexMeter will be documented in this file.
 - Made Windows settings saves atomic, prevented repeated startup-registry writes, and made the Settings window reopen reliably without duplicate event handlers.
 - Derived Windows package versions from the project metadata so CI and release artifacts cannot silently reuse an older release version.
 
+## [0.1.5] - 2026-08-27
+
+### Fixed
+
+- Built every public macOS package in a new Swift scratch directory so a stale or damaged incremental build database cannot reuse an older executable under a new version number.
+- Republished the inherited-session accounting correction from 0.1.4 in a verified clean Universal 2 binary.
+
 ## [0.1.4] - 2026-08-27
 
 ### Fixed
