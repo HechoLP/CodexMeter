@@ -104,7 +104,7 @@
                     <TextBlock Text="{Binding MonthTotal}" FontSize="16" Foreground="{StaticResource SecondaryText}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                 </Grid>
                 <Grid Grid.Row="2">
-                    <TextBlock Text="All Time" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock Text="Local History" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding AllTimeTotal}" FontSize="16" Foreground="{StaticResource SecondaryText}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                 </Grid>
             </Grid>

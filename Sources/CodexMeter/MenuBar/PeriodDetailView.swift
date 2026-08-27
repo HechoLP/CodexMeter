@@ -75,7 +75,7 @@ struct PeriodDetailView: View {
         case .today: "Today"
         case .week: "This Week"
         case .month: "This Month"
-        case .allTime: "All Time"
+        case .allTime: "Local History"
         }
     }
 

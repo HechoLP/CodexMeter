@@ -106,7 +106,7 @@ struct MenuPopoverView: View {
         VStack(spacing: 0) {
             periodLink("This Week", period: .week, value: store.snapshot.week.totalTokens)
             periodLink("This Month", period: .month, value: store.snapshot.month.totalTokens)
-            periodLink("All Time", period: .allTime, value: store.snapshot.allTime.totalTokens)
+            periodLink("Local History", period: .allTime, value: store.snapshot.allTime.totalTokens)
         }
         .padding(.vertical, 6)
     }

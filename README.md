@@ -96,7 +96,7 @@ No Codex account sign-in is required.
 
 ## Features
 
-- Today, week, month, and locally observable all-time totals
+- Today, week, month, and **Local History** totals
 - Input, cached input, output, and total-token breakdowns
 - Automatic file-event refresh with a lightweight configurable fallback
 - Manual, 30-second, one-minute, and five-minute refresh modes
@@ -141,7 +141,7 @@ It does not use an official account-usage API and does not scan unrelated folder
 
 ## Accuracy and limitations
 
-- **All Time** means the oldest token record still present in local Codex session history through now.
+- **Local History** means the oldest token record still present in local Codex session history through now. It is not the cloud account's lifetime total.
 - Deleted logs cannot be reconstructed.
 - Activity from another computer is not included unless its session history exists locally.
 - A future Codex session-schema change may require a CodexMeter update.

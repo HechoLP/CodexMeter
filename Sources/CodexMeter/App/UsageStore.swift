@@ -35,8 +35,7 @@ final class UsageStore: ObservableObject {
 
     var menuBarText: String {
         let displayRawValue = defaults.string(forKey: "menuBarDisplay") ?? AppPreferences.defaultMenuBarDisplay
-        let display = MenuBarDisplay(rawValue: displayRawValue) ?? .iconOnly
-        if display == .iconOnly { return "" }
+        let display = MenuBarDisplay(rawValue: displayRawValue) ?? .total
         guard hasLoadedSnapshot else { return "…" }
         guard snapshot.updatedAt != nil else { return "—" }
         let periodRawValue = defaults.string(forKey: "menuBarPeriod") ?? UsagePeriod.today.rawValue
@@ -54,8 +53,6 @@ final class UsageStore: ObservableObject {
             "↑\(formatter.string(from: usage.inputTokens, style: style))"
         case .output:
             "↓\(formatter.string(from: usage.outputTokens, style: style))"
-        case .iconOnly:
-            ""
         }
     }
 
@@ -65,16 +62,16 @@ final class UsageStore: ObservableObject {
         let periodRawValue = defaults.string(forKey: "menuBarPeriod") ?? UsagePeriod.today.rawValue
         let displayRawValue = defaults.string(forKey: "menuBarDisplay") ?? AppPreferences.defaultMenuBarDisplay
         let period = UsagePeriod(rawValue: periodRawValue) ?? .today
-        let display = MenuBarDisplay(rawValue: displayRawValue) ?? .iconOnly
+        let display = MenuBarDisplay(rawValue: displayRawValue) ?? .total
         let usage = snapshot.totals(for: period)
         let periodName = switch period {
         case .today: "today"
         case .week: "this week"
         case .month: "this month"
-        case .allTime: "all time"
+        case .allTime: "in local history"
         }
         return switch display {
-        case .total, .iconOnly:
+        case .total:
             "CodexMeter, \(usage.totalTokens) total tokens \(periodName)"
         case .inputOutput:
             "CodexMeter, \(usage.inputTokens) input tokens and \(usage.outputTokens) output tokens \(periodName)"
@@ -536,7 +533,6 @@ enum MenuBarDisplay: String, CaseIterable, Identifiable {
     case inputOutput
     case input
     case output
-    case iconOnly
 
     var id: String { rawValue }
 
@@ -546,7 +542,6 @@ enum MenuBarDisplay: String, CaseIterable, Identifiable {
         case .inputOutput: "Input / Output"
         case .input: "Input Only"
         case .output: "Output Only"
-        case .iconOnly: "Icon Only"
         }
     }
 }
