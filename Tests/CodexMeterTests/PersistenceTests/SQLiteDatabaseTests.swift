@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import XCTest
 @testable import CodexMeter
@@ -171,7 +170,7 @@ final class SQLiteDatabaseTests: XCTestCase {
         }
     }
 
-    func testVersion2MigrationPreservesUsageAndHashesSensitiveMetadata() async throws {
+    func testVersion2MigrationRebuildsDerivedAccountingAndPreservesCutoff() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -217,32 +216,22 @@ final class SQLiteDatabaseTests: XCTestCase {
         let migrated = try SQLiteDatabase(url: url)
         let migratedCount = try await migrated.eventCount()
         let migratedCutoff = try await migrated.importCutoff()
-        XCTAssertEqual(migratedCount, 1)
+        XCTAssertEqual(migratedCount, 0)
         XCTAssertEqual(migratedCutoff, cutoff)
         let snapshot = try await migrated.usageSnapshot(
             now: eventDate.addingTimeInterval(60),
             calendar: Calendar(identifier: .gregorian),
             weekStart: .monday
         )
-        XCTAssertEqual(snapshot.allTime, usage)
+        XCTAssertEqual(snapshot.allTime, .zero)
 
-        let digest = SHA256.hash(data: Data(rawSessionID.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
-        let migratedState = try await migrated.normalizationState(for: digest)
         let rawState = try await migrated.normalizationState(for: rawSessionID)
-        XCTAssertEqual(migratedState.cumulativeHighWaterMark, usage)
         XCTAssertEqual(rawState, .empty)
-        let checkpointDigest = SHA256.hash(data: Data(checkpoint.sourcePath.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
-        let migratedCheckpoint = try await migrated.checkpoint(for: checkpointDigest)
-        XCTAssertEqual(migratedCheckpoint?.sessionID, digest)
-        XCTAssertNil(migratedCheckpoint?.model)
-        XCTAssertNil(migratedCheckpoint?.projectPath)
+        let migratedCheckpoint = try await migrated.checkpoint(for: checkpoint.sourcePath)
+        XCTAssertNil(migratedCheckpoint)
     }
 
-    func testVersion10MigrationInvalidatesOnlyInheritedAccounting() async throws {
+    func testVersion11MigrationRebuildsDerivedAccountingAndPreservesCutoff() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -250,9 +239,12 @@ final class SQLiteDatabaseTests: XCTestCase {
         let rootUsage = TokenUsage(inputTokens: 100, cachedInputTokens: 60, outputTokens: 20)
         let inheritedUsage = TokenUsage(inputTokens: 5_000, cachedInputTokens: 4_000, outputTokens: 500)
         let occurredAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let cutoff = occurredAt.addingTimeInterval(-60)
+        var previousEpoch: Int64 = 0
 
         do {
             let database = try SQLiteDatabase(url: url)
+            _ = try await database.clearLocalHistory(at: cutoff)
             for (path, sessionID, inheritsHistory, usage) in [
                 ("root-source", "root-session", false, rootUsage),
                 ("child-source", "child-session", true, inheritedUsage)
@@ -287,7 +279,8 @@ final class SQLiteDatabaseTests: XCTestCase {
                     )
                 )
             }
-            try await database.prepareVersion9FixtureForTesting()
+            previousEpoch = try await database.importPolicy().dataEpoch
+            try await database.prepareVersion10FixtureForTesting()
         }
 
         let migrated = try SQLiteDatabase(url: url)
@@ -296,11 +289,14 @@ final class SQLiteDatabaseTests: XCTestCase {
         let childCheckpoint = try await migrated.checkpoint(for: "child-source")
         let rootState = try await migrated.normalizationState(for: "root-session")
         let childState = try await migrated.normalizationState(for: "child-session")
-        XCTAssertEqual(eventCount, 1)
-        XCTAssertNotNil(rootCheckpoint)
+        let policy = try await migrated.importPolicy()
+        XCTAssertEqual(eventCount, 0)
+        XCTAssertNil(rootCheckpoint)
         XCTAssertNil(childCheckpoint)
-        XCTAssertEqual(rootState.cumulativeHighWaterMark, rootUsage)
+        XCTAssertEqual(rootState, .empty)
         XCTAssertEqual(childState, .empty)
+        XCTAssertEqual(policy.cutoff, cutoff)
+        XCTAssertGreaterThan(policy.dataEpoch, previousEpoch)
     }
 
     func testDatabaseFilesUseOwnerOnlyPermissions() async throws {
