@@ -134,11 +134,6 @@ struct MenuPopoverView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 4)
 
-                periodLink(
-                    "Profile Day · \(profileDate(snapshot.statsAsOf))",
-                    period: .today,
-                    value: snapshot.today
-                )
                 periodLink("This Week", period: .week, value: snapshot.week)
                 periodLink("This Month", period: .month, value: snapshot.month)
                 periodLink("Lifetime", period: .allTime, value: snapshot.lifetime)
