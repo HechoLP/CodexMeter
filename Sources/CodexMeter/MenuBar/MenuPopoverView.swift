@@ -98,6 +98,7 @@ struct MenuPopoverView: View {
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("This Mac total tokens today, \(formatted(store.snapshot.today.totalTokens))")
+                    .help("Includes cached input reads, so this reads higher than the token count Codex itself displays.")
 
                     VStack(spacing: 8) {
                         metricRow("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")
@@ -165,6 +166,7 @@ struct MenuPopoverView: View {
                         Text(formatted(store.snapshot.today.totalTokens))
                             .font(.subheadline)
                             .monospacedDigit()
+                            .help("Includes cached input reads, so this reads higher than the token count Codex itself displays.")
                     }
                     VStack(spacing: 8) {
                         metricRow("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")

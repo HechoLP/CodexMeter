@@ -30,6 +30,11 @@ struct PeriodDetailView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(usesProfileTotals ? "ChatGPT account" : "This Mac") \(title) total tokens, \(formatted(total))")
+            .help(
+                usesProfileTotals
+                    ? "Aggregate ChatGPT account statistic; can lag behind live local activity."
+                    : "Includes cached input reads, so this reads higher than the token count Codex itself displays."
+            )
 
             Divider()
 

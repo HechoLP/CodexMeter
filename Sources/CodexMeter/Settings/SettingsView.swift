@@ -320,6 +320,9 @@ private struct UsageSettingsView: View {
                 Label("Cached input is counted", systemImage: "bolt.horizontal")
                 Label("Output is counted independently", systemImage: "arrow.down")
                 Label("Total equals all three components", systemImage: "sum")
+                Text("Cached input is the portion of Input that Codex served from cache. Total = Input + Cached input + Output, so it intentionally reads higher than the token count Codex itself displays (Input + Output only, which excludes cache reads). This is expected, not a bug in CodexMeter's counting.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Text("Account totals and this Mac's component breakdown are separate data sets and are never added together. Calendar periods use your Mac's current time zone and selected week start.")
                 .font(.caption)

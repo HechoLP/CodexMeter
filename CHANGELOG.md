@@ -4,6 +4,12 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-08-28
+
+### Changed
+
+- Clarified in the README, Settings, and popover/detail tooltips that the local Activity Total intentionally counts cached input a second time (on top of Input) and will read higher than the token count Codex itself displays, so this is not miscounting.
+
 ## [1.0.4] - 2026-08-28
 
 ### Changed
