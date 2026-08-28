@@ -6,7 +6,7 @@ CodexMeter can publish a stable release without an Apple Developer ID or Microso
 
 Required maintainer access:
 
-- GitHub write permission for the source, public releases, update-feed, and personal Homebrew Tap repositories
+- GitHub write permission for the source repository's releases and `update-feed` branch, plus the personal Homebrew Tap repository
 - The Sparkle Ed25519 private key in the login Keychain under account `HechoLP`
 - A clean source worktree whose immutable `vVERSION` tag points exactly to `HEAD`
 
@@ -24,12 +24,12 @@ The verifier requires an ad-hoc signature, rejects an Apple certificate authorit
 
 ## Unified macOS and Windows release
 
-Both platforms use the same immutable `vVERSION` tag and the same public release in `HechoLP/CodexMeter-Releases`.
+Both platforms use the same immutable `vVERSION` tag and the same public release in `HechoLP/CodexMeter`.
 
 1. Merge the reviewed release commit to `main` after CI passes.
 2. Create and push `vVERSION` at that exact commit. Never move or replace a published tag.
 3. Run `Scripts/release_stable.sh` on the tagged commit for the macOS ZIP, DMG, checksums, and signed appcast.
-4. Wait for the Windows Release workflow. It tests, formats, packages, smoke-tests x64, verifies both package hashes, and uploads x64/ARM64 artifacts to the workflow run. It does not create a release in the source repository.
+4. Wait for the Windows Release workflow. It tests, formats, packages, smoke-tests x64, verifies both package hashes, and uploads x64/ARM64 artifacts to the workflow run. It does not create the public GitHub Release automatically.
 5. Download the exact Windows workflow artifact; do not rebuild or rename it.
 6. Create one stable public GitHub Release at `vVERSION` and upload the macOS and Windows archives, per-artifact checksums, both checksum manifests, and `appcast.xml`.
 7. Confirm every asset is anonymously downloadable before publishing the exact same signed `appcast.xml` on the public `update-feed` branch.
@@ -40,6 +40,12 @@ The configured release repository and feed branch can be overridden only when bo
 export CODEXMETER_RELEASE_REPOSITORY="OWNER/PUBLIC-RELEASE-REPOSITORY"
 export CODEXMETER_UPDATE_FEED_BRANCH="update-feed"
 ```
+
+### Legacy feed migration
+
+Versions through 1.0.3 have `HechoLP/CodexMeter-Releases` embedded as their Sparkle feed. For the 1.0.4 bridge release only, publish the exact same signed `appcast.xml` to both repositories' `update-feed` branches after uploading the archive to `HechoLP/CodexMeter`. The enclosure URL must point to the release in `HechoLP/CodexMeter`.
+
+After the dual feed is anonymously reachable and 1.0.4 is verified to read the source repository's feed, archive `HechoLP/CodexMeter-Releases` as a public, read-only compatibility repository. Do not delete it or make it private: an older installation may still need its static 1.0.4 bridge feed. Releases after 1.0.4 are published only in `HechoLP/CodexMeter` and only its `update-feed` branch is updated.
 
 ## First-install trust disclosure
 
