@@ -4,24 +4,24 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.0.4</title>
-            <pubDate>Fri, 28 Aug 2026 11:05:40 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.0.4</link>
-            <sparkle:version>104</sparkle:version>
-            <sparkle:shortVersionString>1.0.4</sparkle:shortVersionString>
+            <title>1.0.6</title>
+            <pubDate>Fri, 28 Aug 2026 13:33:18 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.0.6</link>
+            <sparkle:version>106</sparkle:version>
+            <sparkle:shortVersionString>1.0.6</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.0.4
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.0.6
 
-CodexMeter 1.0.4 consolidates the public downloads and signed macOS update feed into the main `HechoLP/CodexMeter` repository.
+CodexMeter 1.0.6 corrects local token totals on macOS and Windows.
 
-## Changes
+## Fixes
 
-- macOS and Windows downloads now live on the same repository as the source and immutable release tag.
-- The macOS app now checks the signed `HechoLP/CodexMeter` update feed.
-- Release links in both applications and the installation documentation now open the consolidated release page.
-- The personal Homebrew Tap remains separate because Homebrew discovers `HechoLP/tap` through the `HechoLP/homebrew-tap` repository, but its Cask downloads the ZIP from the main repository.
+- Local Total now uses `Input + Output`.
+- Cached Input remains visible as the portion of Input served from cache, but is no longer added to Total a second time.
+- Today, This Week, This Month, and Local History are recalculated from the existing component data without a database migration.
+- Settings, tooltips, architecture documentation, and Windows installation links now describe the corrected accounting semantics.
 
-The 1.0.4 feed is also published once to the legacy `CodexMeter-Releases` update branch so installations through 1.0.3 can upgrade safely. The legacy repository remains public and read-only after that bridge; it is not used for later releases.
+Account-wide ChatGPT profile totals remain separate and unchanged.
 
 ## Integrity and platform trust
 
@@ -42,10 +42,10 @@ Fresh installations can use `brew install --cask HechoLP/tap/codexmeter`.
 
 Download the x64 or ARM64 ZIP together with `SHA256SUMS-windows.txt`, compare the PowerShell `Get-FileHash` result with the manifest, and extract the verified package to a permanent folder.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.0.4/CodexMeter-1.0.4.zip" length="2154470" type="application/octet-stream" sparkle:edSignature="v+lo49WnH7RbnSy1EDBbDYVZ++ZzQ2mAJnayg/m/MI9lxfPv7/q1LSCYUXEbPqZ0qJJRGfUmuPbHCIPNPOPUBQ=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.0.6/CodexMeter-1.0.6.zip" length="2158510" type="application/octet-stream" sparkle:edSignature="ZHcSKJPTftofWM3FjiXPcN74gxlohmyx2QFCCQmqc44tXnvNto9dCj81IfvPd/zvM+3aFyFVkgZBlNu0ER2XCQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: o8iU3nUas8bssDfy5w9ScWhR2Z9QPeu8VY5s5Bi+vqd9WAMjxvQBbKvNV9k+MS3nGFIlk8t+VEH9P23B9EmXBQ==
-length: 2903
+edSignature: /BMa9cQjFKUyaOCa0D17Jly/JiNBrgHyCXOaFuX6RM96ThFVn7/Wlxd8YTFYE6WLmiPdjKt26H5cbCa9BhZKAg==
+length: 2609
 -->
