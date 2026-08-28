@@ -33,7 +33,7 @@ struct PeriodDetailView: View {
             .help(
                 usesProfileTotals
                     ? "Aggregate ChatGPT account statistic; can lag behind live local activity."
-                    : "Includes cached input reads, so this reads higher than the token count Codex itself displays."
+                    : "Cached input is already included in Input. Total equals Input plus Output."
             )
 
             Divider()

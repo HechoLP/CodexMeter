@@ -317,10 +317,10 @@ private struct UsageSettingsView: View {
             }
             Section("This Mac Breakdown") {
                 Label("Input is counted", systemImage: "arrow.up")
-                Label("Cached input is counted", systemImage: "bolt.horizontal")
+                Label("Cached input is included in Input", systemImage: "bolt.horizontal")
                 Label("Output is counted independently", systemImage: "arrow.down")
-                Label("Total equals all three components", systemImage: "sum")
-                Text("Cached input is the portion of Input that Codex served from cache. Total = Input + Cached input + Output, so it intentionally reads higher than the token count Codex itself displays (Input + Output only, which excludes cache reads). This is expected, not a bug in CodexMeter's counting.")
+                Label("Total equals Input plus Output", systemImage: "sum")
+                Text("Cached input is the portion of Input that Codex served from cache. It remains visible as a breakdown, but is not added to Total a second time.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

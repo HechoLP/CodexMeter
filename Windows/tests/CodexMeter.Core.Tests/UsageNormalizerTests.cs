@@ -11,11 +11,11 @@ public sealed class UsageNormalizerTests
         CultureInfo.InvariantCulture);
 
     [Fact]
-    public void TotalMatchesChatGptProfileActivityAccounting()
+    public void TotalCountsCachedInputOnlyAsPartOfInput()
     {
         var usage = new TokenUsage(1_200, 800, 300);
 
-        Assert.Equal(2_300, usage.TotalTokens);
+        Assert.Equal(1_500, usage.TotalTokens);
     }
 
     [Fact]

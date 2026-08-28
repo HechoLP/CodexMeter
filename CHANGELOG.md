@@ -4,6 +4,12 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-08-28
+
+### Fixed
+
+- Corrected local totals on macOS and Windows to use `Input + Output`; cached input is already included in Input and is now shown only as an auditable breakdown instead of being counted twice.
+
 ## [1.0.5] - 2026-08-28
 
 ### Changed

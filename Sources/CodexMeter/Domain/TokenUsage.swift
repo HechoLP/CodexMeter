@@ -9,7 +9,6 @@ struct TokenUsage: Codable, Equatable, Sendable {
 
     var totalTokens: Int64 {
         inputTokens
-            .saturatedAdding(cachedInputTokens)
             .saturatedAdding(outputTokens)
     }
 
