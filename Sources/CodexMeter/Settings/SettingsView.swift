@@ -2,22 +2,164 @@ import AppKit
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var selectedCategory: SettingsCategory? = .general
+
     var body: some View {
-        TabView {
-            GeneralSettingsView()
-                .tabItem { Label("General", systemImage: "gear") }
-            AppearanceSettingsView()
-                .tabItem { Label("Appearance", systemImage: "paintbrush") }
-            UsageSettingsView()
-                .tabItem { Label("Usage", systemImage: "chart.bar") }
-            DataSettingsView()
-                .tabItem { Label("Data", systemImage: "externaldrive") }
-            AdvancedSettingsView()
-                .tabItem { Label("Advanced", systemImage: "slider.horizontal.3") }
-            AboutSettingsView()
-                .tabItem { Label("About", systemImage: "info.circle") }
+        NavigationSplitView {
+            List(selection: $selectedCategory) {
+                Section("Categories") {
+                    ForEach(SettingsCategory.allCases) { category in
+                        SettingsCategoryRow(category: category)
+                            .tag(category)
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationTitle("CodexMeter")
+            .navigationSplitViewColumnWidth(min: 220, ideal: 248, max: 300)
+            .accessibilityLabel("Settings categories")
+            .accessibilityHint("Use the arrow keys to choose a category, then press Tab to change its settings.")
+        } detail: {
+            if let selectedCategory {
+                SettingsDetail(category: selectedCategory) {
+                    settingsView(for: selectedCategory)
+                }
+            } else {
+                ContentUnavailableView(
+                    "Choose a Category",
+                    systemImage: "sidebar.left",
+                    description: Text("Select a category from the sidebar to view its settings.")
+                )
+            }
         }
-        .frame(width: 560, height: 390)
+        .navigationSplitViewStyle(.balanced)
+        .frame(minWidth: 840, idealWidth: 980, maxWidth: .infinity, minHeight: 560, idealHeight: 680, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func settingsView(for category: SettingsCategory) -> some View {
+        switch category {
+        case .general:
+            GeneralSettingsView()
+        case .appearance:
+            AppearanceSettingsView()
+        case .usage:
+            UsageSettingsView()
+        case .data:
+            DataSettingsView()
+        case .advanced:
+            AdvancedSettingsView()
+        case .about:
+            AboutSettingsView()
+        }
+    }
+}
+
+enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
+    case general
+    case appearance
+    case usage
+    case data
+    case advanced
+    case about
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general: "General"
+        case .appearance: "Menu Bar"
+        case .usage: "Usage & Privacy"
+        case .data: "Local Data"
+        case .advanced: "Diagnostics"
+        case .about: "Information"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .general: "Startup, refresh, updates, and calendar"
+        case .appearance: "Icon, token text, and popover display"
+        case .usage: "What is counted and what stays local"
+        case .data: "Source status and history management"
+        case .advanced: "Optional logging and log files"
+        case .about: "Version, updates, and project links"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .general: "gearshape"
+        case .appearance: "menubar.rectangle"
+        case .usage: "chart.bar.xaxis"
+        case .data: "externaldrive"
+        case .advanced: "stethoscope"
+        case .about: "info.circle"
+        }
+    }
+}
+
+private struct SettingsCategoryRow: View {
+    let category: SettingsCategory
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.title)
+                    .fontWeight(.medium)
+                Text(category.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        } icon: {
+            Image(systemName: category.systemImage)
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 18)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(category.title) settings. \(category.summary)")
+        .accessibilityHint("Select to view this category.")
+    }
+}
+
+private struct SettingsDetail<Content: View>: View {
+    let category: SettingsCategory
+    @ViewBuilder let content: Content
+
+    init(category: SettingsCategory, @ViewBuilder content: () -> Content) {
+        self.category = category
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: category.systemImage)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 28)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(category.title)
+                        .font(.title2.weight(.semibold))
+                        .accessibilityLabel("\(category.title) settings")
+                        .accessibilityAddTraits(.isHeader)
+                    Text(category.summary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 24)
+            .padding(.bottom, 20)
+
+            Divider()
+            content
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -311,30 +453,65 @@ private struct AboutSettingsView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "diamond")
-                .font(.system(size: 40, weight: .medium))
-                .accessibilityHidden(true)
-            Text("CodexMeter")
-                .font(.title2.bold())
-            Text(build.map { "Version \(version) (\($0))" } ?? "Version \(version)")
-                .foregroundStyle(.secondary)
-            Text("Unofficial utility. Not affiliated with or endorsed by OpenAI.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("Check for Updates…") {
-                UpdateService.shared.checkForUpdates()
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 14) {
+                Image(systemName: "diamond")
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("CodexMeter")
+                        .font(.title3.weight(.semibold))
+                    Text("Local Codex token usage in the menu bar")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .disabled(!UpdateService.shared.isAvailable)
-            HStack(spacing: 16) {
-                Link("GitHub", destination: URL(string: "https://github.com/HechoLP/CodexMeter")!)
-                Link("Releases", destination: URL(string: "https://github.com/HechoLP/CodexMeter-Releases/releases")!)
-                Link("MIT License", destination: URL(string: "https://github.com/HechoLP/CodexMeter/blob/main/LICENSE")!)
+            .padding(.horizontal, 28)
+            .padding(.top, 26)
+            .padding(.bottom, 12)
+            .accessibilityElement(children: .combine)
+
+            Form {
+                Section("Application") {
+                    LabeledContent("Version", value: version)
+                    if let build {
+                        LabeledContent("Build", value: build)
+                    }
+                    LabeledContent("Data scope", value: "Local Codex history")
+                    LabeledContent("Privacy", value: "Stored on this Mac")
+                }
+                Section("Updates") {
+                    Button("Check for Updates…") {
+                        UpdateService.shared.checkForUpdates()
+                    }
+                    .disabled(!UpdateService.shared.isAvailable)
+                    Text("Update checks use the signed CodexMeter update feed. Token usage data is never sent.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Project") {
+                    Link(destination: URL(string: "https://github.com/HechoLP/CodexMeter")!) {
+                        Label("Open Source on GitHub", systemImage: "arrow.up.right.square")
+                    }
+                    Link(destination: URL(string: "https://github.com/HechoLP/CodexMeter-Releases/releases")!) {
+                        Label("View Releases", systemImage: "shippingbox")
+                    }
+                    Link(destination: URL(string: "https://github.com/HechoLP/CodexMeter/blob/main/LICENSE")!) {
+                        Label("Read MIT License", systemImage: "doc.text")
+                    }
+                }
+                Section {
+                    Text("CodexMeter is an independent utility and is not affiliated with or endorsed by OpenAI.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .font(.caption)
+            .formStyle(.grouped)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

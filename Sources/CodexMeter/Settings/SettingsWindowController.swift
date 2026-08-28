@@ -5,6 +5,10 @@ import SwiftUI
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowController()
 
+    private static let frameAutosaveName = "CodexMeterSettingsWindowV2"
+    private static let minimumContentSize = NSSize(width: 840, height: 560)
+    private static let defaultContentSize = NSSize(width: 980, height: 680)
+
     private var settingsWindow: NSWindow?
 
     var isSettingsWindowVisible: Bool {
@@ -12,27 +16,28 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func showSettings(for store: UsageStore) {
-        let rootView = SettingsView().environmentObject(store)
         let window: NSWindow
 
         if let settingsWindow {
-            settingsWindow.contentViewController = NSHostingController(rootView: rootView)
             window = settingsWindow
         } else {
             let created = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 560, height: 390),
-                styleMask: [.titled, .closable, .miniaturizable],
+                contentRect: NSRect(origin: .zero, size: Self.defaultContentSize),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
             )
             created.title = "CodexMeter Settings"
+            created.contentMinSize = Self.minimumContentSize
             created.isReleasedWhenClosed = false
-            created.contentViewController = NSHostingController(rootView: rootView)
+            created.contentViewController = NSHostingController(
+                rootView: SettingsView().environmentObject(store)
+            )
             created.delegate = self
-            if !created.setFrameUsingName("CodexMeterSettingsWindow") {
+            if !created.setFrameUsingName(Self.frameAutosaveName) {
                 created.center()
             }
-            created.setFrameAutosaveName("CodexMeterSettingsWindow")
+            created.setFrameAutosaveName(Self.frameAutosaveName)
             settingsWindow = created
             window = created
         }
@@ -42,6 +47,22 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
 #if DEBUG
+    var settingsWindowContentSizeForTesting: NSSize? {
+        settingsWindow?.contentView?.bounds.size
+    }
+
+    var settingsWindowIsResizableForTesting: Bool {
+        settingsWindow?.styleMask.contains(.resizable) ?? false
+    }
+
+    var settingsWindowMinimumContentSizeForTesting: NSSize? {
+        settingsWindow?.contentMinSize
+    }
+
+    var settingsContentViewControllerForTesting: NSViewController? {
+        settingsWindow?.contentViewController
+    }
+
     func closeSettingsForTesting() {
         settingsWindow?.close()
     }

@@ -4,6 +4,15 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-28
+
+### Changed
+
+- Replaced the compact tab strip with a persistent, keyboard-navigable settings sidebar that names and describes each category.
+- Enlarged the macOS Settings window to a resizable 980×680pt default with an 840×560pt minimum, using a new saved-frame key so previous small windows do not override the new layout.
+- Added a structured **Information** page with application version, build number, local-data scope, privacy statement, update control, and project links.
+- Preserve the selected settings category, scroll position, and assistive-technology context when the Settings window is reopened.
+
 ## [1.0.1] - 2026-08-28
 
 ### Fixed
