@@ -4,6 +4,25 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-08-28
+
+### Added
+
+- Added an explicitly enabled macOS view of ChatGPT account-wide profile-day, current-week, current-month, and lifetime totals while keeping the existing local component breakdown separate.
+- Added secure, memory-only profile retrieval from a fixed ChatGPT endpoint using only the current Codex access token and account ID.
+
+### Fixed
+
+- Made delayed server snapshots display their exact profile date instead of presenting them as live local usage.
+- Refresh account totals immediately after opt-in or a week-start change, discard in-flight results after opt-out, and clear stale account values when credentials expire.
+- Invalidate and recalculate account week/month totals at local midnight, after wake, and after clock or time-zone changes so a prior calendar period is never shown under the new label.
+- Kept menu-bar account totals available even while local session history is still loading.
+
+### Security
+
+- Reject unsafe credential files, redirects, oversized responses, malformed statistics, duplicate dates, invalid token counts, and authentication failures without logging credentials or response bodies.
+- Keep remote account statistics out of SQLite, UserDefaults, Keychain, and diagnostics.
+
 ## [1.0.2] - 2026-08-28
 
 ### Changed
