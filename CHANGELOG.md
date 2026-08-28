@@ -17,6 +17,7 @@ All notable changes to CodexMeter will be documented in this file.
 - Refresh account totals immediately after opt-in or a week-start change, discard in-flight results after opt-out, and clear stale account values when credentials expire.
 - Invalidate and recalculate account week/month totals at local midnight, after wake, and after clock or time-zone changes so a prior calendar period is never shown under the new label.
 - Kept menu-bar account totals available even while local session history is still loading.
+- Reject a stable release when the Windows package version diverges from the macOS release version.
 
 ### Security
 
