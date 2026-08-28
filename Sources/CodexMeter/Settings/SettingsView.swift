@@ -302,15 +302,26 @@ private struct AppearanceSettingsView: View {
 }
 
 private struct UsageSettingsView: View {
+    @AppStorage("profileSyncEnabled") private var profileSyncEnabled = AppPreferences.defaultProfileSyncEnabled
+
     var body: some View {
         Form {
-            Section("Accounting") {
+            Section("ChatGPT Account Totals") {
+                Toggle("Use ChatGPT account totals", isOn: $profileSyncEnabled)
+                Text("When enabled, CodexMeter uses your current Codex sign-in only to request aggregate profile totals from chatgpt.com. Credentials and profile responses stay in memory and are never written to CodexMeter's database or logs.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Profile totals use a non-public ChatGPT endpoint and can be delayed to the date shown in the popover.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("This Mac Breakdown") {
                 Label("Input is counted", systemImage: "arrow.up")
                 Label("Cached input is counted", systemImage: "bolt.horizontal")
                 Label("Output is counted independently", systemImage: "arrow.down")
                 Label("Total equals all three components", systemImage: "sum")
             }
-            Text("The displayed total adds input, cached input, and output from records currently present in local Codex history. It uses the same activity formula as the ChatGPT profile, but the account total can be higher when older logs or activity from another computer are unavailable on this Mac. Calendar periods use your Mac's current time zone.")
+            Text("Account totals and this Mac's component breakdown are separate data sets and are never added together. Calendar periods use your Mac's current time zone and selected week start.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -479,8 +490,8 @@ private struct AboutSettingsView: View {
                     if let build {
                         LabeledContent("Build", value: build)
                     }
-                    LabeledContent("Data scope", value: "Local Codex history")
-                    LabeledContent("Privacy", value: "Stored on this Mac")
+                    LabeledContent("Data scope", value: "Local history + optional account totals")
+                    LabeledContent("Privacy", value: "Remote totals are memory-only")
                 }
                 Section("Updates") {
                     Button("Check for Updates…") {

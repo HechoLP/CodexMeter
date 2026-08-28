@@ -2,7 +2,7 @@
 
 ## Codex usage not found
 
-Confirm that Codex has created local session history on this Mac. CodexMeter does not query account-wide cloud usage and cannot recover deleted logs or usage from another computer.
+Confirm that Codex has created local session history on this Mac. Local History cannot recover deleted logs or usage from another computer. On macOS, enable **Settings → Usage & Privacy → Use ChatGPT account totals** to load the separate account-wide profile totals.
 
 ## Sessions directory is empty
 
@@ -10,7 +10,9 @@ CodexMeter reads `~/.codex/sessions` and `~/.codex/archived_sessions`. Run a loc
 
 ## Totals are lower than expected
 
-CodexMeter excludes a cumulative baseline, malformed event, or interleaved counter when it cannot derive a safe delta. Choose Data > Rebuild Statistics after Codex has finished writing its session files. Deleted logs and usage from another computer cannot be reconstructed locally.
+For **This Mac** values, CodexMeter excludes a cumulative baseline, malformed event, or interleaved counter when it cannot derive a safe delta. Choose Data > Rebuild Statistics after Codex has finished writing its session files. Deleted logs and usage from another computer cannot be reconstructed locally.
+
+For **ChatGPT account** values, confirm that Codex is signed in and profile sync is enabled. The displayed date is the server's exact snapshot date, so these totals can lag behind live local activity. A sign-in-expired or temporarily-unavailable status never changes local history.
 
 ## Rebuild statistics
 

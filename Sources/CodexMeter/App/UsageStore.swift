@@ -34,14 +34,23 @@ final class UsageStore: ObservableObject {
     private var previousRefreshModeRawValue = RefreshMode.automatic.rawValue
 
     var menuBarText: String {
+        menuBarText(totalOverride: nil)
+    }
+
+    func menuBarText(totalOverride: Int64?) -> String {
         let displayRawValue = defaults.string(forKey: "menuBarDisplay") ?? AppPreferences.defaultMenuBarDisplay
         let display = MenuBarDisplay(rawValue: displayRawValue) ?? .total
-        guard hasLoadedSnapshot else { return "…" }
-        guard snapshot.updatedAt != nil else { return "—" }
         let periodRawValue = defaults.string(forKey: "menuBarPeriod") ?? UsagePeriod.today.rawValue
         let numberStyleRawValue = defaults.string(forKey: "numberStyle") ?? TokenNumberStyle.compact.rawValue
         let period = UsagePeriod(rawValue: periodRawValue) ?? .today
         let style = TokenNumberStyle(rawValue: numberStyleRawValue) ?? .compact
+
+        if display == .total, let totalOverride {
+            return formatter.string(from: totalOverride, style: style)
+        }
+
+        guard hasLoadedSnapshot else { return "…" }
+        guard snapshot.updatedAt != nil else { return "—" }
         let usage = snapshot.totals(for: period)
 
         return switch display {
@@ -57,19 +66,31 @@ final class UsageStore: ObservableObject {
     }
 
     var menuBarAccessibilityLabel: String {
-        guard hasLoadedSnapshot else { return "CodexMeter, loading local usage" }
-        guard snapshot.updatedAt != nil else { return "CodexMeter, no local usage found" }
+        menuBarAccessibilityLabel(totalOverride: nil, totalPeriodDescription: nil)
+    }
+
+    func menuBarAccessibilityLabel(
+        totalOverride: Int64?,
+        totalPeriodDescription: String?
+    ) -> String {
         let periodRawValue = defaults.string(forKey: "menuBarPeriod") ?? UsagePeriod.today.rawValue
         let displayRawValue = defaults.string(forKey: "menuBarDisplay") ?? AppPreferences.defaultMenuBarDisplay
         let period = UsagePeriod(rawValue: periodRawValue) ?? .today
         let display = MenuBarDisplay(rawValue: displayRawValue) ?? .total
-        let usage = snapshot.totals(for: period)
         let periodName = switch period {
         case .today: "today"
         case .week: "this week"
         case .month: "this month"
         case .allTime: "in local history"
         }
+
+        if display == .total, let totalOverride {
+            return "CodexMeter, \(totalOverride) total tokens \(totalPeriodDescription ?? periodName)"
+        }
+
+        guard hasLoadedSnapshot else { return "CodexMeter, loading local usage" }
+        guard snapshot.updatedAt != nil else { return "CodexMeter, no local usage found" }
+        let usage = snapshot.totals(for: period)
         return switch display {
         case .total:
             "CodexMeter, \(usage.totalTokens) total tokens \(periodName)"

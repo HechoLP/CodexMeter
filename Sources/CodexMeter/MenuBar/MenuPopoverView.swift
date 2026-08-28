@@ -4,9 +4,11 @@ import SwiftUI
 struct MenuPopoverView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
+    @EnvironmentObject private var profileStore: ProfileUsageStore
     @AppStorage("numberStyle") private var numberStyleRawValue = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
     @AppStorage("showLastUpdated") private var showLastUpdated = true
+    @AppStorage("weekStart") private var weekStartRawValue = WeekStart.monday.rawValue
     @State private var refreshTurns = 0
 
     private let formatter = TokenFormatter()
@@ -15,9 +17,17 @@ struct MenuPopoverView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 header
-                usageSummary
-                Divider()
-                periodLinks
+                if usesProfileTotals {
+                    profileUsageSummary
+                    Divider()
+                    periodLinks
+                    Divider()
+                    localBreakdown
+                } else {
+                    localUsageSummary
+                    Divider()
+                    periodLinks
+                }
                 Divider()
                 footer
             }
@@ -26,9 +36,10 @@ struct MenuPopoverView: View {
             .navigationDestination(for: UsagePeriod.self) { period in
                 PeriodDetailView(period: period)
                     .environmentObject(store)
+                    .environmentObject(profileStore)
             }
         }
-        .onChange(of: store.isRefreshing) { _, isRefreshing in
+        .onChange(of: isRefreshing) { _, isRefreshing in
             guard isRefreshing, !reduceMotion else { return }
             refreshTurns += 1
         }
@@ -48,7 +59,7 @@ struct MenuPopoverView: View {
         .padding(.bottom, 12)
     }
 
-    private var usageSummary: some View {
+    private var localUsageSummary: some View {
         Group {
             if store.snapshot.updatedAt == nil {
                 HStack(spacing: 12) {
@@ -81,12 +92,12 @@ struct MenuPopoverView: View {
                                 reduceMotion ? nil : .easeOut(duration: 0.24),
                                 value: store.snapshot.today.totalTokens
                             )
-                        Text("Total tokens today")
+                        Text("This Mac tokens today")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Total tokens today, \(formatted(store.snapshot.today.totalTokens))")
+                    .accessibilityLabel("This Mac total tokens today, \(formatted(store.snapshot.today.totalTokens))")
 
                     VStack(spacing: 8) {
                         metricRow("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")
@@ -102,11 +113,78 @@ struct MenuPopoverView: View {
         .padding(.bottom, 16)
     }
 
+    private var profileUsageSummary: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("ChatGPT account")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            if let snapshot = profileStore.snapshot {
+                Text(formatted(snapshot.today))
+                    .font(.system(size: 32, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.24), value: snapshot.today)
+                Text("Profile day · \(profileDate(snapshot.statsAsOf))")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("ChatGPT profile tokens for \(profileDate(snapshot.statsAsOf))")
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 16)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var localBreakdown: some View {
+        Group {
+            if store.snapshot.updatedAt == nil {
+                HStack(spacing: 10) {
+                    if store.isRefreshing || !store.hasLoadedSnapshot {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "externaldrive.badge.questionmark")
+                            .foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(store.hasLoadedSnapshot ? "No local usage found" : "Reading this Mac's usage")
+                            .font(.subheadline.weight(.semibold))
+                        Text(store.statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .accessibilityElement(children: .combine)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("This Mac today")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Text(formatted(store.snapshot.today.totalTokens))
+                            .font(.subheadline)
+                            .monospacedDigit()
+                    }
+                    VStack(spacing: 8) {
+                        metricRow("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")
+                        if showCachedInput {
+                            metricRow("Cached input", value: store.snapshot.today.cachedInputTokens, symbol: "bolt.horizontal")
+                        }
+                        metricRow("Output", value: store.snapshot.today.outputTokens, symbol: "arrow.down")
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+    }
+
     private var periodLinks: some View {
         VStack(spacing: 0) {
-            periodLink("This Week", period: .week, value: store.snapshot.week.totalTokens)
-            periodLink("This Month", period: .month, value: store.snapshot.month.totalTokens)
-            periodLink("Local History", period: .allTime, value: store.snapshot.allTime.totalTokens)
+            periodLink("This Week", period: .week, value: displayedTotal(for: .week))
+            periodLink("This Month", period: .month, value: displayedTotal(for: .month))
+            periodLink(usesProfileTotals ? "Lifetime" : "Local History", period: .allTime, value: displayedTotal(for: .allTime))
         }
         .padding(.vertical, 6)
     }
@@ -115,7 +193,15 @@ struct MenuPopoverView: View {
         HStack(spacing: 10) {
             if shouldShowStatus {
                 Label {
-                    if showLastUpdated,
+                    if profileStore.isEnabled, let profileSnapshot = profileStore.snapshot {
+                        if profileStore.status == .ready {
+                            Text("Profile through \(profileDate(profileSnapshot.statsAsOf))")
+                        } else {
+                            Text("Profile through \(profileDate(profileSnapshot.statsAsOf)) · \(profileStore.statusMessage)")
+                        }
+                    } else if profileStore.isEnabled {
+                        Text("\(profileStore.statusMessage) · showing This Mac")
+                    } else if showLastUpdated,
                        !store.isRefreshing,
                        !store.isImportingHistory,
                        let lastSourceRefreshAt = store.lastSourceRefreshAt,
@@ -142,7 +228,13 @@ struct MenuPopoverView: View {
             }
             Spacer()
             Button {
-                Task { await store.refresh() }
+                Task {
+                    async let localRefresh: Void = store.refresh()
+                    async let profileRefresh: Void = profileStore.refresh(
+                        weekStart: WeekStart(rawValue: weekStartRawValue) ?? .monday
+                    )
+                    _ = await (localRefresh, profileRefresh)
+                }
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .rotationEffect(.degrees(Double(refreshTurns) * 360))
@@ -154,7 +246,7 @@ struct MenuPopoverView: View {
             .buttonStyle(.plain)
             .frame(width: 28, height: 28)
             .contentShape(Rectangle())
-            .disabled(store.isRefreshing || store.isMaintainingData || store.isImportingHistory)
+            .disabled(isRefreshing || store.isMaintainingData || store.isImportingHistory)
             .help("Refresh usage")
             .accessibilityLabel("Refresh usage")
 
@@ -189,11 +281,39 @@ struct MenuPopoverView: View {
         case .stale, .unavailable, .error: true
         case .exact, .partial: false
         }
-        return showLastUpdated || store.isRefreshing || store.isImportingHistory || qualityNeedsStatus
+        return profileStore.isEnabled || showLastUpdated || isRefreshing || store.isImportingHistory || qualityNeedsStatus
     }
 
     private var statusSymbol: String {
-        store.operationAwareStatusSymbol
+        if isRefreshing { return "arrow.triangle.2.circlepath" }
+        if profileStore.isEnabled {
+            return profileStore.status == .ready ? "checkmark.circle" : "exclamationmark.triangle"
+        }
+        return store.operationAwareStatusSymbol
+    }
+
+    private var usesProfileTotals: Bool {
+        profileStore.isEnabled && profileStore.snapshot != nil
+    }
+
+    private var isRefreshing: Bool {
+        store.isRefreshing || profileStore.isRefreshing
+    }
+
+    private func displayedTotal(for period: UsagePeriod) -> Int64 {
+        guard usesProfileTotals, let snapshot = profileStore.snapshot else {
+            return store.snapshot.totals(for: period).totalTokens
+        }
+        return switch period {
+        case .today: snapshot.today
+        case .week: snapshot.week
+        case .month: snapshot.month
+        case .allTime: snapshot.lifetime
+        }
+    }
+
+    private func profileDate(_ date: Date) -> String {
+        date.formatted(.dateTime.month(.abbreviated).day())
     }
 
     private func metricRow(_ title: String, value: Int64, symbol: String) -> some View {
@@ -234,7 +354,7 @@ struct MenuPopoverView: View {
             .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
-        .disabled(store.snapshot.updatedAt == nil)
+        .disabled(!usesProfileTotals && store.snapshot.updatedAt == nil)
         .accessibilityLabel("\(title), \(formatted(value)) tokens")
     }
 
