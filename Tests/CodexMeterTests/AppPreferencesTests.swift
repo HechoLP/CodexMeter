@@ -13,6 +13,7 @@ final class AppPreferencesTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "menuBarDisplay"), MenuBarDisplay.total.rawValue)
         XCTAssertTrue(defaults.bool(forKey: "showMenuBarIcon"))
         XCTAssertFalse(defaults.bool(forKey: "showMenuBarText"))
+        XCTAssertFalse(defaults.bool(forKey: "profileSyncEnabled"))
         XCTAssertTrue(
             AppPreferences.shouldShowMenuBarIcon(
                 display: defaults.string(forKey: "menuBarDisplay") ?? "",

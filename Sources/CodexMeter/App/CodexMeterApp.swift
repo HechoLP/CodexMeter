@@ -13,16 +13,24 @@ import SwiftUI
 struct CodexMeterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: UsageStore
+    @StateObject private var profileStore: ProfileUsageStore
     @AppStorage("menuBarDisplay") private var menuBarDisplay = AppPreferences.defaultMenuBarDisplay
+    @AppStorage("menuBarPeriod") private var menuBarPeriod = UsagePeriod.today.rawValue
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = AppPreferences.defaultShowMenuBarIcon
     @AppStorage("showMenuBarText") private var showMenuBarText = AppPreferences.defaultShowMenuBarText
 
     init() {
         AppPreferences.registerDefaults()
         let store = UsageStore()
+        let profileStore = ProfileUsageStore()
         _store = StateObject(wrappedValue: store)
+        _profileStore = StateObject(wrappedValue: profileStore)
         Task { @MainActor [weak store] in
             await store?.refresh()
+        }
+        Task { @MainActor [weak profileStore] in
+            profileStore?.synchronizeEnabledPreference()
+            await profileStore?.refresh(weekStart: Self.selectedWeekStart)
         }
     }
 
@@ -30,6 +38,7 @@ struct CodexMeterApp: App {
         MenuBarExtra {
             MenuPopoverView()
                 .environmentObject(store)
+                .environmentObject(profileStore)
         } label: {
             HStack(spacing: 4) {
                 if resolvedShowIcon {
@@ -37,20 +46,21 @@ struct CodexMeterApp: App {
                         .accessibilityHidden(true)
                 }
                 if resolvedShowText {
-                    Text(store.menuBarText)
+                    Text(menuBarText)
                         .monospacedDigit()
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: 220)
                 }
             }
-                .accessibilityLabel(store.menuBarAccessibilityLabel)
+                .accessibilityLabel(menuBarAccessibilityLabel)
         }
         .menuBarExtraStyle(.window)
 
         Settings {
             SettingsView()
                 .environmentObject(store)
+                .environmentObject(profileStore)
         }
     }
 
@@ -66,8 +76,48 @@ struct CodexMeterApp: App {
         AppPreferences.shouldShowMenuBarText(
             display: menuBarDisplay,
             showText: showMenuBarText,
-            text: store.menuBarText
+            text: menuBarText
         )
+    }
+
+    private var menuBarText: String {
+        store.menuBarText(totalOverride: profileTotalOverride)
+    }
+
+    private var menuBarAccessibilityLabel: String {
+        store.menuBarAccessibilityLabel(
+            totalOverride: profileTotalOverride,
+            totalPeriodDescription: profilePeriodDescription
+        )
+    }
+
+    private var profileTotalOverride: Int64? {
+        guard profileStore.isEnabled, let snapshot = profileStore.snapshot else { return nil }
+        return switch UsagePeriod(rawValue: menuBarPeriod) ?? .today {
+        case .today: snapshot.today
+        case .week: snapshot.week
+        case .month: snapshot.month
+        case .allTime: snapshot.lifetime
+        }
+    }
+
+    private var profilePeriodDescription: String? {
+        guard profileStore.isEnabled, let snapshot = profileStore.snapshot else { return nil }
+        let asOf = snapshot.statsAsOf.formatted(.dateTime.month(.abbreviated).day())
+        return switch UsagePeriod(rawValue: menuBarPeriod) ?? .today {
+        case .today: "for the ChatGPT profile day through \(asOf)"
+        case .week: "this week in the ChatGPT profile through \(asOf)"
+        case .month: "this month in the ChatGPT profile through \(asOf)"
+        case .allTime: "in the ChatGPT profile through \(asOf)"
+        }
+    }
+
+    private static var selectedWeekStart: WeekStart {
+        let defaults = UserDefaults.standard
+        let rawValue = defaults.object(forKey: "weekStart") == nil
+            ? WeekStart.monday.rawValue
+            : defaults.integer(forKey: "weekStart")
+        return WeekStart(rawValue: rawValue) ?? .monday
     }
 }
 

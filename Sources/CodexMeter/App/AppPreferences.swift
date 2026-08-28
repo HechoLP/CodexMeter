@@ -4,6 +4,7 @@ enum AppPreferences {
     static let defaultMenuBarDisplay = MenuBarDisplay.total.rawValue
     static let defaultShowMenuBarIcon = true
     static let defaultShowMenuBarText = false
+    static let defaultProfileSyncEnabled = false
     private static let legacyIconOnlyDisplay = "iconOnly"
 
     static func registerDefaults(in defaults: UserDefaults = .standard) {
@@ -11,7 +12,8 @@ enum AppPreferences {
             defaults: [
                 "menuBarDisplay": defaultMenuBarDisplay,
                 "showMenuBarIcon": defaultShowMenuBarIcon,
-                "showMenuBarText": defaultShowMenuBarText
+                "showMenuBarText": defaultShowMenuBarText,
+                "profileSyncEnabled": defaultProfileSyncEnabled
             ]
         )
         migrateLegacyIconOnlyPreference(in: defaults)
