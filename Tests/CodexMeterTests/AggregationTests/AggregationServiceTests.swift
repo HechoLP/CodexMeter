@@ -3,10 +3,10 @@ import XCTest
 @testable import CodexMeter
 
 final class AggregationServiceTests: XCTestCase {
-    func testTotalMatchesChatGPTProfileActivityAccounting() {
+    func testTotalCountsCachedInputOnlyAsPartOfInput() {
         let usage = TokenUsage(inputTokens: 1_200, cachedInputTokens: 800, outputTokens: 300)
 
-        XCTAssertEqual(usage.totalTokens, 2_300)
+        XCTAssertEqual(usage.totalTokens, 1_500)
     }
 
     func testMondayWeekAndPeriodBoundaries() throws {

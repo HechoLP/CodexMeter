@@ -7,7 +7,7 @@ namespace CodexMeter.Core.Tests;
 public sealed class CodexJsonlParserTests
 {
     [Fact]
-    public void ParsesTokenObservationAndUsesProfileActivityTotal()
+    public void ParsesTokenObservationWithoutDoubleCountingCachedInput()
     {
         const string line = """
             {"timestamp":"2026-08-27T01:02:03.456Z","type":"event_msg","ordinal":42,"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1200,"cached_input_tokens":800,"output_tokens":300},"last_token_usage":{"input_tokens":200,"cached_input_tokens":150,"output_tokens":50}}}}
@@ -18,7 +18,7 @@ public sealed class CodexJsonlParserTests
         Assert.Equal(ParsedLineKind.Token, result.Kind);
         Assert.Equal(42, result.Token!.Ordinal);
         Assert.Equal(new TokenUsage(200, 150, 50), result.Token.LastUsage);
-        Assert.Equal(2_300, result.Token.CumulativeUsage!.Value.TotalTokens);
+        Assert.Equal(1_500, result.Token.CumulativeUsage!.Value.TotalTokens);
     }
 
     [Theory]
