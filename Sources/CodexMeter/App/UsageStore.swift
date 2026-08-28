@@ -15,6 +15,9 @@ final class UsageStore: ObservableObject {
     @Published private(set) var dataOperationFailed = false
     @Published private(set) var dataStatistics = DataStatistics.empty
     @Published private(set) var sourceCount = 0
+    @Published private(set) var analyticsSnapshots: [AnalyticsRange: AnalyticsSnapshot] = [:]
+    @Published private(set) var isAnalyticsRefreshing = false
+    @Published private(set) var analyticsStatusMessage = "Analytics are ready to load"
 
     private let formatter = TokenFormatter()
     private let defaults = UserDefaults.standard
@@ -229,6 +232,7 @@ final class UsageStore: ObservableObject {
             sourceCount = result.sourceCount
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
+            await refreshAnalytics(range: .today, using: collector)
             updateWatcherForRefreshMode()
             await DiagnosticsLogger.shared.record(
                 .refreshCompleted(
@@ -302,6 +306,7 @@ final class UsageStore: ObservableObject {
             refreshPending = false
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
+            await refreshAnalytics(range: .today, using: collector)
             await DiagnosticsLogger.shared.record(.rebuildCompleted(quality: result.snapshot.quality))
             statusMessage = result.hasMoreWork
                 ? "Importing local history…"
@@ -336,6 +341,7 @@ final class UsageStore: ObservableObject {
             refreshPending = false
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
+            await refreshAnalytics(range: .today, using: collector)
             await DiagnosticsLogger.shared.record(.clearCompleted)
             statusMessage = result.hasMoreWork
                 ? "Importing local history…"
@@ -366,6 +372,35 @@ final class UsageStore: ObservableObject {
         sourceRoots = setup.1
         updateWatcherForRefreshMode()
         return collector
+    }
+
+    func analyticsSnapshot(for range: AnalyticsRange) -> AnalyticsSnapshot? {
+        analyticsSnapshots[range]
+    }
+
+    func refreshAnalytics(range: AnalyticsRange) async {
+        do {
+            let collector = try await collector()
+            await refreshAnalytics(range: range, using: collector)
+        } catch {
+            analyticsStatusMessage = analyticsSnapshots[range] == nil
+                ? "Analytics are unavailable"
+                : "Showing the last analytics snapshot"
+        }
+    }
+
+    private func refreshAnalytics(range: AnalyticsRange, using collector: CodexUsageCollector) async {
+        isAnalyticsRefreshing = true
+        defer { isAnalyticsRefreshing = false }
+        do {
+            let snapshot = try await collector.analyticsSnapshot(range: range)
+            analyticsSnapshots[range] = snapshot
+            analyticsStatusMessage = "Analytics updated"
+        } catch {
+            analyticsStatusMessage = analyticsSnapshots[range] == nil
+                ? "Analytics are unavailable"
+                : "Showing the last analytics snapshot"
+        }
     }
 
     private func startWatcher(roots: [URL]) {

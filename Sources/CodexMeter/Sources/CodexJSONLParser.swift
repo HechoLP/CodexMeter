@@ -5,6 +5,7 @@ enum CodexParsedLine: Equatable, Sendable {
     case sessionMetadata(SessionMetadata)
     case taskStarted(TaskStartedMetadata)
     case turnContext(TurnContextMetadata)
+    case imageAttachments(ImageAttachmentMetadata)
     case token(CodexTokenObservation)
     case ignored
     case malformed(String)
@@ -26,6 +27,11 @@ struct TaskStartedMetadata: Equatable, Sendable {
     let occurredAt: Date
     let startedAt: Date?
     let ordinal: Int64?
+}
+
+struct ImageAttachmentMetadata: Equatable, Sendable {
+    let occurredAt: Date
+    let count: Int
 }
 
 struct CodexJSONLParser: Sendable {
@@ -59,9 +65,31 @@ struct CodexJSONLParser: Sendable {
             return parseTurnContext(root)
         case "event_msg":
             return parseEventMessage(root)
+        case "response_item":
+            return parseResponseItem(root)
         default:
             return .ignored
         }
+    }
+
+    private func parseResponseItem(_ root: [String: Any]) -> CodexParsedLine {
+        guard let payload = root["payload"] as? [String: Any],
+              payload["type"] as? String == "message",
+              payload["role"] as? String == "user",
+              let content = payload["content"] as? [[String: Any]]
+        else { return .ignored }
+
+        let imageCount = content.reduce(into: 0) { count, item in
+            if item["type"] as? String == "input_image" {
+                count += 1
+            }
+        }
+        guard imageCount > 0 else { return .ignored }
+        guard let timestamp = root["timestamp"] as? String,
+              let occurredAt = parseTimestamp(timestamp) else {
+            return .malformed("image metadata is missing a valid timestamp")
+        }
+        return .imageAttachments(ImageAttachmentMetadata(occurredAt: occurredAt, count: imageCount))
     }
 
     private func parseTurnContext(_ root: [String: Any]) -> CodexParsedLine {
@@ -145,15 +173,25 @@ struct CodexJSONLParser: Sendable {
 
     private func parseUsage(_ value: Any?) -> TokenUsage? {
         guard let dictionary = value as? [String: Any] else { return nil }
-        guard
-            let input = integer(dictionary["input_tokens"]),
-            let cached = integer(dictionary["cached_input_tokens"]),
-            let output = integer(dictionary["output_tokens"])
-        else {
-            return nil
+        guard let input = integer(dictionary["input_tokens"]),
+              let cached = integer(dictionary["cached_input_tokens"]),
+              let output = integer(dictionary["output_tokens"])
+        else { return nil }
+
+        let cacheWrite: Int64?
+        if dictionary.keys.contains("cache_write_input_tokens") {
+            guard let parsed = integer(dictionary["cache_write_input_tokens"]) else { return nil }
+            cacheWrite = parsed
+        } else {
+            cacheWrite = nil
         }
 
-        let usage = TokenUsage(inputTokens: input, cachedInputTokens: cached, outputTokens: output)
+        let usage = TokenUsage(
+            inputTokens: input,
+            cachedInputTokens: cached,
+            cacheWriteInputTokens: cacheWrite,
+            outputTokens: output
+        )
         return usage.isValid ? usage : nil
     }
 

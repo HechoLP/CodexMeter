@@ -302,10 +302,46 @@ private struct AppearanceSettingsView: View {
 }
 
 private struct UsageSettingsView: View {
+    @EnvironmentObject private var limitStore: AccountLimitStore
     @AppStorage("profileSyncEnabled") private var profileSyncEnabled = AppPreferences.defaultProfileSyncEnabled
+    @AppStorage("accountLimitsEnabled") private var accountLimitsEnabled = AppPreferences.defaultAccountLimitsEnabled
+    @AppStorage("analyticsEnabled") private var analyticsEnabled = AppPreferences.defaultAnalyticsEnabled
+    @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
+    @AppStorage("additionalLimitsEnabled") private var additionalLimitsEnabled = AppPreferences.defaultAdditionalLimitsEnabled
+    @AppStorage("resetCreditsEnabled") private var resetCreditsEnabled = AppPreferences.defaultResetCreditsEnabled
+    @AppStorage("projectsEnabled") private var projectsEnabled = AppPreferences.defaultProjectsEnabled
+    @AppStorage("sessionsEnabled") private var sessionsEnabled = AppPreferences.defaultSessionsEnabled
+    @AppStorage("agentDetailsEnabled") private var agentDetailsEnabled = AppPreferences.defaultAgentDetailsEnabled
+    @AppStorage("attachmentMetadataEnabled") private var attachmentMetadataEnabled = AppPreferences.defaultAttachmentMetadataEnabled
 
     var body: some View {
         Form {
+            Section("Limits") {
+                Toggle("Show account limits", isOn: $accountLimitsEnabled)
+                    .onChange(of: accountLimitsEnabled) { _, _ in
+                        limitStore.synchronizeEnabledPreference()
+                    }
+                Toggle("Show additional limits", isOn: $additionalLimitsEnabled)
+                    .disabled(!accountLimitsEnabled)
+                Toggle("Show reset credits", isOn: $resetCreditsEnabled)
+                    .disabled(!accountLimitsEnabled)
+            }
+            Section("Usage Analytics") {
+                Toggle("Show usage analytics", isOn: $analyticsEnabled)
+                Toggle("Show estimated API-equivalent cost", isOn: $costEstimatesEnabled)
+                    .disabled(!analyticsEnabled)
+                Toggle("Show projects", isOn: $projectsEnabled)
+                    .disabled(!analyticsEnabled)
+                Toggle("Show sessions", isOn: $sessionsEnabled)
+                    .disabled(!analyticsEnabled)
+                Toggle("Show agent details", isOn: $agentDetailsEnabled)
+                    .disabled(!analyticsEnabled || !sessionsEnabled)
+                Toggle("Show attachment metadata", isOn: $attachmentMetadataEnabled)
+                    .disabled(!analyticsEnabled || !sessionsEnabled)
+                Text("Cost is an estimate based on current official API token prices. It is not a bill, subscription charge, or prediction of remaining quota.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("ChatGPT Account Totals") {
                 Toggle("Use ChatGPT account totals", isOn: $profileSyncEnabled)
                 Text("When enabled, CodexMeter uses your current Codex sign-in only to request aggregate profile totals from chatgpt.com. Credentials and profile responses stay in memory and are never written to CodexMeter's database or logs.")
@@ -327,6 +363,14 @@ private struct UsageSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Section("Privacy") {
+                Label("Project identifiers are stored as keyed hashes", systemImage: "lock.shield")
+                Label("Only project folder names are shown", systemImage: "folder.badge.questionmark")
+                Label("Prompts, responses, paths, and attachment contents are not stored", systemImage: "hand.raised")
+                Text("Limits are requested read-only from the signed Codex app-server. The last successful response stays in memory only.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Text("Account totals and this Mac's component breakdown are separate data sets and are never added together. Calendar periods use your Mac's current time zone and selected week start.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -338,6 +382,7 @@ private struct UsageSettingsView: View {
 
 private struct DataSettingsView: View {
     @EnvironmentObject private var store: UsageStore
+    @EnvironmentObject private var limitStore: AccountLimitStore
     @State private var confirmsClear = false
 
     var body: some View {
@@ -351,6 +396,11 @@ private struct DataSettingsView: View {
                 Button("Open Data Folder") {
                     openDataFolder()
                 }
+            }
+            Section("Sources") {
+                statisticRow("Local Codex sessions", store.sourceStatusText)
+                statisticRow("Account limits", accountLimitStatus)
+                statisticRow("Pricing catalog", "Available · \(PricingCatalog.current.metadata.version)")
             }
             Section {
                 if store.isMaintainingData || store.isRefreshing || store.isImportingHistory {
@@ -422,6 +472,16 @@ private struct DataSettingsView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("\(title), \(value)")
     }
+
+    private var accountLimitStatus: String {
+        switch limitStore.status {
+        case .disabled: "Disabled"
+        case .loading: "Checking…"
+        case .ready: "Connected"
+        case .stale: "Last known data"
+        case .unavailable: "Unavailable"
+        }
+    }
 }
 
 private struct AdvancedSettingsView: View {
@@ -434,6 +494,13 @@ private struct AdvancedSettingsView: View {
                 Button("Open Log Folder") {
                     openLogFolder()
                 }
+            }
+            Section("Account Limit Source") {
+                LabeledContent("Mode", value: "Automatic")
+                LabeledContent("Provider", value: "Signed Codex app-server")
+                Text("CodexMeter uses a read-only local RPC request and does not expose reset or purchase actions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Text("Diagnostics never include prompts, responses, source code, terminal output, or authentication tokens.")
                 .font(.caption)

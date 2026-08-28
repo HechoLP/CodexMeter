@@ -69,7 +69,7 @@ struct UsageNormalizer: Sendable {
             }
 
             return UsageNormalizationResult(
-                delta: cumulative == .zero ? nil : cumulative,
+                delta: cumulative.isZero ? nil : cumulative,
                 state: UsageNormalizationState(
                     cumulativeHighWaterMark: cumulative,
                     lastObservedAt: observation.occurredAt,
@@ -82,7 +82,7 @@ struct UsageNormalizer: Sendable {
         guard cumulative.isComponentWiseAtLeast(previous) else {
             if observation.lastUsage == cumulative {
                 return UsageNormalizationResult(
-                    delta: cumulative == .zero ? nil : cumulative,
+                    delta: cumulative.isZero ? nil : cumulative,
                     state: UsageNormalizationState(
                         cumulativeHighWaterMark: cumulative,
                         lastObservedAt: observation.occurredAt,
@@ -105,7 +105,7 @@ struct UsageNormalizer: Sendable {
 
         let delta = cumulative.subtractingFloorAtZero(previous)
         return UsageNormalizationResult(
-            delta: delta == .zero ? nil : delta,
+            delta: delta.isZero ? nil : delta,
             state: UsageNormalizationState(
                 cumulativeHighWaterMark: cumulative,
                 lastObservedAt: observation.occurredAt,

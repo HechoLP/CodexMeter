@@ -5,6 +5,15 @@ enum AppPreferences {
     static let defaultShowMenuBarIcon = true
     static let defaultShowMenuBarText = false
     static let defaultProfileSyncEnabled = false
+    static let defaultAccountLimitsEnabled = true
+    static let defaultAnalyticsEnabled = true
+    static let defaultCostEstimatesEnabled = true
+    static let defaultAdditionalLimitsEnabled = true
+    static let defaultResetCreditsEnabled = true
+    static let defaultProjectsEnabled = true
+    static let defaultSessionsEnabled = true
+    static let defaultAgentDetailsEnabled = true
+    static let defaultAttachmentMetadataEnabled = true
     private static let legacyIconOnlyDisplay = "iconOnly"
 
     static func registerDefaults(in defaults: UserDefaults = .standard) {
@@ -13,7 +22,16 @@ enum AppPreferences {
                 "menuBarDisplay": defaultMenuBarDisplay,
                 "showMenuBarIcon": defaultShowMenuBarIcon,
                 "showMenuBarText": defaultShowMenuBarText,
-                "profileSyncEnabled": defaultProfileSyncEnabled
+                "profileSyncEnabled": defaultProfileSyncEnabled,
+                "accountLimitsEnabled": defaultAccountLimitsEnabled,
+                "analyticsEnabled": defaultAnalyticsEnabled,
+                "costEstimatesEnabled": defaultCostEstimatesEnabled,
+                "additionalLimitsEnabled": defaultAdditionalLimitsEnabled,
+                "resetCreditsEnabled": defaultResetCreditsEnabled,
+                "projectsEnabled": defaultProjectsEnabled,
+                "sessionsEnabled": defaultSessionsEnabled,
+                "agentDetailsEnabled": defaultAgentDetailsEnabled,
+                "attachmentMetadataEnabled": defaultAttachmentMetadataEnabled
             ]
         )
         migrateLegacyIconOnlyPreference(in: defaults)

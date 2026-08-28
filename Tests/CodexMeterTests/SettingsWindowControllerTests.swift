@@ -8,9 +8,13 @@ final class SettingsWindowControllerTests: XCTestCase {
         _ = NSApplication.shared
         let controller = SettingsWindowController()
         let store = UsageStore()
+        let limitStore = AccountLimitStore(
+            provider: SettingsTestLimitProvider(),
+            pollingInterval: nil
+        )
         defer { controller.closeSettingsForTesting() }
 
-        controller.showSettings(for: store)
+        controller.showSettings(for: store, limitStore: limitStore)
         XCTAssertTrue(controller.isSettingsWindowVisible)
         XCTAssertTrue(controller.settingsWindowIsResizableForTesting)
         XCTAssertEqual(
@@ -30,8 +34,14 @@ final class SettingsWindowControllerTests: XCTestCase {
         controller.closeSettingsForTesting()
         XCTAssertFalse(controller.isSettingsWindowVisible)
 
-        controller.showSettings(for: store)
+        controller.showSettings(for: store, limitStore: limitStore)
         XCTAssertTrue(controller.isSettingsWindowVisible)
         XCTAssertTrue(firstContentController === controller.settingsContentViewControllerForTesting)
+    }
+}
+
+private struct SettingsTestLimitProvider: AccountLimitProviding {
+    func readLimits() async throws -> AccountLimitsSnapshot {
+        throw AccountLimitError.trustedAppServerNotFound
     }
 }

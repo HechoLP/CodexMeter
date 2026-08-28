@@ -5,10 +5,17 @@ struct MenuPopoverView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
     @EnvironmentObject private var profileStore: ProfileUsageStore
+    @EnvironmentObject private var limitStore: AccountLimitStore
     @AppStorage("numberStyle") private var numberStyleRawValue = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
     @AppStorage("showLastUpdated") private var showLastUpdated = true
     @AppStorage("weekStart") private var weekStartRawValue = WeekStart.monday.rawValue
+    @AppStorage("analyticsEnabled") private var analyticsEnabled = AppPreferences.defaultAnalyticsEnabled
+    @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
+    @AppStorage("accountLimitsEnabled") private var accountLimitsEnabled = AppPreferences.defaultAccountLimitsEnabled
+    @AppStorage("additionalLimitsEnabled") private var additionalLimitsEnabled = AppPreferences.defaultAdditionalLimitsEnabled
+    @AppStorage("projectsEnabled") private var projectsEnabled = AppPreferences.defaultProjectsEnabled
+    @AppStorage("sessionsEnabled") private var sessionsEnabled = AppPreferences.defaultSessionsEnabled
     @State private var refreshTurns = 0
 
     private let formatter = TokenFormatter()
@@ -24,6 +31,10 @@ struct MenuPopoverView: View {
                 } else {
                     localPeriodLinks
                 }
+                if accountLimitsEnabled || analyticsEnabled {
+                    Divider()
+                    detailLinks
+                }
                 Divider()
                 footer
             }
@@ -33,6 +44,24 @@ struct MenuPopoverView: View {
                 PeriodDetailView(period: period)
                     .environmentObject(store)
                     .environmentObject(profileStore)
+            }
+            .navigationDestination(for: MenuDestination.self) { destination in
+                switch destination {
+                case .limits:
+                    AccountLimitsView()
+                case .usage:
+                    UsageAnalyticsView()
+                case .projects:
+                    ProjectsAnalyticsView()
+                case .sessions:
+                    SessionsAnalyticsView()
+                case let .project(id, range):
+                    ProjectDetailView(id: id, range: range)
+                case let .session(id, range):
+                    SessionDetailView(id: id, range: range)
+                case let .model(id, range):
+                    ModelDetailView(id: id, range: range)
+                }
             }
         }
         .onChange(of: isRefreshing) { _, isRefreshing in
@@ -103,6 +132,10 @@ struct MenuPopoverView: View {
                         }
                         metricRow("Output", value: store.snapshot.today.outputTokens, symbol: "arrow.down")
                     }
+                    if analyticsEnabled, costEstimatesEnabled,
+                       let analytics = store.analyticsSnapshots[.today] {
+                        EstimatedCostLabel(snapshot: analytics)
+                    }
                 }
             }
         }
@@ -140,6 +173,24 @@ struct MenuPopoverView: View {
             }
         }
         .padding(.bottom, 6)
+    }
+
+    private var detailLinks: some View {
+        VStack(spacing: 0) {
+            if accountLimitsEnabled {
+                destinationLink("Limits", detail: limitSummary, symbol: "gauge.with.dots.needle.50percent", destination: .limits)
+            }
+            if analyticsEnabled {
+                destinationLink("Usage", detail: "Today · 7D · 30D", symbol: "chart.xyaxis.line", destination: .usage)
+                if projectsEnabled {
+                    destinationLink("Projects", detail: "Local usage by project", symbol: "folder", destination: .projects)
+                }
+                if sessionsEnabled {
+                    destinationLink("Sessions", detail: "Sessions and sub-agents", symbol: "text.bubble", destination: .sessions)
+                }
+            }
+        }
+        .padding(.vertical, 6)
     }
 
     private var footer: some View {
@@ -186,7 +237,8 @@ struct MenuPopoverView: View {
                     async let profileRefresh: Void = profileStore.refresh(
                         weekStart: WeekStart(rawValue: weekStartRawValue) ?? .monday
                     )
-                    _ = await (localRefresh, profileRefresh)
+                    async let limitsRefresh: Void = limitStore.refresh()
+                    _ = await (localRefresh, profileRefresh, limitsRefresh)
                 }
             } label: {
                 Image(systemName: "arrow.clockwise")
@@ -204,7 +256,7 @@ struct MenuPopoverView: View {
             .accessibilityLabel("Refresh usage")
 
             Button {
-                SettingsWindowController.shared.showSettings(for: store)
+                SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
             } label: {
                 Image(systemName: "gearshape")
             }
@@ -250,7 +302,7 @@ struct MenuPopoverView: View {
     }
 
     private var isRefreshing: Bool {
-        store.isRefreshing || profileStore.isRefreshing
+        store.isRefreshing || profileStore.isRefreshing || limitStore.isRefreshing
     }
 
     private func displayedTotal(for period: UsagePeriod) -> Int64 {
@@ -312,5 +364,48 @@ struct MenuPopoverView: View {
             from: value,
             style: TokenNumberStyle(rawValue: numberStyleRawValue) ?? .compact
         )
+    }
+
+    private var limitSummary: String {
+        guard limitStore.isEnabled else { return "Disabled" }
+        guard let allWindows = limitStore.snapshot?.windows, !allWindows.isEmpty else {
+            return limitStore.statusMessage
+        }
+        let windows = additionalLimitsEnabled
+            ? allWindows
+            : allWindows.filter { $0.limitID.lowercased() == "codex" }
+        guard !windows.isEmpty else { return "No Codex limit reported" }
+        let remaining = windows.map(\.remainingPercent).min() ?? 0
+        return "\(Int(remaining.rounded()))% minimum remaining"
+    }
+
+    private func destinationLink(
+        _ title: String,
+        detail: String,
+        symbol: String,
+        destination: MenuDestination
+    ) -> some View {
+        NavigationLink(value: destination) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .frame(width: 16)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

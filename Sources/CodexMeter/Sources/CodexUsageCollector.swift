@@ -197,6 +197,14 @@ actor CodexUsageCollector {
         try await database.usageSnapshot(now: now, calendar: calendar, weekStart: weekStart)
     }
 
+    func analyticsSnapshot(
+        range: AnalyticsRange,
+        through end: Date = Date(),
+        calendar: Calendar = .current
+    ) async throws -> AnalyticsSnapshot {
+        try await database.analyticsSnapshot(range: range, through: end, calendar: calendar)
+    }
+
     func refresh(now: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
         let sources = try discovery.discover(in: roots)
         let activeCheckpointKeys = Set(
@@ -460,9 +468,10 @@ actor CodexUsageCollector {
 
         var metadata = SessionMetadata(
             id: checkpoint.sessionID,
-            model: nil,
+            model: checkpoint.model,
             workingDirectory: nil,
             forkedFromID: checkpoint.inheritsHistory ? "inherited" : nil,
+            parentThreadID: checkpoint.parentSessionID,
             subagentHistoryStartOrdinal: checkpoint.inheritedHistoryEndOrdinal,
             occurredAt: checkpoint.sessionStartedAt
         )
@@ -737,6 +746,7 @@ actor CodexUsageCollector {
                 || line.containsASCII("\"session_meta\"")
                 || line.containsASCII("\"task_started\"")
                 || line.containsASCII("\"turn_context\"")
+                || (line.containsASCII("\"response_item\"") && line.containsASCII("\"input_image\""))
         else { return }
 
         switch parser.parse(line) {
@@ -748,12 +758,15 @@ actor CodexUsageCollector {
                 return
             }
             let resolvedID = parsed.id.map(storageIdentifier) ?? checkpoint.sessionID
+            let resolvedModel = canonicalModelID(parsed.model)
+            let project = try await projectProjection(parsed.workingDirectory)
+            let parentSessionID = parsed.parentThreadID.map(storageIdentifier)
             metadata = SessionMetadata(
                 id: resolvedID,
-                model: nil,
+                model: resolvedModel,
                 workingDirectory: nil,
                 forkedFromID: parsed.forkedFromID,
-                parentThreadID: parsed.parentThreadID,
+                parentThreadID: parentSessionID,
                 subagentHistoryStartOrdinal: parsed.subagentHistoryStartOrdinal,
                 occurredAt: parsed.occurredAt
             )
@@ -762,8 +775,10 @@ actor CodexUsageCollector {
             checkpoint.sessionStartedAt = parsed.occurredAt
             checkpoint.inheritedHistoryEndOrdinal = parsed.subagentHistoryStartOrdinal
             checkpoint.historyReplayComplete = !parsed.inheritsHistory
-            checkpoint.model = nil
-            checkpoint.projectPath = nil
+            checkpoint.model = resolvedModel
+            checkpoint.projectPath = project?.id
+            checkpoint.projectName = project?.name
+            checkpoint.parentSessionID = parentSessionID
             if resolvedID != loadedStateSessionID, let resolvedID {
                 normalizationState = try await database.normalizationState(for: resolvedID)
                 persistedNormalizationState = normalizationState
@@ -786,8 +801,29 @@ actor CodexUsageCollector {
                 checkpoint.historyReplayComplete = true
             }
 
-        case .turnContext:
-            break
+        case let .turnContext(context):
+            if let model = canonicalModelID(context.model) {
+                checkpoint.model = model
+                metadata = SessionMetadata(
+                    id: metadata.id,
+                    model: model,
+                    workingDirectory: nil,
+                    forkedFromID: metadata.forkedFromID,
+                    parentThreadID: metadata.parentThreadID,
+                    subagentHistoryStartOrdinal: metadata.subagentHistoryStartOrdinal,
+                    occurredAt: metadata.occurredAt
+                )
+            }
+            if let project = try await projectProjection(context.workingDirectory) {
+                checkpoint.projectPath = project.id
+                checkpoint.projectName = project.name
+            }
+
+        case let .imageAttachments(attachment):
+            guard !checkpoint.inheritsHistory || checkpoint.historyReplayComplete else { return }
+            if let importCutoff, attachment.occurredAt <= importCutoff { return }
+            let result = checkpoint.imageAttachmentCount.addingReportingOverflow(Int64(attachment.count))
+            checkpoint.imageAttachmentCount = result.overflow ? Int64.max : result.partialValue
 
         case let .token(observation):
             let isInheritedReplay: Bool
@@ -806,7 +842,7 @@ actor CodexUsageCollector {
             let result = normalizer.normalize(observation, metadata: metadata, state: normalizationState)
             normalizationState = result.state
             guard !isInheritedReplay else { return }
-            guard let delta = result.delta, delta != .zero else { return }
+            guard let delta = result.delta, !delta.isZero else { return }
             if let importCutoff, observation.occurredAt <= importCutoff { return }
             let sessionID = checkpoint.sessionID
             pendingEvents.append(
@@ -817,11 +853,12 @@ actor CodexUsageCollector {
                     ),
                     occurredAt: observation.occurredAt,
                     sessionID: sessionID,
-                    model: nil,
-                    projectPath: nil,
+                    model: checkpoint.model,
+                    projectPath: checkpoint.projectPath,
                     usage: delta,
                     sourcePath: storageIdentifier(source.url.standardizedFileURL.path),
-                    sourcePosition: position
+                    sourcePosition: position,
+                    pricingContext: pricingContext(observation: observation, delta: delta)
                 )
             )
 
@@ -850,7 +887,19 @@ actor CodexUsageCollector {
 
     private func usageIdentity(_ usage: TokenUsage?) -> String {
         guard let usage else { return "none" }
+        // Keep the v2 identity compatible with Phase 1 databases. Cache-write
+        // tokens are enrichment metadata for the same source observation, not a
+        // reason to create a second accounting event during the v15 backfill.
         return "\(usage.inputTokens),\(usage.cachedInputTokens),\(usage.outputTokens)"
+    }
+
+    private func pricingContext(
+        observation: CodexTokenObservation,
+        delta: TokenUsage
+    ) -> PricingContext? {
+        guard delta.inputTokens > PricingContext.highContextInputThreshold else { return .standard }
+        guard observation.lastUsage == delta else { return nil }
+        return .highContext
     }
 
     private func sessionIdentifierFromFilename(_ url: URL) -> String? {
@@ -868,6 +917,48 @@ actor CodexUsageCollector {
     private func storageIdentifier(_ value: Data) -> String {
         SHA256.hash(data: value).map { String(format: "%02x", $0) }.joined()
     }
+
+    private func canonicalModelID(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty,
+              normalized.utf8.count <= 128,
+              normalized.unicodeScalars.allSatisfy({
+                  CharacterSet.alphanumerics.contains($0) || ".-_".unicodeScalars.contains($0)
+              })
+        else { return nil }
+        return normalized
+    }
+
+    private func projectProjection(_ workingDirectory: String?) async throws -> (id: String, name: String)? {
+        guard let workingDirectory,
+              !workingDirectory.isEmpty,
+              workingDirectory.utf8.count <= 4_096,
+              !workingDirectory.contains("\0")
+        else { return nil }
+
+        let standardizedPath = URL(fileURLWithPath: workingDirectory).standardizedFileURL.path
+        let name = URL(fileURLWithPath: standardizedPath).lastPathComponent
+        guard !name.isEmpty,
+              name != ".",
+              name != "..",
+              name.utf8.count <= 128,
+              !name.contains("\0")
+        else { return nil }
+
+        let key = SymmetricKey(data: try await sourceFingerprintKey())
+        let material = Data("CodexMeter.project.v1|\(standardizedPath)".utf8)
+        let digest = HMAC<SHA256>.authenticationCode(for: material, using: key)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return (digest, name)
+    }
+
+#if DEBUG
+    func projectProjectionForTesting(_ workingDirectory: String) async throws -> (id: String, name: String)? {
+        try await projectProjection(workingDirectory)
+    }
+#endif
 }
 
 private extension Data {

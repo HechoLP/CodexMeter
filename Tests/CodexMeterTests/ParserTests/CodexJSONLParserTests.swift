@@ -91,4 +91,22 @@ final class CodexJSONLParserTests: XCTestCase {
             .turnContext(TurnContextMetadata(model: "gpt-example", workingDirectory: "/tmp/project"))
         )
     }
+
+    func testCountsOnlyUserInputImagesWithoutRetainingTheirContent() {
+        let line = #"{"timestamp":"2026-08-27T01:02:03Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"private"},{"type":"input_image","image_url":"data:image/png;base64,private"},{"type":"input_image","image_url":"file:///private/image.png"}]}}"#
+        let occurredAt = try! Date.ISO8601FormatStyle().parse("2026-08-27T01:02:03Z")
+        XCTAssertEqual(
+            parser.parse(Data(line.utf8)),
+            .imageAttachments(ImageAttachmentMetadata(occurredAt: occurredAt, count: 2))
+        )
+
+        let missingTimestamp = #"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_image","image_url":"private"}]}}"#
+        XCTAssertEqual(
+            parser.parse(Data(missingTimestamp.utf8)),
+            .malformed("image metadata is missing a valid timestamp")
+        )
+
+        let assistant = #"{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"input_image","image_url":"ignored"}]}}"#
+        XCTAssertEqual(parser.parse(Data(assistant.utf8)), .ignored)
+    }
 }

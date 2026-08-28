@@ -4,6 +4,336 @@ import XCTest
 @testable import CodexMeter
 
 final class CodexUsageCollectorTests: XCTestCase {
+    func testVersion15BackfillEnrichesLegacyRowsWithoutChangingTotals() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        let sessionID = "90909090-9090-9090-9090-909090909090"
+        let source = sessions.appendingPathComponent(
+            "rollout-2026-08-27T00-00-00-\(sessionID).jsonl"
+        )
+        let metadata =
+            #"{"timestamp":"2026-08-27T00:00:00Z","type":"session_meta","payload":{"id":"90909090-9090-9090-9090-909090909090","model":"gpt-5.5","cwd":"/tmp/legacy-project"}}"#
+        let token = tokenLine(
+            input: 100,
+            cached: 50,
+            output: 20,
+            lastInput: 100,
+            lastCached: 50,
+            lastOutput: 20,
+            ordinal: 1
+        )
+        let sourceData = Data((metadata + "\n" + token + "\n").utf8)
+        try sourceData.write(to: source)
+
+        let databaseURL = root.appendingPathComponent("usage.sqlite")
+        let sourceIdentity = try XCTUnwrap(
+            CodexSourceDiscovery().discover(in: [sessions]).first?.identity
+        )
+        let sourceKey = storageIdentifier(source.standardizedFileURL.path)
+        let storedSessionID = storageIdentifier(sessionID)
+        let occurredAt = try Date.ISO8601FormatStyle().parse("2026-08-27T00:01:00Z")
+        let usage = TokenUsage(inputTokens: 100, cachedInputTokens: 50, outputTokens: 20)
+
+        do {
+            let legacyDatabase = try SQLiteDatabase(url: databaseURL)
+            let checkpoint = SourceCheckpoint(
+                sourcePath: sourceKey,
+                fileIdentity: sourceIdentity,
+                generation: 0,
+                committedOffset: Int64(sourceData.count),
+                sessionID: storedSessionID,
+                inheritsHistory: false,
+                model: nil,
+                projectPath: nil
+            )
+            let legacyEvent = UsageEvent(
+                eventKey: legacyEventKey(
+                    sessionID: storedSessionID,
+                    occurredAt: occurredAt,
+                    ordinal: 1,
+                    usage: usage
+                ),
+                occurredAt: occurredAt,
+                sessionID: storedSessionID,
+                model: nil,
+                projectPath: nil,
+                usage: usage,
+                sourcePath: sourceKey,
+                sourcePosition: Int64(Data((metadata + "\n").utf8).count)
+            )
+            try await legacyDatabase.commit(
+                events: [legacyEvent],
+                checkpoint: checkpoint,
+                normalizationState: UsageNormalizationState(
+                    cumulativeHighWaterMark: usage,
+                    lastObservedAt: occurredAt,
+                    quality: .exact
+                )
+            )
+            try await legacyDatabase.prepareVersion14FixtureForTesting()
+        }
+
+        let migrated = try SQLiteDatabase(url: databaseURL)
+        let migratedEventCount = try await migrated.eventCount()
+        let migratedCheckpoint = try await migrated.checkpoint(for: sourceKey)
+        let migratedState = try await migrated.normalizationState(for: storedSessionID)
+        XCTAssertEqual(migratedEventCount, 1)
+        XCTAssertEqual(migratedCheckpoint?.generation, 1)
+        XCTAssertEqual(migratedCheckpoint?.committedOffset, 0)
+        XCTAssertEqual(migratedState, .empty)
+
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        let collector = CodexUsageCollector(database: migrated, roots: [sessions])
+        var refresh = try await collector.refresh(
+            now: now,
+            calendar: utcCalendar,
+            weekStart: .monday
+        )
+        while refresh.hasMoreWork {
+            refresh = try await collector.refresh(
+                now: now,
+                calendar: utcCalendar,
+                weekStart: .monday
+            )
+        }
+
+        XCTAssertEqual(refresh.snapshot.allTime, usage)
+        let backfilledEventCount = try await migrated.eventCount()
+        XCTAssertEqual(backfilledEventCount, 1)
+        let analytics = try await migrated.analyticsSnapshot(
+            range: .today,
+            through: now,
+            calendar: utcCalendar
+        )
+        XCTAssertEqual(analytics.usage, usage)
+        XCTAssertEqual(analytics.models.first?.modelID, "gpt-5.5")
+        XCTAssertEqual(analytics.projects.first?.name, "legacy-project")
+        XCTAssertNotNil(
+            CostEstimator().estimate(
+                analytics.models.map {
+                    ModelTokenUsageSample(
+                        modelID: $0.modelID ?? "unknown",
+                        usage: $0.usage,
+                        highContextUsage: $0.highContextUsage,
+                        hasUnknownPricingContext: $0.hasUnknownPricingContext,
+                        occurredAt: occurredAt
+                    )
+                }
+            ).amountUSD
+        )
+    }
+
+    func testVersion15BackfillUsesANewGenerationAfterHistoricalRewrites() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        let sessionID = "91919191-9191-9191-9191-919191919191"
+        let source = sessions.appendingPathComponent(
+            "rollout-2026-08-27T00-00-00-\(sessionID).jsonl"
+        )
+        let metadata =
+            #"{"timestamp":"2026-08-27T00:00:00Z","type":"session_meta","payload":{"id":"91919191-9191-9191-9191-919191919191","model":"gpt-5.5","cwd":"/tmp/rewrite-project"}}"#
+        let firstToken = tokenLine(
+            input: 100,
+            cached: 50,
+            output: 20,
+            lastInput: 100,
+            lastCached: 50,
+            lastOutput: 20,
+            ordinal: 1
+        )
+        let sourceData = Data((metadata + "\n" + firstToken + "\n").utf8)
+        try sourceData.write(to: source)
+
+        let databaseURL = root.appendingPathComponent("usage.sqlite")
+        let sourceIdentity = try XCTUnwrap(
+            CodexSourceDiscovery().discover(in: [sessions]).first?.identity
+        )
+        let sourceKey = storageIdentifier(source.standardizedFileURL.path)
+        let storedSessionID = storageIdentifier(sessionID)
+        let currentDate = try Date.ISO8601FormatStyle().parse("2026-08-27T00:01:00Z")
+        let currentUsage = TokenUsage(inputTokens: 100, cachedInputTokens: 50, outputTokens: 20)
+        let historicalDate = currentDate.addingTimeInterval(-120)
+        let historicalUsage = TokenUsage(inputTokens: 40, cachedInputTokens: 20, outputTokens: 8)
+        let sourcePosition = Int64(Data((metadata + "\n").utf8).count)
+
+        do {
+            let legacyDatabase = try SQLiteDatabase(url: databaseURL)
+            let historicalCheckpoint = SourceCheckpoint(
+                sourcePath: sourceKey,
+                fileIdentity: sourceIdentity,
+                generation: 0,
+                committedOffset: Int64(sourceData.count),
+                sessionID: storedSessionID,
+                inheritsHistory: false,
+                model: nil,
+                projectPath: nil
+            )
+            try await legacyDatabase.commit(
+                events: [
+                    UsageEvent(
+                        eventKey: "historical-generation-zero",
+                        occurredAt: historicalDate,
+                        sessionID: storedSessionID,
+                        model: nil,
+                        projectPath: nil,
+                        usage: historicalUsage,
+                        sourcePath: sourceKey,
+                        sourcePosition: sourcePosition
+                    )
+                ],
+                checkpoint: historicalCheckpoint,
+                normalizationState: UsageNormalizationState(
+                    cumulativeHighWaterMark: historicalUsage,
+                    lastObservedAt: historicalDate,
+                    quality: .exact
+                )
+            )
+
+            var currentCheckpoint = historicalCheckpoint
+            currentCheckpoint.generation = 1
+            try await legacyDatabase.commit(
+                events: [
+                    UsageEvent(
+                        eventKey: legacyEventKey(
+                            sessionID: storedSessionID,
+                            occurredAt: currentDate,
+                            ordinal: 1,
+                            usage: currentUsage
+                        ),
+                        occurredAt: currentDate,
+                        sessionID: storedSessionID,
+                        model: nil,
+                        projectPath: nil,
+                        usage: currentUsage,
+                        sourcePath: sourceKey,
+                        sourcePosition: sourcePosition
+                    )
+                ],
+                checkpoint: currentCheckpoint,
+                normalizationState: UsageNormalizationState(
+                    cumulativeHighWaterMark: currentUsage,
+                    lastObservedAt: currentDate,
+                    quality: .exact
+                )
+            )
+            try await legacyDatabase.prepareVersion14FixtureForTesting()
+        }
+
+        let migrated = try SQLiteDatabase(url: databaseURL)
+        let replayCheckpoint = try await migrated.checkpoint(for: sourceKey)
+        XCTAssertEqual(replayCheckpoint?.generation, 2)
+        XCTAssertEqual(replayCheckpoint?.committedOffset, 0)
+        let collector = CodexUsageCollector(database: migrated, roots: [sessions])
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        _ = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+        let replayedEventCount = try await migrated.eventCount()
+        XCTAssertEqual(replayedEventCount, 2)
+
+        let secondToken = tokenLine(
+            input: 150,
+            cached: 75,
+            output: 30,
+            lastInput: 50,
+            lastCached: 25,
+            lastOutput: 10,
+            ordinal: 2
+        )
+        let handle = try FileHandle(forWritingTo: source)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data((secondToken + "\n").utf8))
+        try handle.close()
+        let refreshed = try await collector.refresh(
+            now: now,
+            calendar: utcCalendar,
+            weekStart: .monday
+        )
+
+        XCTAssertEqual(refreshed.snapshot.allTime.inputTokens, 190)
+        XCTAssertEqual(refreshed.snapshot.allTime.cachedInputTokens, 95)
+        XCTAssertEqual(refreshed.snapshot.allTime.outputTokens, 38)
+        let appendedEventCount = try await migrated.eventCount()
+        XCTAssertEqual(appendedEventCount, 3)
+        let analytics = try await migrated.analyticsSnapshot(
+            range: .today,
+            through: now,
+            calendar: utcCalendar
+        )
+        XCTAssertEqual(
+            analytics.models.first(where: { $0.modelID == "gpt-5.5" })?.usage.inputTokens,
+            150
+        )
+        XCTAssertEqual(
+            analytics.projects.first(where: { $0.name == "rewrite-project" })?.usage.inputTokens,
+            150
+        )
+    }
+
+    func testEquivalentWorkingDirectorySpellingsShareOneProjectIdentifier() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try SQLiteDatabase(url: root.appendingPathComponent("usage.sqlite"))
+        let collector = CodexUsageCollector(database: database, roots: [])
+        let base = root.appendingPathComponent("project", isDirectory: true).path
+
+        let plainProjection = try await collector.projectProjectionForTesting(base)
+        let trailingSlashProjection = try await collector.projectProjectionForTesting(base + "/")
+        let dotSegmentProjection = try await collector.projectProjectionForTesting(base + "/./")
+        let plain = try XCTUnwrap(plainProjection)
+        let trailingSlash = try XCTUnwrap(trailingSlashProjection)
+        let dotSegment = try XCTUnwrap(dotSegmentProjection)
+
+        XCTAssertEqual(plain.id, trailingSlash.id)
+        XCTAssertEqual(plain.id, dotSegment.id)
+        XCTAssertEqual(plain.name, "project")
+    }
+
+    func testClearHistoryCutoffExcludesEarlierWholeSessionImages() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sessions = root.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        let source = sessions.appendingPathComponent(
+            "rollout-2026-08-27T00-00-00-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl"
+        )
+        let lines = [
+            #"{"timestamp":"2026-08-27T00:00:00Z","type":"session_meta","payload":{"id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","model":"gpt-5.5","cwd":"/tmp/project"}}"#,
+            #"{"timestamp":"2026-08-27T00:01:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_image","image_url":"private-old"}]}}"#,
+            tokenLine(input: 100, cached: 50, output: 10, lastInput: 100, lastCached: 50, lastOutput: 10, ordinal: 1),
+            #"{"timestamp":"2026-08-27T00:03:00Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_image","image_url":"private-new"}]}}"#,
+            #"{"timestamp":"2026-08-27T00:04:00Z","type":"event_msg","ordinal":2,"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":200,"cached_input_tokens":100,"output_tokens":20},"last_token_usage":{"input_tokens":100,"cached_input_tokens":50,"output_tokens":10}}}}"#
+        ]
+        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: source)
+
+        let database = try SQLiteDatabase(url: root.appendingPathComponent("usage.sqlite"))
+        let collector = CodexUsageCollector(database: database, roots: [sessions])
+        let now = try Date.ISO8601FormatStyle().parse("2026-08-27T01:00:00Z")
+        _ = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+        _ = try await database.clearLocalHistory(
+            at: try Date.ISO8601FormatStyle().parse("2026-08-27T00:02:00Z")
+        )
+        var refreshed = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+        while refreshed.hasMoreWork {
+            refreshed = try await collector.refresh(now: now, calendar: utcCalendar, weekStart: .monday)
+        }
+        let analytics = try await database.analyticsSnapshot(
+            range: .today,
+            through: now,
+            calendar: utcCalendar
+        )
+
+        XCTAssertEqual(analytics.usage, TokenUsage(inputTokens: 100, cachedInputTokens: 50, outputTokens: 10))
+        XCTAssertEqual(try XCTUnwrap(analytics.sessions.first).imageAttachmentCount, 1)
+    }
+
+
     func testIncrementalPartialDuplicateAndTruncationHandling() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -967,6 +1297,24 @@ final class CodexUsageCollectorTests: XCTestCase {
         SHA256.hash(data: Data(value.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
+    }
+
+    private func legacyEventKey(
+        sessionID: String,
+        occurredAt: Date,
+        ordinal: Int64,
+        usage: TokenUsage
+    ) -> String {
+        let identity = "\(usage.inputTokens),\(usage.cachedInputTokens),\(usage.outputTokens)"
+        let material = [
+            "event-v2",
+            "session:\(sessionID)",
+            "time:\(occurredAt.timeIntervalSinceReferenceDate.bitPattern)",
+            "ordinal:\(ordinal)",
+            "last:\(identity)",
+            "cumulative:\(identity)"
+        ].joined(separator: "|")
+        return storageIdentifier(material)
     }
 
     private func tokenLine(

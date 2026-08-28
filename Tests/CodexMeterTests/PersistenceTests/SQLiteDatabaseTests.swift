@@ -190,7 +190,12 @@ final class SQLiteDatabaseTests: XCTestCase {
             model: "private-model",
             projectPath: "/private/project"
         )
-        let usage = TokenUsage(inputTokens: 100, cachedInputTokens: 60, outputTokens: 20)
+        let usage = TokenUsage(
+            inputTokens: 100,
+            cachedInputTokens: 60,
+            cacheWriteInputTokens: 0,
+            outputTokens: 20
+        )
         let eventDate = Date(timeIntervalSince1970: 1_800_000_000)
         let event = UsageEvent(
             eventKey: "stable-event",
@@ -297,6 +302,159 @@ final class SQLiteDatabaseTests: XCTestCase {
         XCTAssertEqual(childState, .empty)
         XCTAssertEqual(policy.cutoff, cutoff)
         XCTAssertGreaterThan(policy.dataEpoch, previousEpoch)
+    }
+
+    func testVersion15MigrationPreservesAccountingAndResetsDerivedCursors() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("db.sqlite")
+        let occurredAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let usage = TokenUsage(
+            inputTokens: 100,
+            cachedInputTokens: 60,
+            cacheWriteInputTokens: 0,
+            outputTokens: 20
+        )
+        let checkpoint = SourceCheckpoint(
+            sourcePath: "/fixture.jsonl",
+            fileIdentity: "1:2",
+            generation: 0,
+            committedOffset: 100,
+            sessionID: "session",
+            inheritsHistory: false,
+            model: "gpt-5.6-sol",
+            projectPath: "project-id"
+        )
+        var previousEpoch: Int64 = 0
+
+        do {
+            let database = try SQLiteDatabase(url: url)
+            let event = UsageEvent(
+                eventKey: "stable-event",
+                occurredAt: occurredAt,
+                sessionID: "session",
+                model: "gpt-5.6-sol",
+                projectPath: "project-id",
+                usage: usage,
+                sourcePath: checkpoint.sourcePath,
+                sourcePosition: 10
+            )
+            try await database.commit(
+                events: [event],
+                checkpoint: checkpoint,
+                normalizationState: UsageNormalizationState(
+                    cumulativeHighWaterMark: usage,
+                    lastObservedAt: occurredAt,
+                    quality: .exact
+                )
+            )
+            previousEpoch = try await database.dataEpoch()
+            try await database.prepareVersion13FixtureForTesting()
+        }
+
+        let migrated = try SQLiteDatabase(url: url)
+        let migratedEventCount = try await migrated.eventCount()
+        let migratedEpoch = try await migrated.dataEpoch()
+        let migratedCheckpoint = try await migrated.checkpoint(for: checkpoint.sourcePath)
+        let migratedNormalizationState = try await migrated.normalizationState(for: "session")
+        XCTAssertEqual(migratedEventCount, 1)
+        XCTAssertGreaterThan(migratedEpoch, previousEpoch)
+        XCTAssertEqual(migratedCheckpoint?.generation, 1)
+        XCTAssertEqual(migratedCheckpoint?.committedOffset, 0)
+        XCTAssertNil(migratedCheckpoint?.sessionID)
+        XCTAssertEqual(migratedNormalizationState, .empty)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let snapshot = try await migrated.usageSnapshot(
+            now: occurredAt.addingTimeInterval(60),
+            calendar: calendar,
+            weekStart: .monday
+        )
+        XCTAssertEqual(snapshot.allTime, usage)
+        let analytics = try await migrated.analyticsSnapshot(
+            range: .today,
+            through: occurredAt.addingTimeInterval(60),
+            calendar: calendar
+        )
+        XCTAssertFalse(try XCTUnwrap(analytics.models.first).hasUnknownPricingContext)
+        XCTAssertNotNil(
+            CostEstimator().estimate(
+                analytics.models.map {
+                    ModelTokenUsageSample(
+                        modelID: $0.modelID ?? "unknown",
+                        usage: $0.usage,
+                        highContextUsage: $0.highContextUsage,
+                        hasUnknownPricingContext: $0.hasUnknownPricingContext,
+                        occurredAt: occurredAt
+                    )
+                }
+            ).amountUSD
+        )
+    }
+
+    func testVersion15MigrationKeepsMissingLegacyPartialHistoryConservative() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("db.sqlite")
+        let occurredAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let usage = TokenUsage(inputTokens: 100, cachedInputTokens: 50, outputTokens: 20)
+
+        do {
+            let database = try SQLiteDatabase(url: url)
+            let checkpoint = SourceCheckpoint(
+                sourcePath: "missing-source",
+                fileIdentity: "missing-identity",
+                generation: 0,
+                committedOffset: 100,
+                sessionID: "partial-session",
+                inheritsHistory: false,
+                model: nil,
+                projectPath: nil
+            )
+            try await database.commit(
+                events: [
+                    UsageEvent(
+                        eventKey: "partial-event",
+                        occurredAt: occurredAt,
+                        sessionID: "partial-session",
+                        model: nil,
+                        projectPath: nil,
+                        usage: usage,
+                        sourcePath: checkpoint.sourcePath,
+                        sourcePosition: 10
+                    )
+                ],
+                checkpoint: checkpoint,
+                normalizationState: UsageNormalizationState(
+                    cumulativeHighWaterMark: usage,
+                    lastObservedAt: occurredAt,
+                    quality: .partial
+                )
+            )
+            try await database.prepareVersion14FixtureForTesting()
+        }
+
+        let migrated = try SQLiteDatabase(url: url)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let snapshot = try await migrated.usageSnapshot(
+            now: occurredAt.addingTimeInterval(60),
+            calendar: calendar,
+            weekStart: .monday
+        )
+        XCTAssertEqual(snapshot.allTime, usage)
+        XCTAssertEqual(snapshot.quality, .partial)
+        let analytics = try await migrated.analyticsSnapshot(
+            range: .today,
+            through: occurredAt.addingTimeInterval(60),
+            calendar: calendar
+        )
+        XCTAssertEqual(analytics.usage, usage)
+        XCTAssertEqual(analytics.quality, .partial)
+        let migratedEventCount = try await migrated.eventCount()
+        XCTAssertEqual(migratedEventCount, 1)
     }
 
     func testDatabaseFilesUseOwnerOnlyPermissions() async throws {

@@ -15,7 +15,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         settingsWindow?.isVisible == true
     }
 
-    func showSettings(for store: UsageStore) {
+    func showSettings(for store: UsageStore, limitStore: AccountLimitStore) {
         let window: NSWindow
 
         if let settingsWindow {
@@ -31,7 +31,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             created.contentMinSize = Self.minimumContentSize
             created.isReleasedWhenClosed = false
             created.contentViewController = NSHostingController(
-                rootView: SettingsView().environmentObject(store)
+                rootView: SettingsView()
+                    .environmentObject(store)
+                    .environmentObject(limitStore)
             )
             created.delegate = self
             if !created.setFrameUsingName(Self.frameAutosaveName) {

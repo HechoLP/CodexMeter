@@ -14,6 +14,7 @@ struct CodexMeterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: UsageStore
     @StateObject private var profileStore: ProfileUsageStore
+    @StateObject private var accountLimitStore: AccountLimitStore
     @AppStorage("menuBarDisplay") private var menuBarDisplay = AppPreferences.defaultMenuBarDisplay
     @AppStorage("menuBarPeriod") private var menuBarPeriod = UsagePeriod.today.rawValue
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = AppPreferences.defaultShowMenuBarIcon
@@ -23,14 +24,19 @@ struct CodexMeterApp: App {
         AppPreferences.registerDefaults()
         let store = UsageStore()
         let profileStore = ProfileUsageStore()
+        let accountLimitStore = AccountLimitStore()
         _store = StateObject(wrappedValue: store)
         _profileStore = StateObject(wrappedValue: profileStore)
+        _accountLimitStore = StateObject(wrappedValue: accountLimitStore)
         Task { @MainActor [weak store] in
             await store?.refresh()
         }
         Task { @MainActor [weak profileStore] in
             profileStore?.synchronizeEnabledPreference()
             await profileStore?.refresh(weekStart: Self.selectedWeekStart)
+        }
+        Task { @MainActor [weak accountLimitStore] in
+            await accountLimitStore?.refresh()
         }
     }
 
@@ -39,6 +45,7 @@ struct CodexMeterApp: App {
             MenuPopoverView()
                 .environmentObject(store)
                 .environmentObject(profileStore)
+                .environmentObject(accountLimitStore)
         } label: {
             HStack(spacing: 4) {
                 if resolvedShowIcon {
@@ -61,6 +68,7 @@ struct CodexMeterApp: App {
             SettingsView()
                 .environmentObject(store)
                 .environmentObject(profileStore)
+                .environmentObject(accountLimitStore)
         }
     }
 
