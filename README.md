@@ -100,6 +100,10 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 - Current week/month through the server snapshot date and lifetime totals when explicitly enabled on macOS
 - Week, month, and **Local History** totals from local Codex records when account totals are off
 - Input, cached input, output, and total-token breakdowns
+- macOS drill-down views for account limits, Today/7D/30D charts, models, projects, sessions, and verified sub-agent relationships
+- Read-only 5-hour/weekly/additional limit windows and reset credits from the signed local Codex app-server
+- Model-aware API-equivalent cost estimates using the current official price catalog; these are estimates, not bills or subscription charges
+- Privacy-minimized project and session analytics with keyed project identifiers and image counts only—never attachment contents
 - Automatic file-event refresh with a lightweight configurable fallback
 - Manual, 30-second, one-minute, and five-minute refresh modes
 - Bounded incremental JSONL ingestion on macOS and a changed-file memory cache on Windows
@@ -109,7 +113,7 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 - Optional launch at login through macOS Service Management or the current-user Windows startup key
 - Daily signed update checks on macOS and a manually opened release page on Windows
 - Secure local-history clearing with a persistent re-import cutoff
-- No notifications, advertising, or analytics
+- No notifications, advertising, or telemetry
 
 ## How token counting works
 
@@ -143,6 +147,10 @@ CodexMeter reads JSONL files only inside:
 
 On macOS, optional profile sync also reads only `tokens.access_token` and `tokens.account_id` from `~/.codex/auth.json` for a fixed read-only request to `https://chatgpt.com/backend-api/wham/profiles/me`. Credentials and the response are held only in memory and are not written to CodexMeter's database or logs. This is a non-public ChatGPT endpoint and may change. Windows remains local-only.
 
+The macOS **Limits** view uses the signed Codex app-server's read-only `account/rateLimits/read` RPC. The last successful limit response is held in memory only. CodexMeter never invokes reset-credit consumption, purchase, or account-changing methods.
+
+For local analytics, CodexMeter stores canonical model IDs, a keyed HMAC of each normalized working directory, the final project-folder name, hashed session relationships, and numeric image counts. Image counts describe the whole retained session after the local-history cutoff, rather than only the selected chart range. It does not store full working-directory paths, session text, image bytes, MIME payloads, or attachment contents.
+
 ## Accuracy and limitations
 
 - **Local History** means the oldest token record still present in local Codex session history through now.
@@ -152,6 +160,8 @@ On macOS, optional profile sync also reads only `tokens.access_token` and `token
 - Activity from another computer is absent from local totals unless its session history exists locally; optional account totals can include it.
 - A future Codex session-schema change may require a CodexMeter update.
 - Ambiguous counter baselines and malformed records are excluded rather than guessed.
+- API-equivalent cost uses the bundled current pricing snapshot and is marked unavailable for unknown models or incomplete pricing metadata. It is not an OpenAI bill.
+- Project names are folder basenames and can be identical; their stored identities remain separate keyed hashes.
 
 ## Roadmap
 
@@ -159,7 +169,7 @@ Codex is the first supported data source. Future releases are planned to expand 
 
 ## Privacy
 
-Local accounting remains entirely on-device. The macOS build can check a signed Sparkle update feed; the Windows build opens GitHub Releases only when requested. Optional macOS profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, `.codex/auth.json`, or remote profile responses.
+Local accounting and analytics remain on-device. The macOS build can check a signed Sparkle update feed; the Windows build opens GitHub Releases only when requested. Optional macOS profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, full project paths, authentication tokens, `.codex/auth.json`, remote profile responses, or attachment contents.
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 
@@ -179,9 +189,9 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 | --- | --- |
 | General | Launch at Login, refresh mode, week start, and macOS automatic updates |
 | Appearance | Period, metric, number style, icon/text visibility, popover details |
-| Usage | Account-total opt-in, data boundary, accounting semantics, and cached-input explanation |
-| Data | Source status, database statistics, rebuild, clear history |
-| Advanced | Privacy-safe diagnostics and log folder |
+| Usage | Account totals, read-only limits, cost/projects/sessions/agent/attachment visibility, privacy boundary, and accounting semantics |
+| Data | Local/limit/pricing source status, database statistics, rebuild, clear history |
+| Advanced | Privacy-safe diagnostics, log folder, and account-limit provider status |
 
 ## Build from source
 

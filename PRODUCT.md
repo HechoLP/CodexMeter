@@ -12,7 +12,7 @@ The macOS app uses Swift, SwiftUI, AppKit, Foundation, Swift Concurrency, SQLite
 
 ## Users
 
-People who use Codex on macOS or Windows and want to see the input, cached input, output, and total tokens visible in their local history. macOS users can also explicitly enable a separate account-wide profile view.
+People who use Codex on macOS or Windows and want to see the input, cached input, output, and total tokens visible in their local history. macOS users can also inspect local models/projects/sessions, API-equivalent cost estimates, read-only account limits, and an explicitly enabled account-wide profile view.
 
 ## Product Purpose
 
@@ -20,7 +20,7 @@ CodexMeter turns local Codex session token events into a fast, durable usage sna
 
 ## Positioning
 
-CodexMeter measures locally observable token consumption and can optionally display aggregate ChatGPT profile statistics on macOS. It does not present account quota, claim to be an official OpenAI usage dashboard, or copy CodexBar's branding, assets, or layout.
+CodexMeter measures locally observable token consumption and can optionally display aggregate ChatGPT profile statistics and read-only Codex account-limit windows on macOS. It keeps quota percentages separate from token totals, does not claim to be an official OpenAI usage or billing dashboard, and does not copy CodexBar's branding, assets, or layout.
 
 ## Operating Context
 
@@ -33,6 +33,9 @@ The app runs quietly in the macOS menu bar or Windows notification area, discove
 - Persist normalized usage and parser checkpoints in owner-only SQLite on macOS; keep Windows usage events in process memory.
 - Avoid prompts, responses, source code, terminal output, and stored authentication data.
 - Keep optional macOS account retrieval opt-in, fixed-destination, aggregate-only, and memory-only.
+- Read account limits only through a verified signed Codex app-server and never expose reset, purchase, or account mutation actions.
+- Derive current API-equivalent estimates from model token usage; unknown or incomplete pricing data remains unavailable rather than becoming zero.
+- Persist only canonical model IDs, keyed project identifiers, folder basenames, session relationships, and numeric attachment metadata needed for local analytics.
 - Operate without telemetry, analytics, notifications, a local web server, or a separately installed runtime.
 - Remain responsive during large historical imports and tolerate unknown, malformed, partial, truncated, rotated, and duplicated input.
 - Keep launch-at-login optional and use the platform-supported current-user mechanism.
