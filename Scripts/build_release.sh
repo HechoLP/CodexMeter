@@ -10,7 +10,11 @@ release_build=${CODEXMETER_BUILD_NUMBER:-${BUILD_NUMBER}}
 release_bundle_id=${CODEXMETER_BUNDLE_ID:-${BUNDLE_IDENTIFIER}}
 release_repository=${CODEXMETER_RELEASE_REPOSITORY:-${RELEASE_REPOSITORY}}
 update_feed_branch=${CODEXMETER_UPDATE_FEED_BRANCH:-${UPDATE_FEED_BRANCH}}
-adhoc_hardened_runtime=${CODEXMETER_ADHOC_HARDENED_RUNTIME:-1}
+# A Hardened Runtime host cannot load Sparkle's separately signed framework
+# until sign_app.sh gives every nested component the same Developer ID. Keep
+# the standalone ad-hoc build runnable; certificate-backed release workflows
+# apply Hardened Runtime when they sign the finished bundle.
+adhoc_hardened_runtime=${CODEXMETER_ADHOC_HARDENED_RUNTIME:-0}
 sparkle_feed_url="https://raw.githubusercontent.com/${release_repository}/${update_feed_branch}/appcast.xml"
 artifact_root="${project_root}/Artifacts"
 cache_root=${CODEXMETER_BUILD_CACHE:-"$(getconf DARWIN_USER_CACHE_DIR)/dev.codexmeter.release"}
