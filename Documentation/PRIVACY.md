@@ -1,6 +1,6 @@
 # Privacy
 
-CodexMeter processes Codex usage locally. On macOS, the bundled Sparkle updater checks an HTTPS appcast and downloads updates from GitHub Releases. Automatic checks run at most once per day by default and can be disabled in **Settings → General**. The Windows release does not perform a background network request; its Settings window opens the fixed GitHub Releases page only when the user requests it.
+CodexMeter processes local Codex usage on-device. On macOS, the bundled Sparkle updater checks an HTTPS appcast and downloads updates from GitHub Releases. Automatic checks run at most once per day by default and can be disabled in **Settings → General**. The Windows release does not perform a background network request; its Settings window opens the fixed GitHub Releases page only when the user requests it.
 
 Update requests contain the normal connection metadata needed to reach GitHub, such as the user's IP address and HTTP client information. CodexMeter does not add token totals, prompts, responses, source paths, project metadata, cache contents, Codex credentials, or machine profile data to a request. macOS update archives and the appcast are verified with the public Ed25519 key embedded in the app before extraction or installation.
 
@@ -8,8 +8,10 @@ It discovers only JSONL files within `~/.codex/sessions` and `~/.codex/archived_
 
 On macOS, the Application Support directory is restricted to the current user (`0700`), and SQLite, lock, and fingerprint-key files are restricted to the current user (`0600`). Clearing local history enables SQLite secure deletion, truncates the write-ahead log, and vacuums the database. The Windows release has no persistent usage database to clear; exiting the application discards its in-memory normalized event cache.
 
-CodexMeter does not store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, authentication tokens, or `~/.codex/auth.json`.
+On macOS, **Use ChatGPT account totals** is off by default. When the user enables it, CodexMeter opens `~/.codex/auth.json` with no-follow protections and projects only `tokens.access_token` and `tokens.account_id`. It sends those values only in a fixed HTTPS GET to `https://chatgpt.com/backend-api/wham/profiles/me`. The app uses only aggregate lifetime, daily-bucket, and snapshot-date fields from the response. It does not refresh credentials or modify the authentication file. Credentials and remote responses exist only for the in-memory request and are never written to UserDefaults, SQLite, Keychain, or diagnostics. The endpoint is not a public API and may change. Disabling the option removes the in-memory profile snapshot. Windows remains local-only.
+
+CodexMeter does not store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, authentication tokens, `~/.codex/auth.json`, or remote profile responses.
 
 macOS debug logging is off by default. When enabled, it records only timestamps, fixed operational event names, data-quality state, source counts, and processed-byte totals. It never records source paths or raw error descriptions, and rotates at 1 MiB. The Windows release does not write a diagnostic log.
 
-“Local History” is limited to records observable in local Codex session history. Deleted logs and usage from other computers are not recoverable.
+“Local History” is limited to records observable in local Codex session history. Deleted logs and usage from other computers are not recoverable locally. Optional account totals remain a separate, memory-only overlay and are never inserted into the local usage database.
