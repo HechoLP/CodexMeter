@@ -11,7 +11,7 @@ namespace CodexMeter.Windows.Views;
 
 public partial class SettingsWindow : Window
 {
-    private const string ReleasesUrl = "https://github.com/HechoLP/CodexMeter-Releases/releases";
+    private const string ReleasesUrl = "https://github.com/HechoLP/CodexMeter/releases";
     private readonly AppSettingsStore settingsStore;
 
     public SettingsWindow(AppSettingsStore settingsStore)

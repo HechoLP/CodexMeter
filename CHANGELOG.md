@@ -4,6 +4,13 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-08-28
+
+### Changed
+
+- Consolidated macOS and Windows release assets, release links, and the signed Sparkle update feed into the public `HechoLP/CodexMeter` repository.
+- Added a dual-published 1.0.4 bridge feed so installations through 1.0.3 can move to the consolidated update location without losing signed-update continuity.
+
 ## [1.0.3] - 2026-08-28
 
 ### Added

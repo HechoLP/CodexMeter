@@ -506,7 +506,7 @@ private struct AboutSettingsView: View {
                     Link(destination: URL(string: "https://github.com/HechoLP/CodexMeter")!) {
                         Label("Open Source on GitHub", systemImage: "arrow.up.right.square")
                     }
-                    Link(destination: URL(string: "https://github.com/HechoLP/CodexMeter-Releases/releases")!) {
+                    Link(destination: URL(string: "https://github.com/HechoLP/CodexMeter/releases")!) {
                         Label("View Releases", systemImage: "shippingbox")
                     }
                     Link(destination: URL(string: "https://github.com/HechoLP/CodexMeter/blob/main/LICENSE")!) {
