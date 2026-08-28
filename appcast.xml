@@ -4,43 +4,48 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>0.1.1</title>
-            <pubDate>Thu, 27 Aug 2026 17:38:21 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v0.1.1</link>
-            <sparkle:version>2</sparkle:version>
-            <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+            <title>1.0.4</title>
+            <pubDate>Fri, 28 Aug 2026 11:05:40 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.0.4</link>
+            <sparkle:version>104</sparkle:version>
+            <sparkle:shortVersionString>1.0.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 0.1.1
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.0.4
 
-- Adds a certificate-free Universal 2 DMG and ZIP that do not require an Apple Developer signing identity.
-- Keeps automatic update archives and the appcast authenticated with Sparkle Ed25519 signatures.
-- Includes the accounting, file-watcher, Settings-window, and release-verification fixes prepared after v0.1.0.
+CodexMeter 1.0.4 consolidates the public downloads and signed macOS update feed into the main `HechoLP/CodexMeter` repository.
 
-This build is ad-hoc signed and is not notarized by Apple. macOS therefore requires the one-time first-run procedure below. It must not be presented as an Apple-trusted release.
+## Changes
 
-## macOS에서 처음 실행할 때
+- macOS and Windows downloads now live on the same repository as the source and immutable release tag.
+- The macOS app now checks the signed `HechoLP/CodexMeter` update feed.
+- Release links in both applications and the installation documentation now open the consolidated release page.
+- The personal Homebrew Tap remains separate because Homebrew discovers `HechoLP/tap` through the `HechoLP/homebrew-tap` repository, but its Cask downloads the ZIP from the main repository.
 
-공식 GitHub 릴리스에서 `CodexMeter-0.1.1.dmg`와 `SHA256SUMS.txt`를 같은 폴더에 다운로드합니다. 아래 검사가 `OK`를 출력하지 않으면 실행하지 마세요.
+The 1.0.4 feed is also published once to the legacy `CodexMeter-Releases` update branch so installations through 1.0.3 can upgrade safely. The legacy repository remains public and read-only after that bridge; it is not used for later releases.
+
+## Integrity and platform trust
+
+These packages are distributed without Apple Developer ID, Apple notarization, or a Microsoft publisher certificate. Verify the official SHA-256 manifest before bypassing Gatekeeper or SmartScreen. The macOS automatic-update feed and ZIP archive are separately authenticated with Sparkle Ed25519 signatures.
+
+## macOS with Homebrew
 
 ```bash
-cd ~/Downloads
-grep ' CodexMeter-0.1.1.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-0.1.1.dmg
-```
-
-DMG에서 `CodexMeter.app`을 `Applications` 폴더로 복사한 뒤, 체크섬이 일치한 공식 프리뷰에 한해서만 실행합니다.
-
-```bash
+brew update
+brew upgrade --cask codexmeter
 xattr -dr com.apple.quarantine /Applications/CodexMeter.app
 open /Applications/CodexMeter.app
 ```
 
-이 명령은 해당 앱의 다운로드 격리 속성을 제거합니다. 출처가 다르거나 체크섬이 일치하지 않는 파일에는 사용하지 마세요.
+Fresh installations can use `brew install --cask HechoLP/tap/codexmeter`.
+
+## Windows portable download
+
+Download the x64 or ARM64 ZIP together with `SHA256SUMS-windows.txt`, compare the PowerShell `Get-FileHash` result with the manifest, and extract the verified package to a permanent folder.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v0.1.1/CodexMeter-0.1.1.zip" length="1847955" type="application/octet-stream" sparkle:edSignature="HMI+8ldI07w/PLYM2gVchwHjGtVshOeK+nId9+ybQzcTgWUldmsFvCb3cJcKmZQ90sPCQpc1QMXETvomdiQbBQ=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.0.4/CodexMeter-1.0.4.zip" length="2154470" type="application/octet-stream" sparkle:edSignature="v+lo49WnH7RbnSy1EDBbDYVZ++ZzQ2mAJnayg/m/MI9lxfPv7/q1LSCYUXEbPqZ0qJJRGfUmuPbHCIPNPOPUBQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: FO5xW13ja6DBGxZxkNSVVP8d1J6SFK/MPjJc5wdtNFeQgaYIMP21GzxH7ko1bUI7XPxPmULlHo+Yo/Am/GOQDA==
-length: 2488
+edSignature: o8iU3nUas8bssDfy5w9ScWhR2Z9QPeu8VY5s5Bi+vqd9WAMjxvQBbKvNV9k+MS3nGFIlk8t+VEH9P23B9EmXBQ==
+length: 2903
 -->
