@@ -17,16 +17,12 @@ struct MenuPopoverView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 header
+                localUsageSummary
+                Divider()
                 if usesProfileTotals {
-                    profileUsageSummary
-                    Divider()
-                    periodLinks
-                    Divider()
-                    localBreakdown
+                    profilePeriodLinks
                 } else {
-                    localUsageSummary
-                    Divider()
-                    periodLinks
+                    localPeriodLinks
                 }
                 Divider()
                 footer
@@ -114,81 +110,41 @@ struct MenuPopoverView: View {
         .padding(.bottom, 16)
     }
 
-    private var profileUsageSummary: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("ChatGPT account")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            if let snapshot = profileStore.snapshot {
-                Text(formatted(snapshot.today))
-                    .font(.system(size: 32, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.24), value: snapshot.today)
-                Text("Profile day · \(profileDate(snapshot.statsAsOf))")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("ChatGPT profile tokens for \(profileDate(snapshot.statsAsOf))")
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 16)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var localBreakdown: some View {
-        Group {
-            if store.snapshot.updatedAt == nil {
-                HStack(spacing: 10) {
-                    if store.isRefreshing || !store.hasLoadedSnapshot {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "externaldrive.badge.questionmark")
-                            .foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(store.hasLoadedSnapshot ? "No local usage found" : "Reading this Mac's usage")
-                            .font(.subheadline.weight(.semibold))
-                        Text(store.statusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .accessibilityElement(children: .combine)
-            } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("This Mac today")
-                            .font(.subheadline.weight(.semibold))
-                        Spacer()
-                        Text(formatted(store.snapshot.today.totalTokens))
-                            .font(.subheadline)
-                            .monospacedDigit()
-                            .help("Cached input is already included in Input. Total equals Input plus Output.")
-                    }
-                    VStack(spacing: 8) {
-                        metricRow("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")
-                        if showCachedInput {
-                            metricRow("Cached input", value: store.snapshot.today.cachedInputTokens, symbol: "bolt.horizontal")
-                        }
-                        metricRow("Output", value: store.snapshot.today.outputTokens, symbol: "arrow.down")
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-    }
-
-    private var periodLinks: some View {
+    private var localPeriodLinks: some View {
         VStack(spacing: 0) {
             periodLink("This Week", period: .week, value: displayedTotal(for: .week))
             periodLink("This Month", period: .month, value: displayedTotal(for: .month))
-            periodLink(usesProfileTotals ? "Lifetime" : "Local History", period: .allTime, value: displayedTotal(for: .allTime))
+            periodLink("Local History", period: .allTime, value: displayedTotal(for: .allTime))
         }
         .padding(.vertical, 6)
+    }
+
+    private var profilePeriodLinks: some View {
+        VStack(spacing: 0) {
+            if let snapshot = profileStore.snapshot {
+                HStack {
+                    Text("ChatGPT account")
+                        .font(.caption.weight(.semibold))
+                    Spacer()
+                    Text("Through \(profileDate(snapshot.statsAsOf))")
+                        .font(.caption)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+
+                periodLink(
+                    "Profile Day · \(profileDate(snapshot.statsAsOf))",
+                    period: .today,
+                    value: snapshot.today
+                )
+                periodLink("This Week", period: .week, value: snapshot.week)
+                periodLink("This Month", period: .month, value: snapshot.month)
+                periodLink("Lifetime", period: .allTime, value: snapshot.lifetime)
+            }
+        }
+        .padding(.bottom, 6)
     }
 
     private var footer: some View {
@@ -303,15 +259,11 @@ struct MenuPopoverView: View {
     }
 
     private func displayedTotal(for period: UsagePeriod) -> Int64 {
-        guard usesProfileTotals, let snapshot = profileStore.snapshot else {
-            return store.snapshot.totals(for: period).totalTokens
-        }
-        return switch period {
-        case .today: snapshot.today
-        case .week: snapshot.week
-        case .month: snapshot.month
-        case .allTime: snapshot.lifetime
-        }
+        UsageDisplayPolicy.displayedTotal(
+            for: period,
+            localUsage: store.snapshot.totals(for: period),
+            profileSnapshot: usesProfileTotals ? profileStore.snapshot : nil
+        )
     }
 
     private func profileDate(_ date: Date) -> String {

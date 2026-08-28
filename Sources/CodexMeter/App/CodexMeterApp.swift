@@ -93,19 +93,17 @@ struct CodexMeterApp: App {
 
     private var profileTotalOverride: Int64? {
         guard profileStore.isEnabled, let snapshot = profileStore.snapshot else { return nil }
-        return switch UsagePeriod(rawValue: menuBarPeriod) ?? .today {
-        case .today: snapshot.today
-        case .week: snapshot.week
-        case .month: snapshot.month
-        case .allTime: snapshot.lifetime
-        }
+        return UsageDisplayPolicy.profileOverride(
+            for: UsagePeriod(rawValue: menuBarPeriod) ?? .today,
+            profileSnapshot: snapshot
+        )
     }
 
     private var profilePeriodDescription: String? {
         guard profileStore.isEnabled, let snapshot = profileStore.snapshot else { return nil }
         let asOf = snapshot.statsAsOf.formatted(.dateTime.month(.abbreviated).day())
         return switch UsagePeriod(rawValue: menuBarPeriod) ?? .today {
-        case .today: "for the ChatGPT profile day through \(asOf)"
+        case .today: nil
         case .week: "this week in the ChatGPT profile through \(asOf)"
         case .month: "this month in the ChatGPT profile through \(asOf)"
         case .allTime: "in the ChatGPT profile through \(asOf)"

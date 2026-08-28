@@ -314,6 +314,9 @@ private struct UsageSettingsView: View {
                 Text("Profile totals use a non-public ChatGPT endpoint and can be delayed to the date shown in the popover.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Text("The main Today value always uses this Mac's live local history. Delayed profile-day totals appear separately with their date.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("This Mac Breakdown") {
                 Label("Input is counted", systemImage: "arrow.up")

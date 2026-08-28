@@ -96,8 +96,9 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 
 ## Features
 
-- Latest profile day (with its date), current week/month through that date, and lifetime totals when explicitly enabled on macOS
-- Today, week, month, and **Local History** totals from local Codex records on macOS and Windows
+- Live Today total from local Codex records always stays in the primary summary on macOS and Windows
+- Latest profile day (shown separately with its date), current week/month through that date, and lifetime totals when explicitly enabled on macOS
+- Week, month, and **Local History** totals from local Codex records when account totals are off
 - Input, cached input, output, and total-token breakdowns
 - Automatic file-event refresh with a lightweight configurable fallback
 - Manual, 30-second, one-minute, and five-minute refresh modes
