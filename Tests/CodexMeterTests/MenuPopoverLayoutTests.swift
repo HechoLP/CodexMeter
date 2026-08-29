@@ -5,11 +5,14 @@ import XCTest
 
 @MainActor
 final class MenuPopoverLayoutTests: XCTestCase {
-    func testPopoverCategoriesFollowThePrimaryReadingOrder() {
+    func testPopoverSectionsSeparateTokenUsageFromCodexLimits() {
         XCTAssertEqual(
-            MenuPopoverCategory.allCases.map(\.title),
-            ["Account Limits", "Token Usage", "History", "Explore"]
+            MenuPopoverSection.allCases.map(\.title),
+            ["Overview", "Codex"]
         )
+        XCTAssertEqual(MenuPopoverSection.overview.categories, [.localUsage, .tokenHistory, .explore])
+        XCTAssertEqual(MenuPopoverSection.codex.categories, [.accountLimits])
+        XCTAssertTrue(MenuPopoverSection.allCases.allSatisfy { !$0.symbol.isEmpty })
         XCTAssertTrue(MenuPopoverCategory.allCases.allSatisfy { !$0.symbol.isEmpty })
     }
 

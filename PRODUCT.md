@@ -20,7 +20,7 @@ CodexMeter turns local Codex session token events into a fast, durable usage sna
 
 ## Positioning
 
-CodexMeter measures locally observable token consumption and can optionally display aggregate ChatGPT profile statistics and read-only Codex account-limit windows. It keeps quota percentages separate from token totals, does not claim to be an official OpenAI usage or billing dashboard, and does not copy CodexBar's branding, assets, or layout.
+CodexMeter measures locally observable token consumption and can optionally display aggregate ChatGPT profile statistics and read-only Codex account-limit windows. It keeps quota percentages separate from token totals, does not claim to be an official OpenAI usage or billing dashboard, and does not copy CodexBar's branding or assets.
 
 ## Operating Context
 

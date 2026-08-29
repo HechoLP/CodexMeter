@@ -89,13 +89,13 @@ The palette follows macOS semantic colors so it remains correct in light, dark, 
 
 ## Layout
 
-The menu popover is a fixed compact column (372px). The header identifies the active provider, the footer keeps primary actions visible, and the middle region scrolls only beyond a practical 700px ceiling. The overview follows a provider-first vertical reading path: account limits, token usage, history, and detailed destinations. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
+The menu popover is a fixed compact column (372px). The header provides two top-level modes, the footer keeps primary actions visible, and the middle region scrolls only beyond a practical 700px ceiling. Overview contains token totals, history, and analytic destinations; Codex contains account-limit windows and reset timing. Token accounting and quota status never share the same scrolling surface. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
 
-The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at overview edges. The overview prioritizes today's local usage, then account limits, nearby periods, and three compact analytic shortcuts.
+The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at overview edges. Overview prioritizes today's local usage, nearby periods, and analytic shortcuts; Codex prioritizes quota remaining and reset timing.
 
 **The One-Question Rule.** Each destination answers one question: limits, usage, projects, or sessions.
 
-**The Real-Provider Rule.** A provider switcher appears only after a second provider has working data and status handling; empty provider tabs are not navigation.
+**The Real-Provider Rule.** Overview is the cross-source token summary. A named provider tab appears only when that provider has working data and status handling; empty provider tabs are not navigation.
 
 ## Elevation & Depth
 
@@ -114,8 +114,15 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 ### Overview Popover
 
 - **Character:** A compact status instrument, not a miniature dashboard.
-- **Shape:** Fixed 344px width with a stable header and footer.
+- **Shape:** Fixed 372px width with a stable header and footer.
 - **Behavior:** The center scrolls only when content exceeds the practical menu height.
+
+### Top-Level Modes
+
+- **Overview:** Local and optional account-wide token totals, period history, and analytic destinations.
+- **Codex:** Read-only Codex quota windows, reset timing, pace, and reset-credit availability.
+- **Behavior:** Two equal-width native buttons switch content in place. The selected mode uses the system accent and both modes remain keyboard and VoiceOver accessible.
+- **Separation:** The header contains no provider status card, connection badge, or generated explanatory subtitle.
 
 ### Primary Token Summary
 
@@ -152,7 +159,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 ### Do:
 
-- **Do** keep the first screen focused on the active provider, actionable account limits, current local usage, nearby periods, and direct navigation.
+- **Do** keep Overview focused on token totals and history, and Codex focused on account limits and reset timing.
 - **Do** use semantic system colors, SwiftUI text styles, SF Symbols, VoiceOver labels, keyboard shortcuts, and Reduce Motion.
 - **Do** show unknown or incomplete cost data as unavailable in detailed analytics instead of zero.
 - **Do** keep local token totals, account-wide profile totals, quota percentages, and API-equivalent estimates visibly distinct.
@@ -160,7 +167,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 ### Don't:
 
-- **Don't** copy CodexBar branding or assets; reuse only provider-first information-architecture ideas that improve scanning for CodexMeter's real features.
+- **Don't** copy CodexBar branding or assets; reuse only mode separation and information-architecture ideas that improve scanning for CodexMeter's real features.
 - **Don't** place charts, projects, sessions, credits, every provider, and every limit on the overview.
 - **Don't** show empty or speculative provider tabs.
 - **Don't** use purple/blue AI gradients, neon, decorative glass, giant cards, or custom dashboard chrome.

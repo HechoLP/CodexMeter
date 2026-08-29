@@ -8,6 +8,34 @@ enum MenuPopoverMetrics {
     static let maximumBodyHeight: CGFloat = 700
 }
 
+enum MenuPopoverSection: String, CaseIterable, Identifiable {
+    case overview
+    case codex
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .overview: "Overview"
+        case .codex: "Codex"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .overview: "square.grid.2x2"
+        case .codex: "terminal"
+        }
+    }
+
+    var categories: [MenuPopoverCategory] {
+        switch self {
+        case .overview: [.localUsage, .tokenHistory, .explore]
+        case .codex: [.accountLimits]
+        }
+    }
+}
+
 enum MenuPopoverCategory: String, CaseIterable, Identifiable {
     case accountLimits
     case localUsage
@@ -51,6 +79,7 @@ struct MenuPopoverView: View {
     @AppStorage("resetCreditsEnabled") private var resetCreditsEnabled = AppPreferences.defaultResetCreditsEnabled
     @AppStorage("projectsEnabled") private var projectsEnabled = AppPreferences.defaultProjectsEnabled
     @AppStorage("sessionsEnabled") private var sessionsEnabled = AppPreferences.defaultSessionsEnabled
+    @State private var selectedSection = MenuPopoverSection.overview
     @State private var refreshTurns = 0
 
     private let formatter = TokenFormatter()
@@ -60,17 +89,16 @@ struct MenuPopoverView: View {
             VStack(spacing: 0) {
                 header
                 ScrollView {
-                    VStack(spacing: 0) {
-                        if accountLimitsEnabled {
-                            accountLimitsPreview
-                            Divider()
-                        }
-                        localUsageSection
-                        if analyticsEnabled {
-                            Divider()
-                            exploreSection
+                    Group {
+                        switch selectedSection {
+                        case .overview:
+                            overviewContent
+                        case .codex:
+                            codexContent
                         }
                     }
+                    .id(selectedSection)
+                    .transition(.opacity)
                 }
                 .scrollIndicators(.hidden)
                 // A ScrollView has no useful intrinsic height inside MenuBarExtra.
@@ -113,6 +141,37 @@ struct MenuPopoverView: View {
         .onChange(of: isRefreshing) { _, isRefreshing in
             guard isRefreshing, !reduceMotion else { return }
             refreshTurns += 1
+        }
+    }
+
+    private var overviewContent: some View {
+        VStack(spacing: 0) {
+            localUsageSection
+            if analyticsEnabled {
+                Divider()
+                exploreSection
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var codexContent: some View {
+        if accountLimitsEnabled {
+            accountLimitsPreview
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Codex usage limits are hidden", systemImage: "gauge.with.dots.needle.0percent")
+                    .font(.headline)
+                Text("Turn on Account Limits in Settings to see Codex quota windows and reset times.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Open Settings") {
+                    SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
+                }
+                .buttonStyle(.link)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
         }
     }
 
@@ -186,33 +245,45 @@ struct MenuPopoverView: View {
             .padding(.top, 15)
             .padding(.bottom, 12)
 
-            Divider()
-
-            HStack(spacing: 12) {
-                Image(systemName: "terminal")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Codex")
-                        .font(.headline)
-                    Text(providerScopeText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ForEach(MenuPopoverSection.allCases) { section in
+                    sectionTab(section)
                 }
-                Spacer(minLength: 12)
-                Label(store.sourceStatusText, systemImage: providerStatusSymbol)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 13)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Codex, \(providerScopeText), \(store.sourceStatusText)")
+            .padding(.horizontal, 12)
+            .padding(.bottom, 10)
+
+            Divider()
         }
+    }
+
+    private func sectionTab(_ section: MenuPopoverSection) -> some View {
+        let isSelected = selectedSection == section
+        return Button {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                selectedSection = section
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: section.symbol)
+                    .font(.system(size: 16, weight: .medium))
+                Text(section.title)
+                    .font(.caption.weight(.semibold))
+            }
+            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(
+                Color.accentColor.opacity(isSelected ? 0.16 : 0),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(section == .overview ? "1" : "2", modifiers: .command)
+        .accessibilityLabel(section.title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Show \(section.title.lowercased())")
+        .accessibilityIdentifier("menu.section.\(section.rawValue)")
     }
 
     private var localUsageSection: some View {
@@ -342,7 +413,9 @@ struct MenuPopoverView: View {
             if shouldShowStatus {
                 HStack {
                     Label {
-                        if profileStore.isEnabled, let profileSnapshot = profileStore.snapshot {
+                        if selectedSection == .codex {
+                            Text(limitStore.statusMessage)
+                        } else if profileStore.isEnabled, let profileSnapshot = profileStore.snapshot {
                             if profileStore.status == .ready {
                                 Text("Account totals through \(profileDate(profileSnapshot.statsAsOf))")
                             } else {
@@ -446,6 +519,9 @@ struct MenuPopoverView: View {
     }
 
     private var shouldShowStatus: Bool {
+        if selectedSection == .codex {
+            return accountLimitsEnabled
+        }
         let qualityNeedsStatus = switch store.snapshot.quality {
         case .stale, .unavailable, .error: true
         case .exact, .partial: false
@@ -455,6 +531,15 @@ struct MenuPopoverView: View {
 
     private var statusSymbol: String {
         if isRefreshing { return "arrow.triangle.2.circlepath" }
+        if selectedSection == .codex {
+            return switch limitStore.status {
+            case .ready: "checkmark.circle"
+            case .stale: "clock.badge.exclamationmark"
+            case .disabled: "gauge.with.dots.needle.0percent"
+            case .loading: "arrow.triangle.2.circlepath"
+            case .unavailable: "exclamationmark.triangle"
+            }
+        }
         if profileStore.isEnabled {
             return profileStore.status == .ready ? "checkmark.circle" : "exclamationmark.triangle"
         }
@@ -463,15 +548,6 @@ struct MenuPopoverView: View {
 
     private var usesProfileTotals: Bool {
         profileStore.isEnabled && profileStore.snapshot != nil
-    }
-
-    private var providerScopeText: String {
-        profileStore.isEnabled ? "This Mac + ChatGPT account totals" : "This Mac activity"
-    }
-
-    private var providerStatusSymbol: String {
-        if store.isRefreshing || store.isImportingHistory { return "arrow.triangle.2.circlepath" }
-        return store.sourceCount > 0 ? "checkmark.circle" : "exclamationmark.triangle"
     }
 
     private var limitHeaderContext: String {
