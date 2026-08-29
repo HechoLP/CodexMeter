@@ -4,6 +4,14 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-08-29
+
+### Changed
+
+- Rebuilt the menu popover around a provider-first reading order: Codex status, account limits, token usage, history, detailed destinations, and utility actions.
+- Enlarged important rows and restored vertical period comparisons so labels and large token totals are easier to scan.
+- Added reset-credit context to the account-limit overview when the existing setting is enabled.
+
 ## [1.1.4] - 2026-08-29
 
 ### Changed
