@@ -5,8 +5,8 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=flat-square&logo=windows11&logoColor=white)](Documentation/WINDOWS.md)
-[![macOS Release](https://img.shields.io/badge/macOS-v1.0.6-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.0.6.md)
-[![Windows Release](https://img.shields.io/badge/Windows-v1.0.6-0078D4?style=flat-square)](Documentation/ReleaseNotes/1.0.6.md)
+[![macOS Release](https://img.shields.io/badge/macOS-v1.1.0-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.1.0.md)
+[![Windows Release](https://img.shields.io/badge/Windows-v1.1.0-0078D4?style=flat-square)](Documentation/ReleaseNotes/1.1.0.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -19,6 +19,7 @@ Tiny native macOS menu bar and Windows notification-area apps that turn **local 
 ## Why
 
 - **Glanceable totals.** See input, cached input, output, and total tokens without leaving the menu bar.
+- **Plan around limits.** See the nearest Codex quota windows, reset countdowns, and an explicitly labeled even-use pace estimate before starting a long task.
 - **Honest accounting.** Cumulative snapshots are normalized into increases instead of being added repeatedly.
 - **Local by design.** Prompts, responses, source code, credentials, and raw session paths are not stored in CodexMeter's database.
 - **Native and quiet.** SwiftUI on macOS, WPF on Windows, no Dock/taskbar window, and no telemetry.
@@ -49,9 +50,9 @@ Homebrew 6 no longer provides the old `--no-quarantine` installation option. The
 
 ### Direct download
 
-CodexMeter v1.0.6 is available from the public [CodexMeter repository](https://github.com/HechoLP/CodexMeter/releases/tag/v1.0.6) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
+CodexMeter v1.1.0 is available from the public [CodexMeter repository](https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.0) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
 
-This is the stable 1.0.6 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
+This is the stable 1.1.0 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
 
 ### macOS에서 인증서 없는 릴리스를 처음 실행할 때
 
@@ -59,8 +60,8 @@ This is the stable 1.0.6 application release, but it is not Apple-trusted or not
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.0.6.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.0.6.dmg
+grep ' CodexMeter-1.1.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.1.0.dmg
 ```
 
 열린 DMG에서 `CodexMeter.app`을 `Applications` 폴더로 복사합니다. 체크섬이 일치하고 공식 릴리스임을 확인한 경우에만 아래 명령으로 해당 앱의 격리 속성을 제거하고 실행하세요.
@@ -74,7 +75,7 @@ open /Applications/CodexMeter.app
 
 ### Windows portable release
 
-Windows 10/11 users can download the x64 or ARM64 portable ZIP from the same public [`v1.0.6` release](https://github.com/HechoLP/CodexMeter/releases/tag/v1.0.6). The package is self-contained, so a separate .NET installation is not required.
+Windows 10/11 users can download the x64 or ARM64 portable ZIP from the same public [`v1.1.0` release](https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.0). The package is self-contained, so a separate .NET installation is not required.
 
 Verify the ZIP against `SHA256SUMS-windows.txt`, extract it to a permanent folder, and run `CodexMeter.exe`. This release is not publisher-signed, so Windows SmartScreen may require **Properties → Unblock** or the following command after the hash is confirmed:
 
@@ -96,11 +97,16 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 
 ## Features
 
-- Latest profile day (with its date), current week/month through that date, and lifetime totals when explicitly enabled on macOS
-- Today, week, month, and **Local History** totals from local Codex records on macOS and Windows
+- Live Today total from local Codex records always stays in the primary summary on macOS and Windows
+- Current week/month through the server snapshot date and lifetime totals when explicitly enabled on macOS
+- Week, month, and **Local History** totals from local Codex records when account totals are off
 - Input, cached input, output, and total-token breakdowns
-- Automatic file-event refresh with a lightweight configurable fallback
-- Manual, 30-second, one-minute, and five-minute refresh modes
+- macOS drill-down views for account limits, Today/7D/30D charts, models, projects, sessions, and verified sub-agent relationships
+- Read-only 5-hour/weekly/additional limit windows and reset credits from the signed local Codex app-server
+- First-screen limit previews with low-quota text warnings, reset countdowns, and even-use pace; detailed Limits can also show a current-window run-out estimate
+- Model-aware API-equivalent cost estimates using the current official price catalog; these are estimates, not bills or subscription charges
+- Privacy-minimized project and session analytics with keyed project identifiers and image counts only—never attachment contents
+- Automatic file-event refresh plus manual, 30-second, 1-, 2-, 5-, 15-, and 30-minute modes
 - Bounded incremental JSONL ingestion on macOS and a changed-file memory cache on Windows
 - Duplicate, replay, partial-line, truncation, and same-inode rewrite protection
 - Resumable 32 MiB / roughly five-second import slices for large histories
@@ -108,7 +114,7 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 - Optional launch at login through macOS Service Management or the current-user Windows startup key
 - Daily signed update checks on macOS and a manually opened release page on Windows
 - Secure local-history clearing with a persistent re-import cutoff
-- No notifications, advertising, or analytics
+- No notifications, advertising, or telemetry
 
 ## How token counting works
 
@@ -142,6 +148,10 @@ CodexMeter reads JSONL files only inside:
 
 On macOS, optional profile sync also reads only `tokens.access_token` and `tokens.account_id` from `~/.codex/auth.json` for a fixed read-only request to `https://chatgpt.com/backend-api/wham/profiles/me`. Credentials and the response are held only in memory and are not written to CodexMeter's database or logs. This is a non-public ChatGPT endpoint and may change. Windows remains local-only.
 
+The macOS **Limits** view uses the signed Codex app-server's read-only `account/rateLimits/read` RPC. The last successful limit response is held in memory only. CodexMeter never invokes reset-credit consumption, purchase, or account-changing methods.
+
+For local analytics, CodexMeter stores canonical model IDs, a keyed HMAC of each normalized working directory, the final project-folder name, hashed session relationships, and numeric image counts. Image counts describe the whole retained session after the local-history cutoff, rather than only the selected chart range. It does not store full working-directory paths, session text, image bytes, MIME payloads, or attachment contents.
+
 ## Accuracy and limitations
 
 - **Local History** means the oldest token record still present in local Codex session history through now.
@@ -151,14 +161,18 @@ On macOS, optional profile sync also reads only `tokens.access_token` and `token
 - Activity from another computer is absent from local totals unless its session history exists locally; optional account totals can include it.
 - A future Codex session-schema change may require a CodexMeter update.
 - Ambiguous counter baselines and malformed records are excluded rather than guessed.
+- API-equivalent cost uses the bundled current pricing snapshot and is marked unavailable for unknown models or incomplete pricing metadata. It is not an OpenAI bill.
+- Project names are folder basenames and can be identical; their stored identities remain separate keyed hashes.
 
 ## Roadmap
 
 Codex is the first supported data source. Future releases are planned to expand CodexMeter into a multi-service local usage meter, including **Claude** and other AI coding assistants where reliable local usage data is available. Support will be added service by service while preserving CodexMeter's local-first privacy model.
 
+CodexBar's current feature families have been reviewed as a product reference, but CodexMeter keeps an independent interface and a narrower trust boundary. See the [CodexBar feature strategy](Documentation/CODEXBAR_STRATEGY.md) for what is adopted, adapted, deferred, or intentionally excluded.
+
 ## Privacy
 
-Local accounting remains entirely on-device. The macOS build can check a signed Sparkle update feed; the Windows build opens GitHub Releases only when requested. Optional macOS profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, model names, project paths, authentication tokens, `.codex/auth.json`, or remote profile responses.
+Local accounting and analytics remain on-device. The macOS build can check a signed Sparkle update feed; the Windows build opens GitHub Releases only when requested. Optional macOS profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, full project paths, authentication tokens, `.codex/auth.json`, remote profile responses, or attachment contents.
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 
@@ -178,9 +192,9 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 | --- | --- |
 | General | Launch at Login, refresh mode, week start, and macOS automatic updates |
 | Appearance | Period, metric, number style, icon/text visibility, popover details |
-| Usage | Account-total opt-in, data boundary, accounting semantics, and cached-input explanation |
-| Data | Source status, database statistics, rebuild, clear history |
-| Advanced | Privacy-safe diagnostics and log folder |
+| Usage | Account totals, read-only limits, cost/projects/sessions/agent/attachment visibility, privacy boundary, and accounting semantics |
+| Data | Local/limit/pricing source status, database statistics, rebuild, clear history |
+| Advanced | Privacy-safe diagnostics, log folder, and account-limit provider status |
 
 ## Build from source
 
@@ -232,6 +246,7 @@ See the complete [Troubleshooting guide](Documentation/TROUBLESHOOTING.md).
 ## Documentation
 
 - [Architecture](Documentation/ARCHITECTURE.md)
+- [CodexBar feature strategy](Documentation/CODEXBAR_STRATEGY.md)
 - [Privacy](Documentation/PRIVACY.md)
 - [Releasing](Documentation/RELEASING.md)
 - [Troubleshooting](Documentation/TROUBLESHOOTING.md)

@@ -1,12 +1,27 @@
 import Foundation
 
 enum AppPaths {
+    private static let productionBundleIdentifier = "dev.codexmeter.CodexMeter"
+
     static var applicationSupportDirectory: URL {
         let fileManager = FileManager.default
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? fileManager.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support", isDirectory: true)
-        return base.appendingPathComponent("CodexMeter", isDirectory: true)
+        return applicationSupportDirectory(
+            baseDirectory: base,
+            bundleIdentifier: Bundle.main.bundleIdentifier
+        )
+    }
+
+    static func applicationSupportDirectory(
+        baseDirectory: URL,
+        bundleIdentifier: String?
+    ) -> URL {
+        let directoryName = bundleIdentifier == productionBundleIdentifier
+            ? "CodexMeter"
+            : "CodexMeter-Development"
+        return baseDirectory.appendingPathComponent(directoryName, isDirectory: true)
     }
 
     static var databaseURL: URL {

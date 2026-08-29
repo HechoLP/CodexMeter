@@ -22,6 +22,9 @@ struct SourceCheckpoint: Equatable, Sendable {
     var historyReplayComplete: Bool = true
     var model: String?
     var projectPath: String?
+    var parentSessionID: String?
+    var projectName: String?
+    var imageAttachmentCount: Int64 = 0
 
     static func fresh(sourcePath: String, fileIdentity: String, generation: Int64 = 0) -> SourceCheckpoint {
         SourceCheckpoint(
@@ -40,7 +43,39 @@ struct SourceCheckpoint: Equatable, Sendable {
             inheritedHistoryEndOrdinal: nil,
             historyReplayComplete: true,
             model: nil,
-            projectPath: nil
+            projectPath: nil,
+            parentSessionID: nil,
+            projectName: nil,
+            imageAttachmentCount: 0
+        )
+    }
+}
+
+private struct ModelUsageAccumulator {
+    var usage = TokenUsage.zero
+    var highContextUsage = TokenUsage.zero
+    var hasUnknownPricingContext = false
+
+    mutating func add(_ value: TokenUsage, pricingContext: PricingContext?) {
+        usage = usage.adding(value)
+        switch pricingContext {
+        case .highContext:
+            highContextUsage = highContextUsage.adding(value)
+        case .standard:
+            break
+        case nil:
+            if value.inputTokens > PricingContext.highContextInputThreshold {
+                hasUnknownPricingContext = true
+            }
+        }
+    }
+
+    func summary(modelID: String?) -> ModelUsageSummary {
+        ModelUsageSummary(
+            modelID: modelID,
+            usage: usage,
+            highContextUsage: highContextUsage,
+            hasUnknownPricingContext: hasUnknownPricingContext
         )
     }
 }
@@ -153,7 +188,8 @@ actor SQLiteDatabase {
             SELECT file_identity, generation, committed_offset, skipping_oversized_line,
                    observed_size, modification_time_ns, content_fingerprint, has_pending_import,
                    session_id, inherits_history, session_started_at,
-                   inherited_history_end_ordinal, history_replay_complete, model, project_path
+                   inherited_history_end_ordinal, history_replay_complete, model, project_path,
+                   parent_session_id, project_name, image_attachment_count
             FROM parsing_state
             WHERE source_path = ?1
             """
@@ -183,7 +219,10 @@ actor SQLiteDatabase {
                     : sqlite3_column_int64(statement, 11),
                 historyReplayComplete: sqlite3_column_int(statement, 12) != 0,
                 model: text(statement, column: 13),
-                projectPath: text(statement, column: 14)
+                projectPath: text(statement, column: 14),
+                parentSessionID: text(statement, column: 15),
+                projectName: text(statement, column: 16),
+                imageAttachmentCount: sqlite3_column_int64(statement, 17)
             )
         case SQLITE_DONE:
             return nil
@@ -203,7 +242,8 @@ actor SQLiteDatabase {
     private func normalizationStateWithinTransaction(for sessionID: String) throws -> UsageNormalizationState {
         let statement = try prepare(
             """
-            SELECT input_tokens, cached_input_tokens, output_tokens, last_observed_at, quality
+            SELECT input_tokens, cached_input_tokens, cache_write_input_tokens,
+                   output_tokens, last_observed_at, quality
             FROM session_counters
             WHERE session_id = ?1
             """
@@ -217,12 +257,15 @@ actor SQLiteDatabase {
                 cumulativeHighWaterMark: TokenUsage(
                     inputTokens: sqlite3_column_int64(statement, 0),
                     cachedInputTokens: sqlite3_column_int64(statement, 1),
-                    outputTokens: sqlite3_column_int64(statement, 2)
+                    cacheWriteInputTokens: sqlite3_column_type(statement, 2) == SQLITE_NULL
+                        ? nil
+                        : sqlite3_column_int64(statement, 2),
+                    outputTokens: sqlite3_column_int64(statement, 3)
                 ),
-                lastObservedAt: sqlite3_column_type(statement, 3) == SQLITE_NULL
+                lastObservedAt: sqlite3_column_type(statement, 4) == SQLITE_NULL
                     ? nil
-                    : Date(timeIntervalSince1970: sqlite3_column_double(statement, 3)),
-                quality: DataQuality(rawValue: text(statement, column: 4) ?? "") ?? .partial
+                    : Date(timeIntervalSince1970: sqlite3_column_double(statement, 4)),
+                quality: DataQuality(rawValue: text(statement, column: 5) ?? "") ?? .partial
             )
         case SQLITE_DONE:
             return .empty
@@ -259,10 +302,21 @@ actor SQLiteDatabase {
                 """
                 INSERT INTO usage_events (
                     event_key, occurred_at, session_id, model, project_path,
-                    input_tokens, cached_input_tokens, output_tokens,
-                    source_path, source_generation, source_position
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                ON CONFLICT DO NOTHING
+                    input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens,
+                    high_context_pricing, source_path, source_generation, source_position
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                ON CONFLICT DO UPDATE SET
+                    session_id = COALESCE(excluded.session_id, usage_events.session_id),
+                    model = COALESCE(excluded.model, usage_events.model),
+                    project_path = COALESCE(excluded.project_path, usage_events.project_path),
+                    cache_write_input_tokens = COALESCE(
+                        excluded.cache_write_input_tokens,
+                        usage_events.cache_write_input_tokens
+                    ),
+                    high_context_pricing = COALESCE(
+                        excluded.high_context_pricing,
+                        usage_events.high_context_pricing
+                    )
                 """
             )
             defer { sqlite3_finalize(insert) }
@@ -277,10 +331,20 @@ actor SQLiteDatabase {
                 try bind(event.projectPath, at: 5, to: insert)
                 sqlite3_bind_int64(insert, 6, event.usage.inputTokens)
                 sqlite3_bind_int64(insert, 7, event.usage.cachedInputTokens)
-                sqlite3_bind_int64(insert, 8, event.usage.outputTokens)
-                try bind(event.sourcePath, at: 9, to: insert)
-                sqlite3_bind_int64(insert, 10, checkpoint.generation)
-                sqlite3_bind_int64(insert, 11, event.sourcePosition)
+                if let cacheWrite = event.usage.cacheWriteInputTokens {
+                    sqlite3_bind_int64(insert, 8, cacheWrite)
+                } else {
+                    sqlite3_bind_null(insert, 8)
+                }
+                sqlite3_bind_int64(insert, 9, event.usage.outputTokens)
+                if let pricingContext = event.pricingContext {
+                    sqlite3_bind_int64(insert, 10, Int64(pricingContext.rawValue))
+                } else {
+                    sqlite3_bind_null(insert, 10)
+                }
+                try bind(event.sourcePath, at: 11, to: insert)
+                sqlite3_bind_int64(insert, 12, checkpoint.generation)
+                sqlite3_bind_int64(insert, 13, event.sourcePosition)
                 guard sqlite3_step(insert) == SQLITE_DONE else {
                     throw SQLiteDatabaseError.step(errorMessage)
                 }
@@ -296,12 +360,13 @@ actor SQLiteDatabase {
                     """
                     INSERT INTO session_counters (
                         session_id, input_tokens, cached_input_tokens, output_tokens,
-                        last_observed_at, quality
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                        cache_write_input_tokens, last_observed_at, quality
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                     ON CONFLICT(session_id) DO UPDATE SET
                         input_tokens = excluded.input_tokens,
                         cached_input_tokens = excluded.cached_input_tokens,
                         output_tokens = excluded.output_tokens,
+                        cache_write_input_tokens = excluded.cache_write_input_tokens,
                         last_observed_at = excluded.last_observed_at,
                         quality = excluded.quality
                     WHERE session_counters.last_observed_at IS NULL
@@ -311,6 +376,11 @@ actor SQLiteDatabase {
                             AND excluded.input_tokens >= session_counters.input_tokens
                             AND excluded.cached_input_tokens >= session_counters.cached_input_tokens
                             AND excluded.output_tokens >= session_counters.output_tokens
+                            AND (
+                                excluded.cache_write_input_tokens IS NULL
+                                OR session_counters.cache_write_input_tokens IS NULL
+                                OR excluded.cache_write_input_tokens >= session_counters.cache_write_input_tokens
+                            )
                        )
                     """
                 )
@@ -319,12 +389,17 @@ actor SQLiteDatabase {
                 sqlite3_bind_int64(counter, 2, highWaterMark.inputTokens)
                 sqlite3_bind_int64(counter, 3, highWaterMark.cachedInputTokens)
                 sqlite3_bind_int64(counter, 4, highWaterMark.outputTokens)
-                if let lastObservedAt = normalizationState.lastObservedAt {
-                    sqlite3_bind_double(counter, 5, lastObservedAt.timeIntervalSince1970)
+                if let cacheWrite = highWaterMark.cacheWriteInputTokens {
+                    sqlite3_bind_int64(counter, 5, cacheWrite)
                 } else {
                     sqlite3_bind_null(counter, 5)
                 }
-                try bind(normalizationState.quality.rawValue, at: 6, to: counter)
+                if let lastObservedAt = normalizationState.lastObservedAt {
+                    sqlite3_bind_double(counter, 6, lastObservedAt.timeIntervalSince1970)
+                } else {
+                    sqlite3_bind_null(counter, 6)
+                }
+                try bind(normalizationState.quality.rawValue, at: 7, to: counter)
                 guard sqlite3_step(counter) == SQLITE_DONE else {
                     throw SQLiteDatabaseError.step(errorMessage)
                 }
@@ -337,8 +412,9 @@ actor SQLiteDatabase {
                     observed_size, modification_time_ns, content_fingerprint, has_pending_import,
                     session_id, inherits_history, session_started_at,
                     inherited_history_end_ordinal, history_replay_complete,
-                    model, project_path, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                    model, project_path, parent_session_id, project_name,
+                    image_attachment_count, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
                 ON CONFLICT(source_path) DO UPDATE SET
                     file_identity = excluded.file_identity,
                     generation = excluded.generation,
@@ -355,6 +431,9 @@ actor SQLiteDatabase {
                     history_replay_complete = excluded.history_replay_complete,
                     model = excluded.model,
                     project_path = excluded.project_path,
+                    parent_session_id = excluded.parent_session_id,
+                    project_name = excluded.project_name,
+                    image_attachment_count = excluded.image_attachment_count,
                     updated_at = excluded.updated_at
                 """
             )
@@ -383,9 +462,57 @@ actor SQLiteDatabase {
             sqlite3_bind_int(state, 14, checkpoint.historyReplayComplete ? 1 : 0)
             try bind(checkpoint.model, at: 15, to: state)
             try bind(checkpoint.projectPath, at: 16, to: state)
-            sqlite3_bind_double(state, 17, Date().timeIntervalSince1970)
+            try bind(checkpoint.parentSessionID, at: 17, to: state)
+            try bind(checkpoint.projectName, at: 18, to: state)
+            sqlite3_bind_int64(state, 19, checkpoint.imageAttachmentCount)
+            sqlite3_bind_double(state, 20, Date().timeIntervalSince1970)
             guard sqlite3_step(state) == SQLITE_DONE else {
                 throw SQLiteDatabaseError.step(errorMessage)
+            }
+
+            if checkpoint.hasPendingImport == false,
+               checkpoint.committedOffset >= checkpoint.observedSize {
+                let completedBackfill = try prepare(
+                    "DELETE FROM analytics_backfill_sources WHERE source_path = ?1"
+                )
+                defer { sqlite3_finalize(completedBackfill) }
+                try bind(checkpoint.sourcePath, at: 1, to: completedBackfill)
+                guard sqlite3_step(completedBackfill) == SQLITE_DONE else {
+                    throw SQLiteDatabaseError.step(errorMessage)
+                }
+            }
+
+            if let sessionID = checkpoint.sessionID {
+                let metadata = try prepare(
+                    """
+                    INSERT INTO session_metadata (
+                        session_id, parent_session_id, project_id, project_name,
+                        started_at, image_attachment_count, updated_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    ON CONFLICT(session_id) DO UPDATE SET
+                        parent_session_id = excluded.parent_session_id,
+                        project_id = excluded.project_id,
+                        project_name = excluded.project_name,
+                        started_at = COALESCE(session_metadata.started_at, excluded.started_at),
+                        image_attachment_count = excluded.image_attachment_count,
+                        updated_at = excluded.updated_at
+                    """
+                )
+                defer { sqlite3_finalize(metadata) }
+                try bind(sessionID, at: 1, to: metadata)
+                try bind(checkpoint.parentSessionID, at: 2, to: metadata)
+                try bind(checkpoint.projectPath, at: 3, to: metadata)
+                try bind(checkpoint.projectName, at: 4, to: metadata)
+                if let sessionStartedAt = checkpoint.sessionStartedAt {
+                    sqlite3_bind_double(metadata, 5, sessionStartedAt.timeIntervalSince1970)
+                } else {
+                    sqlite3_bind_null(metadata, 5)
+                }
+                sqlite3_bind_int64(metadata, 6, checkpoint.imageAttachmentCount)
+                sqlite3_bind_double(metadata, 7, Date().timeIntervalSince1970)
+                guard sqlite3_step(metadata) == SQLITE_DONE else {
+                    throw SQLiteDatabaseError.step(errorMessage)
+                }
             }
 
             try execute("COMMIT")
@@ -429,6 +556,361 @@ actor SQLiteDatabase {
         }
     }
 
+    func analyticsSnapshot(
+        range: AnalyticsRange,
+        through end: Date,
+        calendar: Calendar
+    ) throws -> AnalyticsSnapshot {
+        let interval = range.interval(through: end, calendar: calendar)
+        let bucketIntervals = range.bucketIntervals(through: end, calendar: calendar)
+
+        try execute("BEGIN DEFERRED")
+        do {
+            let models = try modelUsage(from: interval.start, through: end)
+            let buckets = try usageBuckets(intervals: bucketIntervals, through: end)
+            let projects = try projectUsage(from: interval.start, through: end)
+            let sessions = try sessionUsage(from: interval.start, through: end)
+            let usage = models.reduce(TokenUsage.zero) { $0.adding($1.usage) }
+            let snapshot = AnalyticsSnapshot(
+                range: range,
+                interval: interval,
+                through: end,
+                usage: usage,
+                quality: try databaseQuality(hasEvents: !usage.isZero),
+                buckets: buckets,
+                models: models,
+                projects: projects,
+                sessions: sessions
+            )
+            try execute("COMMIT")
+            return snapshot
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
+    private func modelUsage(from start: Date, through end: Date) throws -> [ModelUsageSummary] {
+        let statement = try prepare(
+            """
+            SELECT model,
+                   CASE
+                       WHEN high_context_pricing IS NULL
+                        AND input_tokens <= \(PricingContext.highContextInputThreshold) THEN 0
+                       ELSE high_context_pricing
+                   END AS effective_high_context_pricing,
+                   SUM(input_tokens), SUM(cached_input_tokens),
+                   CASE WHEN COUNT(cache_write_input_tokens) = COUNT(*)
+                        THEN COALESCE(SUM(cache_write_input_tokens), 0) END,
+                   SUM(output_tokens)
+            FROM usage_events
+            WHERE occurred_at >= ?1 AND occurred_at <= ?2
+            GROUP BY model, effective_high_context_pricing
+            """
+        )
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, start.timeIntervalSince1970)
+        sqlite3_bind_double(statement, 2, end.timeIntervalSince1970)
+
+        var rows: [String: (modelID: String?, accumulator: ModelUsageAccumulator)] = [:]
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                let modelID = text(statement, column: 0)
+                let key = modelID ?? "\0unknown-model"
+                var row = rows[key] ?? (modelID, ModelUsageAccumulator())
+                row.accumulator.add(
+                    aggregateUsage(statement, startingAt: 2),
+                    pricingContext: pricingContext(statement, column: 1)
+                )
+                rows[key] = row
+            case SQLITE_DONE:
+                return rows.values.map { $0.accumulator.summary(modelID: $0.modelID) }
+                    .sorted { $0.usage.totalTokens > $1.usage.totalTokens }
+            default:
+                throw SQLiteDatabaseError.step(errorMessage)
+            }
+        }
+    }
+
+    private func usageBuckets(intervals: [DateInterval], through end: Date) throws -> [UsageBucket] {
+        guard !intervals.isEmpty else { return [] }
+        let placeholders = intervals.enumerated().map { index, _ in
+            let first = index * 3 + 1
+            return "(?\(first), ?\(first + 1), ?\(first + 2))"
+        }.joined(separator: ",")
+        let endIndex = intervals.count * 3 + 1
+        let statement = try prepare(
+            """
+            WITH buckets(bucket_index, start_at, end_at) AS (VALUES \(placeholders))
+            SELECT buckets.bucket_index, usage_events.model,
+                   CASE
+                       WHEN usage_events.high_context_pricing IS NULL
+                        AND usage_events.input_tokens <= \(PricingContext.highContextInputThreshold) THEN 0
+                       ELSE usage_events.high_context_pricing
+                   END AS effective_high_context_pricing,
+                   COALESCE(SUM(usage_events.input_tokens), 0),
+                   COALESCE(SUM(usage_events.cached_input_tokens), 0),
+                   CASE WHEN COUNT(usage_events.cache_write_input_tokens) = COUNT(usage_events.event_key)
+                        THEN COALESCE(SUM(usage_events.cache_write_input_tokens), 0) END,
+                   COALESCE(SUM(usage_events.output_tokens), 0)
+            FROM buckets
+            LEFT JOIN usage_events
+              ON usage_events.occurred_at >= buckets.start_at
+             AND usage_events.occurred_at < buckets.end_at
+             AND usage_events.occurred_at <= ?\(endIndex)
+            GROUP BY buckets.bucket_index, usage_events.model, effective_high_context_pricing
+            ORDER BY buckets.bucket_index
+            """
+        )
+        defer { sqlite3_finalize(statement) }
+        for (index, interval) in intervals.enumerated() {
+            let first = Int32(index * 3 + 1)
+            sqlite3_bind_int64(statement, first, Int64(index))
+            sqlite3_bind_double(statement, first + 1, interval.start.timeIntervalSince1970)
+            sqlite3_bind_double(statement, first + 2, interval.end.timeIntervalSince1970)
+        }
+        sqlite3_bind_double(statement, Int32(endIndex), end.timeIntervalSince1970)
+
+        var grouped = Array(
+            repeating: [String: (modelID: String?, accumulator: ModelUsageAccumulator)](),
+            count: intervals.count
+        )
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                let index = Int(sqlite3_column_int64(statement, 0))
+                guard grouped.indices.contains(index) else {
+                    throw SQLiteDatabaseError.step("usage bucket index is out of range")
+                }
+                let usage = aggregateUsage(statement, startingAt: 3)
+                if !usage.isZero {
+                    let modelID = text(statement, column: 1)
+                    let key = modelID ?? "\0unknown-model"
+                    var row = grouped[index][key] ?? (modelID, ModelUsageAccumulator())
+                    row.accumulator.add(
+                        usage,
+                        pricingContext: pricingContext(statement, column: 2)
+                    )
+                    grouped[index][key] = row
+                }
+            case SQLITE_DONE:
+                return intervals.enumerated().map { index, interval in
+                    UsageBucket(
+                        start: interval.start,
+                        end: interval.end,
+                        models: grouped[index].values
+                            .map { $0.accumulator.summary(modelID: $0.modelID) }
+                            .sorted { $0.usage.totalTokens > $1.usage.totalTokens }
+                    )
+                }
+            default:
+                throw SQLiteDatabaseError.step(errorMessage)
+            }
+        }
+    }
+
+    private func projectUsage(from start: Date, through end: Date) throws -> [ProjectUsageSummary] {
+        let statement = try prepare(
+            """
+            SELECT usage_events.project_path, MAX(session_metadata.project_name), usage_events.model,
+                   CASE
+                       WHEN usage_events.high_context_pricing IS NULL
+                        AND usage_events.input_tokens <= \(PricingContext.highContextInputThreshold) THEN 0
+                       ELSE usage_events.high_context_pricing
+                   END AS effective_high_context_pricing,
+                   SUM(usage_events.input_tokens), SUM(usage_events.cached_input_tokens),
+                   CASE WHEN COUNT(usage_events.cache_write_input_tokens) = COUNT(*)
+                        THEN COALESCE(SUM(usage_events.cache_write_input_tokens), 0) END,
+                   SUM(usage_events.output_tokens)
+            FROM usage_events
+            LEFT JOIN session_metadata ON session_metadata.session_id = usage_events.session_id
+            WHERE usage_events.occurred_at >= ?1 AND usage_events.occurred_at <= ?2
+            GROUP BY usage_events.project_path, usage_events.model, effective_high_context_pricing
+            """
+        )
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, start.timeIntervalSince1970)
+        sqlite3_bind_double(statement, 2, end.timeIntervalSince1970)
+
+        struct Accumulator {
+            var name: String
+            var models: [String: (modelID: String?, accumulator: ModelUsageAccumulator)]
+        }
+        var projects: [String: Accumulator] = [:]
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                let projectID = text(statement, column: 0) ?? "unknown-project"
+                let name = text(statement, column: 1) ?? "Unknown Project"
+                let modelID = text(statement, column: 2)
+                let modelKey = modelID ?? "\0unknown-model"
+                var project = projects[projectID] ?? Accumulator(name: name, models: [:])
+                var model = project.models[modelKey] ?? (modelID, ModelUsageAccumulator())
+                model.accumulator.add(
+                    aggregateUsage(statement, startingAt: 4),
+                    pricingContext: pricingContext(statement, column: 3)
+                )
+                project.models[modelKey] = model
+                projects[projectID] = project
+            case SQLITE_DONE:
+                let counts = try projectSessionCounts(from: start, through: end)
+                return projects.map { projectID, accumulator in
+                    let models = accumulator.models.values
+                        .map { $0.accumulator.summary(modelID: $0.modelID) }
+                        .sorted { $0.usage.totalTokens > $1.usage.totalTokens }
+                    let usage = models.reduce(TokenUsage.zero) { $0.adding($1.usage) }
+                    return ProjectUsageSummary(
+                        id: projectID,
+                        name: accumulator.name,
+                        usage: usage,
+                        models: models,
+                        sessionCount: counts[projectID] ?? 0
+                    )
+                }.sorted { $0.usage.totalTokens > $1.usage.totalTokens }
+            default:
+                throw SQLiteDatabaseError.step(errorMessage)
+            }
+        }
+    }
+
+    private func projectSessionCounts(from start: Date, through end: Date) throws -> [String: Int] {
+        let statement = try prepare(
+            """
+            SELECT project_path, COUNT(DISTINCT session_id)
+            FROM usage_events
+            WHERE occurred_at >= ?1 AND occurred_at <= ?2
+            GROUP BY project_path
+            """
+        )
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, start.timeIntervalSince1970)
+        sqlite3_bind_double(statement, 2, end.timeIntervalSince1970)
+        var counts: [String: Int] = [:]
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                counts[text(statement, column: 0) ?? "unknown-project"] = Int(sqlite3_column_int64(statement, 1))
+            case SQLITE_DONE:
+                return counts
+            default:
+                throw SQLiteDatabaseError.step(errorMessage)
+            }
+        }
+    }
+
+    private func sessionUsage(from start: Date, through end: Date) throws -> [SessionUsageSummary] {
+        let statement = try prepare(
+            """
+            SELECT COALESCE(usage_events.session_id, 'unknown-session'),
+                   MAX(usage_events.project_path), MAX(session_metadata.project_name),
+                   session_metadata.started_at, MAX(usage_events.occurred_at), usage_events.model,
+                   CASE
+                       WHEN usage_events.high_context_pricing IS NULL
+                        AND usage_events.input_tokens <= \(PricingContext.highContextInputThreshold) THEN 0
+                       ELSE usage_events.high_context_pricing
+                   END AS effective_high_context_pricing,
+                   SUM(usage_events.input_tokens), SUM(usage_events.cached_input_tokens),
+                   CASE WHEN COUNT(usage_events.cache_write_input_tokens) = COUNT(*)
+                        THEN COALESCE(SUM(usage_events.cache_write_input_tokens), 0) END,
+                   SUM(usage_events.output_tokens), session_metadata.parent_session_id,
+                   COALESCE(session_metadata.image_attachment_count, 0)
+            FROM usage_events
+            LEFT JOIN session_metadata ON session_metadata.session_id = usage_events.session_id
+            WHERE usage_events.occurred_at >= ?1 AND usage_events.occurred_at <= ?2
+            GROUP BY usage_events.session_id, usage_events.model, effective_high_context_pricing
+            """
+        )
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_double(statement, 1, start.timeIntervalSince1970)
+        sqlite3_bind_double(statement, 2, end.timeIntervalSince1970)
+
+        struct Accumulator {
+            var projectID: String?
+            var projectName: String?
+            var startedAt: Date?
+            var lastActivityAt: Date
+            var models: [String: (modelID: String?, accumulator: ModelUsageAccumulator)]
+            var imageAttachmentCount: Int
+            var parentSessionID: String?
+        }
+        var sessions: [String: Accumulator] = [:]
+        while true {
+            switch sqlite3_step(statement) {
+            case SQLITE_ROW:
+                guard let sessionID = text(statement, column: 0) else {
+                    throw SQLiteDatabaseError.step("session identifier is unavailable")
+                }
+                let lastActivity = Date(timeIntervalSince1970: sqlite3_column_double(statement, 4))
+                let startedAt = sqlite3_column_type(statement, 3) == SQLITE_NULL
+                    ? nil
+                    : Date(timeIntervalSince1970: sqlite3_column_double(statement, 3))
+                var accumulator = sessions[sessionID] ?? Accumulator(
+                    projectID: text(statement, column: 1),
+                    projectName: text(statement, column: 2),
+                    startedAt: startedAt,
+                    lastActivityAt: lastActivity,
+                    models: [:],
+                    imageAttachmentCount: Int(sqlite3_column_int64(statement, 12)),
+                    parentSessionID: text(statement, column: 11)
+                )
+                accumulator.lastActivityAt = max(accumulator.lastActivityAt, lastActivity)
+                let modelID = text(statement, column: 5)
+                let modelKey = modelID ?? "\0unknown-model"
+                var model = accumulator.models[modelKey] ?? (modelID, ModelUsageAccumulator())
+                model.accumulator.add(
+                    aggregateUsage(statement, startingAt: 7),
+                    pricingContext: pricingContext(statement, column: 6)
+                )
+                accumulator.models[modelKey] = model
+                sessions[sessionID] = accumulator
+            case SQLITE_DONE:
+                var directSubagentCounts: [String: Int] = [:]
+                for accumulator in sessions.values {
+                    guard let parentID = accumulator.parentSessionID,
+                          sessions[parentID] != nil
+                    else { continue }
+                    directSubagentCounts[parentID, default: 0] += 1
+                }
+                return sessions.map { sessionID, accumulator in
+                    let models = accumulator.models.values
+                        .map { $0.accumulator.summary(modelID: $0.modelID) }
+                        .sorted { $0.usage.totalTokens > $1.usage.totalTokens }
+                    return SessionUsageSummary(
+                        id: sessionID,
+                        projectID: accumulator.projectID,
+                        projectName: accumulator.projectName,
+                        startedAt: accumulator.startedAt,
+                        lastActivityAt: accumulator.lastActivityAt,
+                        usage: models.reduce(TokenUsage.zero) { $0.adding($1.usage) },
+                        models: models,
+                        directSubagentCount: directSubagentCounts[sessionID] ?? 0,
+                        imageAttachmentCount: accumulator.imageAttachmentCount,
+                        parentSessionID: accumulator.parentSessionID
+                    )
+                }.sorted { $0.lastActivityAt > $1.lastActivityAt }
+            default:
+                throw SQLiteDatabaseError.step(errorMessage)
+            }
+        }
+    }
+
+    private func aggregateUsage(_ statement: OpaquePointer, startingAt column: Int32) -> TokenUsage {
+        TokenUsage(
+            inputTokens: sqlite3_column_int64(statement, column),
+            cachedInputTokens: sqlite3_column_int64(statement, column + 1),
+            cacheWriteInputTokens: sqlite3_column_type(statement, column + 2) == SQLITE_NULL
+                ? nil
+                : sqlite3_column_int64(statement, column + 2),
+            outputTokens: sqlite3_column_int64(statement, column + 3)
+        )
+    }
+
+    private func pricingContext(_ statement: OpaquePointer, column: Int32) -> PricingContext? {
+        guard sqlite3_column_type(statement, column) != SQLITE_NULL else { return nil }
+        return PricingContext(rawValue: Int(sqlite3_column_int64(statement, column)))
+    }
+
     func dataStatistics() throws -> DataStatistics {
         let statement = try prepare("SELECT MIN(occurred_at), MAX(occurred_at) FROM usage_events")
         defer { sqlite3_finalize(statement) }
@@ -457,11 +939,26 @@ actor SQLiteDatabase {
     }
 
 #if DEBUG
+    func prepareVersion14FixtureForTesting() throws {
+        try execute("PRAGMA user_version = 14")
+    }
+
+    func prepareVersion13FixtureForTesting() throws {
+        try removeVersion14SchemaForTesting()
+        try execute("PRAGMA user_version = 13")
+    }
+
     func prepareVersion10FixtureForTesting() throws {
+        try removeVersion14SchemaForTesting()
+        try removeVersion13SchemaForTesting()
+        try removeVersion12SchemaForTesting()
         try execute("PRAGMA user_version = 10")
     }
 
     func prepareVersion9FixtureForTesting() throws {
+        try removeVersion14SchemaForTesting()
+        try removeVersion13SchemaForTesting()
+        try removeVersion12SchemaForTesting()
         try execute("ALTER TABLE parsing_state DROP COLUMN history_replay_complete")
         try execute("ALTER TABLE parsing_state DROP COLUMN inherited_history_end_ordinal")
         try execute("ALTER TABLE parsing_state DROP COLUMN session_started_at")
@@ -469,6 +966,9 @@ actor SQLiteDatabase {
     }
 
     func prepareVersion2FixtureForTesting() throws {
+        try removeVersion14SchemaForTesting()
+        try removeVersion13SchemaForTesting()
+        try removeVersion12SchemaForTesting()
         try execute("ALTER TABLE parsing_state DROP COLUMN history_replay_complete")
         try execute("ALTER TABLE parsing_state DROP COLUMN inherited_history_end_ordinal")
         try execute("ALTER TABLE parsing_state DROP COLUMN session_started_at")
@@ -479,6 +979,23 @@ actor SQLiteDatabase {
         try execute("ALTER TABLE parsing_state DROP COLUMN skipping_oversized_line")
         try execute("ALTER TABLE session_counters DROP COLUMN last_observed_at")
         try execute("PRAGMA user_version = 2")
+    }
+
+    private func removeVersion12SchemaForTesting() throws {
+        try execute("DROP TABLE IF EXISTS session_metadata")
+        try execute("ALTER TABLE parsing_state DROP COLUMN image_attachment_count")
+        try execute("ALTER TABLE parsing_state DROP COLUMN project_name")
+        try execute("ALTER TABLE parsing_state DROP COLUMN parent_session_id")
+    }
+
+    private func removeVersion13SchemaForTesting() throws {
+        try execute("DROP INDEX IF EXISTS usage_events_analytics_idx")
+        try execute("ALTER TABLE usage_events DROP COLUMN cache_write_input_tokens")
+        try execute("ALTER TABLE session_counters DROP COLUMN cache_write_input_tokens")
+    }
+
+    private func removeVersion14SchemaForTesting() throws {
+        try execute("ALTER TABLE usage_events DROP COLUMN high_context_pricing")
     }
 #endif
 
@@ -528,6 +1045,9 @@ actor SQLiteDatabase {
             try execute("DELETE FROM usage_events")
             try execute("DELETE FROM parsing_state")
             try execute("DELETE FROM session_counters")
+            try execute("DELETE FROM session_metadata")
+            try execute("DELETE FROM analytics_backfill_sources")
+            try execute("DELETE FROM app_metadata WHERE key = 'legacy_partial_quality'")
             try execute("COMMIT")
         } catch {
             try? execute("ROLLBACK")
@@ -543,6 +1063,9 @@ actor SQLiteDatabase {
             try execute("DELETE FROM usage_events")
             try execute("DELETE FROM parsing_state")
             try execute("DELETE FROM session_counters")
+            try execute("DELETE FROM session_metadata")
+            try execute("DELETE FROM analytics_backfill_sources")
+            try execute("DELETE FROM app_metadata WHERE key = 'legacy_partial_quality'")
             do {
                 let statement = try prepare(
                     """
@@ -633,7 +1156,7 @@ actor SQLiteDatabase {
         if start != nil {
             statement = try prepare(
                 """
-                SELECT input_tokens, cached_input_tokens, output_tokens
+                SELECT input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens
                 FROM usage_events
                 WHERE occurred_at >= ?1 AND occurred_at <= ?2
                 """
@@ -641,7 +1164,7 @@ actor SQLiteDatabase {
         } else {
             statement = try prepare(
                 """
-                SELECT input_tokens, cached_input_tokens, output_tokens
+                SELECT input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens
                 FROM usage_events
                 WHERE occurred_at <= ?1
                 """
@@ -661,16 +1184,30 @@ actor SQLiteDatabase {
             case SQLITE_ROW:
                 let input = sqlite3_column_int64(statement, 0)
                 let cached = sqlite3_column_int64(statement, 1)
-                let output = sqlite3_column_int64(statement, 2)
+                let cacheWrite = sqlite3_column_type(statement, 2) == SQLITE_NULL
+                    ? nil
+                    : sqlite3_column_int64(statement, 2)
+                let output = sqlite3_column_int64(statement, 3)
                 let (newInput, inputOverflow) = total.inputTokens.addingReportingOverflow(input)
                 let (newCached, cachedOverflow) = total.cachedInputTokens.addingReportingOverflow(cached)
                 let (newOutput, outputOverflow) = total.outputTokens.addingReportingOverflow(output)
-                guard !inputOverflow, !cachedOverflow, !outputOverflow else {
+                let newCacheWrite: Int64?
+                let cacheWriteOverflow: Bool
+                if let current = total.cacheWriteInputTokens, let cacheWrite {
+                    let result = current.addingReportingOverflow(cacheWrite)
+                    newCacheWrite = result.partialValue
+                    cacheWriteOverflow = result.overflow
+                } else {
+                    newCacheWrite = nil
+                    cacheWriteOverflow = false
+                }
+                guard !inputOverflow, !cachedOverflow, !cacheWriteOverflow, !outputOverflow else {
                     throw SQLiteDatabaseError.step("token aggregate exceeds the supported range")
                 }
                 total = TokenUsage(
                     inputTokens: newInput,
                     cachedInputTokens: newCached,
+                    cacheWriteInputTokens: newCacheWrite,
                     outputTokens: newOutput
                 )
             case SQLITE_DONE:
@@ -694,7 +1231,18 @@ actor SQLiteDatabase {
 
     private func databaseQuality(hasEvents: Bool) throws -> DataQuality {
         guard hasEvents else { return .unavailable }
-        let statement = try prepare("SELECT 1 FROM session_counters WHERE quality != 'exact' LIMIT 1")
+        let statement = try prepare(
+            """
+            SELECT 1
+            WHERE EXISTS (SELECT 1 FROM analytics_backfill_sources)
+               OR EXISTS (
+                    SELECT 1 FROM app_metadata
+                    WHERE key = 'legacy_partial_quality' AND value = '1'
+               )
+               OR EXISTS (SELECT 1 FROM session_counters WHERE quality != 'exact')
+            LIMIT 1
+            """
+        )
         defer { sqlite3_finalize(statement) }
         switch sqlite3_step(statement) {
         case SQLITE_ROW: return .partial
@@ -715,7 +1263,7 @@ actor SQLiteDatabase {
 
     private static func migrate(_ database: OpaquePointer) throws {
         var version = try userVersion(database)
-        guard version <= 11 else {
+        guard version <= 15 else {
             throw SQLiteDatabaseError.migration("database schema is newer than this app supports")
         }
 
@@ -761,6 +1309,22 @@ actor SQLiteDatabase {
         }
         if version == 10 {
             try migrateToVersion11(database)
+            version = 11
+        }
+        if version == 11 {
+            try migrateToVersion12(database)
+            version = 12
+        }
+        if version == 12 {
+            try migrateToVersion13(database)
+            version = 13
+        }
+        if version == 13 {
+            try migrateToVersion14(database)
+            version = 14
+        }
+        if version == 14 {
+            try migrateToVersion15(database)
         }
     }
 
@@ -1139,6 +1703,181 @@ actor SQLiteDatabase {
                 on: database
             )
             try execute("PRAGMA user_version = 11", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion12(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 12 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute("ALTER TABLE parsing_state ADD COLUMN parent_session_id TEXT", on: database)
+            try execute("ALTER TABLE parsing_state ADD COLUMN project_name TEXT", on: database)
+            try execute(
+                "ALTER TABLE parsing_state ADD COLUMN image_attachment_count INTEGER NOT NULL DEFAULT 0",
+                on: database
+            )
+            try execute(
+                """
+                CREATE TABLE session_metadata (
+                    session_id TEXT PRIMARY KEY NOT NULL,
+                    parent_session_id TEXT,
+                    project_id TEXT,
+                    project_name TEXT,
+                    started_at REAL,
+                    image_attachment_count INTEGER NOT NULL DEFAULT 0 CHECK(image_attachment_count >= 0),
+                    updated_at REAL NOT NULL
+                )
+                """,
+                on: database
+            )
+            try execute(
+                "CREATE INDEX session_metadata_parent_idx ON session_metadata(parent_session_id)",
+                on: database
+            )
+            try execute("PRAGMA user_version = 12", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion13(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 13 {
+                try execute("COMMIT", on: database)
+                return
+            }
+            try execute("ALTER TABLE usage_events ADD COLUMN cache_write_input_tokens INTEGER", on: database)
+            try execute(
+                "ALTER TABLE session_counters ADD COLUMN cache_write_input_tokens INTEGER",
+                on: database
+            )
+            try execute(
+                """
+                CREATE INDEX usage_events_analytics_idx
+                ON usage_events(occurred_at, model, project_path, session_id)
+                """,
+                on: database
+            )
+            try execute("PRAGMA user_version = 13", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion14(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 14 {
+                try execute("COMMIT", on: database)
+                return
+            }
+
+            try execute(
+                "ALTER TABLE usage_events ADD COLUMN high_context_pricing INTEGER CHECK(high_context_pricing IN (0, 1))",
+                on: database
+            )
+            try execute("PRAGMA user_version = 14", on: database)
+            try execute("COMMIT", on: database)
+        } catch {
+            try? execute("ROLLBACK", on: database)
+            throw error
+        }
+    }
+
+    private static func migrateToVersion15(_ database: OpaquePointer) throws {
+        try execute("BEGIN IMMEDIATE", on: database)
+        do {
+            if try userVersion(database) >= 15 {
+                try execute("COMMIT", on: database)
+                return
+            }
+
+            try execute(
+                """
+                CREATE TABLE IF NOT EXISTS analytics_backfill_sources (
+                    source_path TEXT PRIMARY KEY NOT NULL
+                )
+                """,
+                on: database
+            )
+            try execute(
+                """
+                INSERT OR IGNORE INTO analytics_backfill_sources(source_path)
+                SELECT DISTINCT source_path FROM usage_events
+                """,
+                on: database
+            )
+
+            // Phase 1 checkpoints skipped source bytes that now carry model,
+            // project, cache-write, pricing-context, and session metadata. Keep
+            // every accounting event so totals remain available even when an old
+            // source file has disappeared. Seed each replay above every historical
+            // generation so a rewritten source cannot collide with an older row.
+            // The conflict update in commit() enriches semantic duplicate events
+            // without adding their token deltas a second time.
+            try execute(
+                """
+                INSERT OR REPLACE INTO app_metadata(key, value)
+                SELECT 'legacy_partial_quality', '1'
+                WHERE EXISTS (SELECT 1 FROM session_counters WHERE quality != 'exact')
+                """,
+                on: database
+            )
+            try execute("DELETE FROM session_counters", on: database)
+            try execute("DELETE FROM session_metadata", on: database)
+            try execute(
+                """
+                UPDATE parsing_state
+                SET generation = MAX(
+                        generation + 1,
+                        COALESCE(
+                            (
+                                SELECT MAX(usage_events.source_generation) + 1
+                                FROM usage_events
+                                WHERE usage_events.source_path = parsing_state.source_path
+                            ),
+                            generation + 1
+                        )
+                    ),
+                    committed_offset = 0,
+                    skipping_oversized_line = 0,
+                    observed_size = 0,
+                    modification_time_ns = 0,
+                    content_fingerprint = '',
+                    has_pending_import = 0,
+                    session_id = NULL,
+                    inherits_history = 0,
+                    session_started_at = NULL,
+                    inherited_history_end_ordinal = NULL,
+                    history_replay_complete = 1,
+                    model = NULL,
+                    project_path = NULL,
+                    parent_session_id = NULL,
+                    project_name = NULL,
+                    image_attachment_count = 0
+                """,
+                on: database
+            )
+            try execute(
+                """
+                INSERT INTO app_metadata(key, value) VALUES('data_epoch', '1')
+                ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1
+                """,
+                on: database
+            )
+            try execute("PRAGMA user_version = 15", on: database)
             try execute("COMMIT", on: database)
         } catch {
             try? execute("ROLLBACK", on: database)

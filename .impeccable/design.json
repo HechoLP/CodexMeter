@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-29T14:19:25+09:00",
+  "title": "Design System: CodexMeter",
+  "extensions": {
+    "typographyMeta": {
+      "primary-metric": {
+        "displayName": "Primary Token Metric",
+        "purpose": "The strongest number on the overview, using rounded system typography and stable digits."
+      }
+    },
+    "motion": [
+      {
+        "name": "numeric-update",
+        "value": "ease-out 0.20-0.24s",
+        "purpose": "Makes changing token totals legible without turning them into decoration; disabled for Reduce Motion."
+      },
+      {
+        "name": "refresh-turn",
+        "value": "ease-in-out 0.5s, one 360-degree turn",
+        "purpose": "Confirms that refresh began; disabled for Reduce Motion."
+      },
+      {
+        "name": "status-fade",
+        "value": "ease-out 0.18s",
+        "purpose": "Softens status-label changes; disabled for Reduce Motion."
+      }
+    ]
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "The Quiet Instrument",
+    "overview": "CodexMeter should feel like a compact macOS instrument that is ready when opened and disappears when the user returns to work. It is precise, calm, and native: the first screen answers the immediate questions, while charts, projects, sessions, and full limit details remain one click deeper. The product uses system materials, semantic labels, SF Symbols, hairline separators, and tabular numerals instead of decorative dashboard chrome. Density is intentional, but every section must have one clear purpose and retain enough spacing to scan quickly.",
+    "keyCharacteristics": [
+      "Native macOS controls and semantic system styling.",
+      "Token totals remain the strongest visual signal.",
+      "Progressive disclosure instead of one long provider dashboard.",
+      "Quiet status communication with explicit text for warnings and estimates.",
+      "Motion explains change and never blocks interaction."
+    ],
+    "rules": [
+      {
+        "name": "The Semantic Color Rule",
+        "body": "Do not replace native semantic colors with fixed light- or dark-mode values.",
+        "section": "colors"
+      },
+      {
+        "name": "The Text-With-Color Rule",
+        "body": "Warning and critical colors always appear with an explicit label such as Low or Critical.",
+        "section": "colors"
+      },
+      {
+        "name": "The Number Stability Rule",
+        "body": "Use monospaced digits and numeric content transitions anywhere changing values could shift the layout.",
+        "section": "typography"
+      },
+      {
+        "name": "The One-Question Rule",
+        "body": "Each destination answers one question: limits, usage, projects, or sessions.",
+        "section": "layout"
+      },
+      {
+        "name": "The Real-Provider Rule",
+        "body": "A provider switcher appears only after a second provider has working data and status handling; empty provider tabs are not navigation.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Use tonal grouping and system materials before introducing custom elevation.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Native Control Rule",
+        "body": "Do not redraw a platform control solely to mimic another menu-bar app.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do keep the first screen focused on current local usage, actionable account limits, nearby periods, and direct navigation.",
+      "Do use semantic system colors, SwiftUI text styles, SF Symbols, VoiceOver labels, keyboard shortcuts, and Reduce Motion.",
+      "Do show unknown or incomplete cost data as unavailable in detailed analytics instead of zero.",
+      "Do keep local token totals, account-wide profile totals, quota percentages, and API-equivalent estimates visibly distinct.",
+      "Do add Claude, Gemini, or another provider behind a shared provider boundary before exposing it in navigation."
+    ],
+    "donts": [
+      "Don't copy CodexBar branding, assets, provider tab layout, or long single-page composition.",
+      "Don't place charts, projects, sessions, credits, every provider, and every limit on the overview.",
+      "Don't show empty or speculative provider tabs.",
+      "Don't use purple/blue AI gradients, neon, decorative glass, giant cards, or custom dashboard chrome.",
+      "Don't communicate low quota, stale data, or estimates through color alone."
+    ]
+  }
+}

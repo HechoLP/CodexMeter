@@ -4,6 +4,22 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-29
+
+### Added
+
+- Added first-screen Codex limit previews with reset countdowns, low-quota text warnings, and even-use pace, plus current-window run-out estimates in the detailed Limits screen.
+- Added fixed 2-, 15-, and 30-minute refresh choices alongside the existing automatic, manual, and shorter intervals.
+- Added quick access to Usage, Projects, and Sessions plus a compact actions menu for updates, the OpenAI status page, GitHub, and quit.
+
+### Changed
+
+- Reorganized the macOS popover around progressive disclosure: glanceable local usage and limits stay on the first screen, while detailed analytics remain one click away.
+
+### Fixed
+
+- Isolated preview and development builds from the production usage database so an unreleased schema migration cannot make the installed app stop reading local usage.
+
 ## [1.0.6] - 2026-08-28
 
 ### Fixed

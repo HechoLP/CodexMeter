@@ -15,7 +15,7 @@ struct PeriodDetailView: View {
         let total = displayedTotal(localUsage: usage)
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                if usesProfileTotals {
+                if usesProfileTotalForPeriod {
                     Text("ChatGPT account")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -25,20 +25,20 @@ struct PeriodDetailView: View {
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.24), value: total)
-                Text(usesProfileTotals ? profileTotalLabel : "This Mac total tokens")
+                Text(usesProfileTotalForPeriod ? profileTotalLabel : "This Mac total tokens")
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(usesProfileTotals ? "ChatGPT account" : "This Mac") \(title) total tokens, \(formatted(total))")
+            .accessibilityLabel("\(usesProfileTotalForPeriod ? "ChatGPT account" : "This Mac") \(title) total tokens, \(formatted(total))")
             .help(
-                usesProfileTotals
+                usesProfileTotalForPeriod
                     ? "Aggregate ChatGPT account statistic; can lag behind live local activity."
                     : "Cached input is already included in Input. Total equals Input plus Output."
             )
 
             Divider()
 
-            if usesProfileTotals, store.snapshot.updatedAt == nil {
+            if usesProfileTotalForPeriod, store.snapshot.updatedAt == nil {
                 HStack(spacing: 10) {
                     if store.isRefreshing || !store.hasLoadedSnapshot {
                         ProgressView()
@@ -58,7 +58,7 @@ struct PeriodDetailView: View {
                 }
                 .accessibilityElement(children: .combine)
             } else {
-                if usesProfileTotals {
+                if usesProfileTotalForPeriod {
                     HStack {
                         Text(localBreakdownLabel)
                             .font(.subheadline.weight(.semibold))
@@ -80,7 +80,7 @@ struct PeriodDetailView: View {
             Spacer(minLength: 0)
         }
         .padding(18)
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 240, alignment: .topLeading)
         .navigationTitle(title)
     }
@@ -94,7 +94,7 @@ struct PeriodDetailView: View {
         if !store.isRefreshing,
            !profileStore.isRefreshing,
            !store.isImportingHistory,
-           usesProfileTotals,
+           usesProfileTotalForPeriod,
            let profileSnapshot = profileStore.snapshot {
             Label(
                 profileStore.status == .ready
@@ -130,10 +130,10 @@ struct PeriodDetailView: View {
 
     private var title: String {
         switch period {
-        case .today: usesProfileTotals ? "Profile Day" : "Today"
+        case .today: "Today"
         case .week: "This Week"
         case .month: "This Month"
-        case .allTime: usesProfileTotals ? "Lifetime" : "Local History"
+        case .allTime: usesProfileTotalForPeriod ? "Lifetime" : "Local History"
         }
     }
 
@@ -150,24 +150,21 @@ struct PeriodDetailView: View {
         profileStore.isEnabled && profileStore.snapshot != nil
     }
 
+    private var usesProfileTotalForPeriod: Bool {
+        usesProfileTotals && period != .today
+    }
+
     private var profileTotalLabel: String {
         guard let snapshot = profileStore.snapshot else { return "Profile total tokens" }
-        if period == .today {
-            return "Profile day · \(profileDate(snapshot.statsAsOf))"
-        }
         return "Profile total through \(profileDate(snapshot.statsAsOf))"
     }
 
     private func displayedTotal(localUsage: TokenUsage) -> Int64 {
-        guard usesProfileTotals, let snapshot = profileStore.snapshot else {
-            return localUsage.totalTokens
-        }
-        return switch period {
-        case .today: snapshot.today
-        case .week: snapshot.week
-        case .month: snapshot.month
-        case .allTime: snapshot.lifetime
-        }
+        UsageDisplayPolicy.displayedTotal(
+            for: period,
+            localUsage: localUsage,
+            profileSnapshot: usesProfileTotals ? profileStore.snapshot : nil
+        )
     }
 
     private func profileDate(_ date: Date) -> String {

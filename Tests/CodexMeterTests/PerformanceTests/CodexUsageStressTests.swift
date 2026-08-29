@@ -26,7 +26,7 @@ final class CodexUsageStressTests: XCTestCase {
         _ = FileManager.default.createFile(atPath: source.path, contents: nil)
         let handle = try FileHandle(forWritingTo: source)
         var output = Data(
-            "{\"timestamp\":\"2026-08-27T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"\(sessionID)\"}}\n".utf8
+            "{\"timestamp\":\"2026-08-27T00:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"\(sessionID)\",\"model\":\"gpt-5.5\",\"cwd\":\"/tmp/CodexMeterStress\"}}\n".utf8
         )
         for index in 1...eventCount {
             let cached = index / 2
@@ -69,6 +69,30 @@ final class CodexUsageStressTests: XCTestCase {
         XCTAssertEqual(replay.processedBytes, 0)
         let replayedEventCount = try await database.eventCount()
         XCTAssertEqual(replayedEventCount, Int64(eventCount))
+        for range in AnalyticsRange.allCases {
+            let analytics = try await database.analyticsSnapshot(
+                range: range,
+                through: now,
+                calendar: calendar
+            )
+            XCTAssertEqual(analytics.usage, initial.snapshot.allTime)
+            XCTAssertEqual(analytics.buckets.reduce(TokenUsage.zero) { $0.adding($1.usage) }, analytics.usage)
+            XCTAssertEqual(analytics.models.map(\.modelID), ["gpt-5.5"])
+            XCTAssertEqual(analytics.projects.count, 1)
+            XCTAssertEqual(analytics.sessions.count, 1)
+            let estimate = CostEstimator().estimate(
+                analytics.models.map {
+                    ModelTokenUsageSample(
+                        modelID: $0.modelID ?? "unknown",
+                        usage: $0.usage,
+                        highContextUsage: $0.highContextUsage,
+                        hasUnknownPricingContext: $0.hasUnknownPricingContext,
+                        occurredAt: now
+                    )
+                }
+            )
+            XCTAssertTrue(estimate.isAvailable)
+        }
         print(
             "CodexMeter stress: \(eventCount) events in \(String(format: "%.3f", elapsed))s "
                 + "(\(String(format: "%.0f", Double(eventCount) / max(elapsed, 0.001))) events/s)"
