@@ -8,15 +8,19 @@ final class MenuPopoverLayoutTests: XCTestCase {
     func testPopoverSectionsSeparateTokenUsageFromCodexLimits() {
         XCTAssertEqual(
             MenuPopoverSection.allCases.map(\.title),
-            ["Overview", "Codex"]
+            ["Token Usage", "Codex Limits"]
         )
         XCTAssertEqual(MenuPopoverSection.overview.categories, [.localUsage, .tokenHistory, .explore])
         XCTAssertEqual(MenuPopoverSection.codex.categories, [.accountLimits])
         XCTAssertTrue(MenuPopoverSection.allCases.allSatisfy { !$0.symbol.isEmpty })
         XCTAssertTrue(MenuPopoverCategory.allCases.allSatisfy { !$0.symbol.isEmpty })
+        XCTAssertEqual(
+            MenuPopoverCategory.allCases.map(\.title),
+            ["Codex Usage Limits", "Today’s Tokens", "Usage History", "Detailed Views"]
+        )
     }
 
-    func testPopoverFittingSizeCannotCollapseToHeaderAndFooterOnly() {
+    func testPopoverFittingSizeShowsContentWithoutEmbeddingAScrollView() {
         _ = NSApplication.shared
         let store = UsageStore()
         let profileStore = ProfileUsageStore()
@@ -33,11 +37,12 @@ final class MenuPopoverLayoutTests: XCTestCase {
         hostingView.layoutSubtreeIfNeeded()
 
         XCTAssertEqual(hostingView.fittingSize.width, MenuPopoverMetrics.width)
-        XCTAssertGreaterThanOrEqual(
-            hostingView.fittingSize.height,
-            MenuPopoverMetrics.minimumBodyHeight,
-            "The menu body must retain enough height to render usage content."
-        )
+        XCTAssertGreaterThan(hostingView.fittingSize.height, 300)
+        XCTAssertFalse(containsScrollView(in: hostingView))
+    }
+
+    private func containsScrollView(in view: NSView) -> Bool {
+        view is NSScrollView || view.subviews.contains(where: containsScrollView)
     }
 }
 

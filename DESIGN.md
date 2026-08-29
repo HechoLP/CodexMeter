@@ -89,13 +89,13 @@ The palette follows macOS semantic colors so it remains correct in light, dark, 
 
 ## Layout
 
-The menu popover is a fixed compact column (372px). The header provides two top-level modes, the footer keeps primary actions visible, and the middle region scrolls only beyond a practical 700px ceiling. Overview contains token totals, history, and analytic destinations; Codex contains account-limit windows and reset timing. Token accounting and quota status never share the same scrolling surface. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
+The menu popover is a fixed compact column (372px) with content-driven height. The header provides two top-level modes and the footer keeps primary actions visible. Token Usage contains token totals, period history, and analytic destinations; Codex Limits contains quota windows and reset timing. The selected mode expands to its full intrinsic height without an embedded scroll region, so every item remains visible at once. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
 
-The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at overview edges. Overview prioritizes today's local usage, nearby periods, and analytic shortcuts; Codex prioritizes quota remaining and reset timing.
+The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at popover edges. Token Usage prioritizes today's local usage, nearby periods, and analytic shortcuts; Codex Limits prioritizes quota remaining and reset timing.
 
 **The One-Question Rule.** Each destination answers one question: limits, usage, projects, or sessions.
 
-**The Real-Provider Rule.** Overview is the cross-source token summary. A named provider tab appears only when that provider has working data and status handling; empty provider tabs are not navigation.
+**The Real-Provider Rule.** Token Usage is the cross-source token summary. A named provider limits tab appears only when that provider has working data and status handling; empty provider tabs are not navigation.
 
 ## Elevation & Depth
 
@@ -115,12 +115,12 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 - **Character:** A compact status instrument, not a miniature dashboard.
 - **Shape:** Fixed 372px width with a stable header and footer.
-- **Behavior:** The center scrolls only when content exceeds the practical menu height.
+- **Behavior:** The selected mode uses its intrinsic height; the overview contains no nested scrolling surface.
 
 ### Top-Level Modes
 
-- **Overview:** Local and optional account-wide token totals, period history, and analytic destinations.
-- **Codex:** Read-only Codex quota windows, reset timing, pace, and reset-credit availability.
+- **Token Usage:** Local and optional account-wide token totals, period history, and analytic destinations.
+- **Codex Limits:** Read-only Codex quota windows, reset timing, pace, and reset-credit availability.
 - **Behavior:** Two equal-width native buttons switch content in place. The selected mode uses the system accent and both modes remain keyboard and VoiceOver accessible.
 - **Separation:** The header contains no provider status card, connection badge, or generated explanatory subtitle.
 
@@ -159,7 +159,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 ### Do:
 
-- **Do** keep Overview focused on token totals and history, and Codex focused on account limits and reset timing.
+- **Do** keep Token Usage focused on token totals and history, and Codex Limits focused on account limits and reset timing.
 - **Do** use semantic system colors, SwiftUI text styles, SF Symbols, VoiceOver labels, keyboard shortcuts, and Reduce Motion.
 - **Do** show unknown or incomplete cost data as unavailable in detailed analytics instead of zero.
 - **Do** keep local token totals, account-wide profile totals, quota percentages, and API-equivalent estimates visibly distinct.

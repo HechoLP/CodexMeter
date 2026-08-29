@@ -3,9 +3,6 @@ import SwiftUI
 
 enum MenuPopoverMetrics {
     static let width: CGFloat = 372
-    static let minimumBodyHeight: CGFloat = 420
-    static let idealBodyHeight: CGFloat = 620
-    static let maximumBodyHeight: CGFloat = 700
 }
 
 enum MenuPopoverSection: String, CaseIterable, Identifiable {
@@ -16,8 +13,8 @@ enum MenuPopoverSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .overview: "Overview"
-        case .codex: "Codex"
+        case .overview: "Token Usage"
+        case .codex: "Codex Limits"
         }
     }
 
@@ -46,10 +43,10 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .accountLimits: "Account Limits"
-        case .localUsage: "Token Usage"
-        case .tokenHistory: "History"
-        case .explore: "Explore"
+        case .accountLimits: "Codex Usage Limits"
+        case .localUsage: "Today’s Tokens"
+        case .tokenHistory: "Usage History"
+        case .explore: "Detailed Views"
         }
     }
 
@@ -88,27 +85,17 @@ struct MenuPopoverView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 header
-                ScrollView {
-                    Group {
-                        switch selectedSection {
-                        case .overview:
-                            overviewContent
-                        case .codex:
-                            codexContent
-                        }
+                Group {
+                    switch selectedSection {
+                    case .overview:
+                        overviewContent
+                    case .codex:
+                        codexContent
                     }
-                    .id(selectedSection)
-                    .transition(.opacity)
                 }
-                .scrollIndicators(.hidden)
-                // A ScrollView has no useful intrinsic height inside MenuBarExtra.
-                // Without a lower bound AppKit can reopen the popover at the
-                // header-and-footer minimum, collapsing the entire usage body.
-                .frame(
-                    minHeight: MenuPopoverMetrics.minimumBodyHeight,
-                    idealHeight: MenuPopoverMetrics.idealBodyHeight,
-                    maxHeight: MenuPopoverMetrics.maximumBodyHeight
-                )
+                .id(selectedSection)
+                .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity)
                 Divider()
                 footer
             }
@@ -160,7 +147,7 @@ struct MenuPopoverView: View {
             accountLimitsPreview
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Codex usage limits are hidden", systemImage: "gauge.with.dots.needle.0percent")
+                Label("Codex Limits are turned off", systemImage: "gauge.with.dots.needle.0percent")
                     .font(.headline)
                 Text("Turn on Account Limits in Settings to see Codex quota windows and reset times.")
                     .font(.caption)
@@ -189,7 +176,7 @@ struct MenuPopoverView: View {
                     let windows = visibleAccountLimitWindows(snapshot.windows)
                     if windows.isEmpty {
                         compactLimitStatus(
-                            "No Codex limit window was reported.",
+                            "No Codex usage limits were reported.",
                             symbol: "gauge.with.dots.needle.0percent"
                         )
                     } else {
@@ -200,7 +187,7 @@ struct MenuPopoverView: View {
                             )
                         }
                         if windows.count > 3 {
-                            Text("\(windows.count - 3) more in Account Limits")
+                            Text("\(windows.count - 3) more in Codex Usage Limits")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -264,14 +251,16 @@ struct MenuPopoverView: View {
                 selectedSection = section
             }
         } label: {
-            VStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: section.symbol)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                 Text(section.title)
                     .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
             }
             .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: 40)
             .background(
                 Color.accentColor.opacity(isSelected ? 0.16 : 0),
                 in: RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -555,7 +544,7 @@ struct MenuPopoverView: View {
             return limitStore.status == .loading ? "Updating" : "Unavailable"
         }
         let count = visibleAccountLimitWindows(windows).count
-        return "\(count) \(count == 1 ? "window" : "windows")"
+        return "\(count) \(count == 1 ? "limit" : "limits")"
     }
 
     private var historyContext: String {
