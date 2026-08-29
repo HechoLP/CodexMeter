@@ -4,6 +4,13 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-29
+
+### Changed
+
+- Reorganized the menu bar overview into clearly labeled Local Usage, Account Limits, Token History, and Explore categories.
+- Added visible source and period context to category headings and exposed the category structure as VoiceOver headings.
+
 ## [1.1.2] - 2026-08-29
 
 ### Fixed
