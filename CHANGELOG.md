@@ -14,6 +14,10 @@ All notable changes to CodexMeter will be documented in this file.
 
 - Reorganized the macOS popover around progressive disclosure: glanceable local usage and limits stay on the first screen, while detailed analytics remain one click away.
 
+### Fixed
+
+- Isolated preview and development builds from the production usage database so an unreleased schema migration cannot make the installed app stop reading local usage.
+
 ## [1.0.6] - 2026-08-28
 
 ### Fixed

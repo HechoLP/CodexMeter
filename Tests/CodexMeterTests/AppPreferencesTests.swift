@@ -92,4 +92,30 @@ final class AppPreferencesTests: XCTestCase {
         XCTAssertNil(RefreshMode.manual.pollingInterval)
         XCTAssertTrue(RefreshMode.automatic.usesFileEvents)
     }
+
+    func testDevelopmentBundlesCannotMigrateProductionUsageDatabase() {
+        let base = URL(fileURLWithPath: "/tmp/Application Support", isDirectory: true)
+
+        XCTAssertEqual(
+            AppPaths.applicationSupportDirectory(
+                baseDirectory: base,
+                bundleIdentifier: "dev.codexmeter.CodexMeter"
+            ).lastPathComponent,
+            "CodexMeter"
+        )
+        XCTAssertEqual(
+            AppPaths.applicationSupportDirectory(
+                baseDirectory: base,
+                bundleIdentifier: "dev.codexmeter.CodexMeterPreview"
+            ).lastPathComponent,
+            "CodexMeter-Development"
+        )
+        XCTAssertEqual(
+            AppPaths.applicationSupportDirectory(
+                baseDirectory: base,
+                bundleIdentifier: nil
+            ).lastPathComponent,
+            "CodexMeter-Development"
+        )
+    }
 }

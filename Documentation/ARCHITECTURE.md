@@ -41,6 +41,8 @@ Canonical model IDs are retained for pricing. Full working directories are immed
 
 Schema version 15 preserves every Phase 1 accounting event while replaying available JSONL sources once to enrich model, project, cache-write, pricing-context, and session metadata. Replay checkpoints start above each source's historical generation and update semantic duplicates instead of adding token deltas twice. Missing legacy sources remain represented by their preserved totals, with unresolved backfill or legacy partial quality kept conservative rather than reported as exact.
 
+Only the production bundle identifier opens `~/Library/Application Support/CodexMeter`. Preview, test-host, and command-line development builds use `~/Library/Application Support/CodexMeter-Development`, so unreleased schema migrations cannot make an installed older app reject its production database.
+
 Account limits use an independent read-only boundary:
 
 ```text
