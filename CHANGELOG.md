@@ -4,6 +4,8 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-29
+
 ### Added
 
 - Added first-screen Codex limit previews with reset countdowns, low-quota text warnings, and even-use pace, plus current-window run-out estimates in the detailed Limits screen.
