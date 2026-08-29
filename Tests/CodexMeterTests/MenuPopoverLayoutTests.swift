@@ -5,6 +5,14 @@ import XCTest
 
 @MainActor
 final class MenuPopoverLayoutTests: XCTestCase {
+    func testPopoverCategoriesFollowThePrimaryReadingOrder() {
+        XCTAssertEqual(
+            MenuPopoverCategory.allCases.map(\.title),
+            ["Local Usage", "Account Limits", "Token History", "Explore"]
+        )
+        XCTAssertTrue(MenuPopoverCategory.allCases.allSatisfy { !$0.symbol.isEmpty })
+    }
+
     func testPopoverFittingSizeCannotCollapseToHeaderAndFooterOnly() {
         _ = NSApplication.shared
         let store = UsageStore()
