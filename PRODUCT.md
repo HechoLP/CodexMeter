@@ -4,7 +4,7 @@
 
 ## Platform
 
-macOS 14 or later and Windows 10/11. CodexMeter is a native menu bar or notification-area utility distributed as a certificate-free application, with stronger platform signing and notarization used when release credentials are available.
+adaptive
 
 ## Stack
 
@@ -24,7 +24,7 @@ CodexMeter measures locally observable token consumption and can optionally disp
 
 ## Operating Context
 
-The app runs quietly in the macOS menu bar or Windows notification area, discovers supported JSONL session history under the user's Codex data directory, imports existing records in the background, and incrementally follows later writes. The default reporting calendar uses the current system time zone and selected week start.
+The app runs quietly on macOS 14 or later and Windows 10/11 as a native menu bar or notification-area utility. It discovers supported JSONL session history under the user's Codex data directory, imports existing records in the background, and incrementally follows later writes. The default reporting calendar uses the current system time zone and selected week start. Public builds are certificate-free unless stronger platform signing and notarization credentials are available.
 
 ## Capabilities and Constraints
 
@@ -57,6 +57,7 @@ The product name is CodexMeter. Its interface is compact, quiet, precise, and na
 3. Read and retain only the minimum data required for token accounting.
 4. Prefer platform-native frameworks and predictable native behavior.
 5. Keep every public claim narrower than the evidence.
+6. Put glanceable status in the first screen and progressively disclose analysis instead of building one long dashboard.
 
 ## Accessibility & Inclusion
 

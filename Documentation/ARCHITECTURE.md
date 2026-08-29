@@ -53,6 +53,8 @@ signed Codex app-server
 
 CodexMeter verifies the local vendor binary signature before launch, never runs it through a shell, bounds output and execution time, and polls at a low frequency. A failed refresh retains the last in-memory limit snapshot and cannot change local token analytics. Reset credits are displayed only; no consume or account mutation RPC exists in the app.
 
+The UI derives an optional pace indicator from each fresh, realistically bounded reported limit window. It compares the observed used percentage with an even-use schedule between the inferred window start and reported reset time. A run-out time uses only the current window's average consumption rate. Neither value is persisted, both are hidden for stale snapshots, and both are labeled as estimates rather than quota guarantees.
+
 Estimated cost is a derived metric, not a stored bill. The catalog records one reviewed current API-pricing snapshot. The estimator uses Decimal, separates ordinary/cached/cache-write/output tokens, applies supported high-context request multipliers only where a qualifying request boundary was observed, safely treats input at or below the published threshold as standard pricing, and returns unavailable for unknown models or metadata that can change the amount.
 
 The macOS updater is isolated from token ingestion. It reads a signed HTTPS appcast, verifies the feed and GitHub Release archive with an embedded Ed25519 public key, and verifies the archive before extraction. No usage state is passed to Sparkle. The Windows release has no self-updater and opens only the fixed releases page after explicit user action.

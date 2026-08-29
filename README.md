@@ -19,6 +19,7 @@ Tiny native macOS menu bar and Windows notification-area apps that turn **local 
 ## Why
 
 - **Glanceable totals.** See input, cached input, output, and total tokens without leaving the menu bar.
+- **Plan around limits.** See the nearest Codex quota windows, reset countdowns, and an explicitly labeled even-use pace estimate before starting a long task.
 - **Honest accounting.** Cumulative snapshots are normalized into increases instead of being added repeatedly.
 - **Local by design.** Prompts, responses, source code, credentials, and raw session paths are not stored in CodexMeter's database.
 - **Native and quiet.** SwiftUI on macOS, WPF on Windows, no Dock/taskbar window, and no telemetry.
@@ -102,10 +103,10 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 - Input, cached input, output, and total-token breakdowns
 - macOS drill-down views for account limits, Today/7D/30D charts, models, projects, sessions, and verified sub-agent relationships
 - Read-only 5-hour/weekly/additional limit windows and reset credits from the signed local Codex app-server
+- First-screen limit previews with low-quota text warnings, reset countdowns, and even-use pace; detailed Limits can also show a current-window run-out estimate
 - Model-aware API-equivalent cost estimates using the current official price catalog; these are estimates, not bills or subscription charges
 - Privacy-minimized project and session analytics with keyed project identifiers and image counts only—never attachment contents
-- Automatic file-event refresh with a lightweight configurable fallback
-- Manual, 30-second, one-minute, and five-minute refresh modes
+- Automatic file-event refresh plus manual, 30-second, 1-, 2-, 5-, 15-, and 30-minute modes
 - Bounded incremental JSONL ingestion on macOS and a changed-file memory cache on Windows
 - Duplicate, replay, partial-line, truncation, and same-inode rewrite protection
 - Resumable 32 MiB / roughly five-second import slices for large histories
@@ -166,6 +167,8 @@ For local analytics, CodexMeter stores canonical model IDs, a keyed HMAC of each
 ## Roadmap
 
 Codex is the first supported data source. Future releases are planned to expand CodexMeter into a multi-service local usage meter, including **Claude** and other AI coding assistants where reliable local usage data is available. Support will be added service by service while preserving CodexMeter's local-first privacy model.
+
+CodexBar's current feature families have been reviewed as a product reference, but CodexMeter keeps an independent interface and a narrower trust boundary. See the [CodexBar feature strategy](Documentation/CODEXBAR_STRATEGY.md) for what is adopted, adapted, deferred, or intentionally excluded.
 
 ## Privacy
 
@@ -243,6 +246,7 @@ See the complete [Troubleshooting guide](Documentation/TROUBLESHOOTING.md).
 ## Documentation
 
 - [Architecture](Documentation/ARCHITECTURE.md)
+- [CodexBar feature strategy](Documentation/CODEXBAR_STRATEGY.md)
 - [Privacy](Documentation/PRIVACY.md)
 - [Releasing](Documentation/RELEASING.md)
 - [Troubleshooting](Documentation/TROUBLESHOOTING.md)
