@@ -1,12 +1,10 @@
 # CodexMeter ◈ — Know where your Codex tokens went.
 
-> Local Codex token usage, always one click away on macOS and Windows.
+> Local Codex token usage, always one click away on macOS.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
-[![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?style=flat-square&logo=windows11&logoColor=white)](Documentation/WINDOWS.md)
 [![macOS Release](https://img.shields.io/badge/macOS-v1.1.0-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.1.0.md)
-[![Windows Release](https://img.shields.io/badge/Windows-v1.1.0-0078D4?style=flat-square)](Documentation/ReleaseNotes/1.1.0.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -14,7 +12,7 @@
 
 <p align="center"><sub>The app popover shown above is an actual CodexMeter screen.</sub></p>
 
-Tiny native macOS menu bar and Windows notification-area apps that turn **local Codex session history** into clear token totals. Local totals stay one click away without an account login, API key, browser cookie, telemetry, or cloud sync. macOS can also opt in to a separate, memory-only ChatGPT account-total view.
+Tiny native macOS menu bar app that turns **local Codex session history** into clear token totals. Local totals stay one click away without an account login, API key, browser cookie, telemetry, or cloud sync. You can also opt in to a separate, memory-only ChatGPT account-total view.
 
 ## Why
 
@@ -22,7 +20,7 @@ Tiny native macOS menu bar and Windows notification-area apps that turn **local 
 - **Plan around limits.** See the nearest Codex quota windows, reset countdowns, and an explicitly labeled even-use pace estimate before starting a long task.
 - **Honest accounting.** Cumulative snapshots are normalized into increases instead of being added repeatedly.
 - **Local by design.** Prompts, responses, source code, credentials, and raw session paths are not stored in CodexMeter's database.
-- **Native and quiet.** SwiftUI on macOS, WPF on Windows, no Dock/taskbar window, and no telemetry.
+- **Native and quiet.** SwiftUI and AppKit, no Dock window, and no telemetry.
 
 ## Install
 
@@ -73,23 +71,10 @@ open /Applications/CodexMeter.app
 
 `xattr` 명령은 이 앱에 대한 macOS의 다운로드 격리 검사를 제거합니다. 출처가 다르거나 체크섬이 일치하지 않는 파일에는 사용하지 마세요. Developer ID 서명과 Apple 공증을 마친 정식 릴리스에서는 이 단계가 필요하지 않습니다.
 
-### Windows portable release
-
-Windows 10/11 users can download the x64 or ARM64 portable ZIP from the same public [`v1.1.0` release](https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.0). The package is self-contained, so a separate .NET installation is not required.
-
-Verify the ZIP against `SHA256SUMS-windows.txt`, extract it to a permanent folder, and run `CodexMeter.exe`. This release is not publisher-signed, so Windows SmartScreen may require **Properties → Unblock** or the following command after the hash is confirmed:
-
-```powershell
-Unblock-File .\CodexMeter.exe
-Start-Process .\CodexMeter.exe
-```
-
-See the complete [Windows installation and build guide](Documentation/WINDOWS.md).
-
 ## First run
 
 1. Launch CodexMeter after Codex has created local session history.
-2. Select the diamond meter in the macOS menu bar or Windows notification area.
+2. Select the diamond meter in the macOS menu bar.
 3. Open **Settings** to choose the displayed period, refresh mode, menu bar elements, and launch-at-login behavior.
 4. Use **Refresh** whenever you want an immediate reconciliation.
 
@@ -97,8 +82,8 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 
 ## Features
 
-- Live Today total from local Codex records always stays in the primary summary on macOS and Windows
-- Current week/month through the server snapshot date and lifetime totals when explicitly enabled on macOS
+- Live Today total from local Codex records always stays in the primary summary
+- Current week/month through the server snapshot date and lifetime totals when explicitly enabled
 - Week, month, and **Local History** totals from local Codex records when account totals are off
 - Input, cached input, output, and total-token breakdowns
 - macOS drill-down views for account limits, Today/7D/30D charts, models, projects, sessions, and verified sub-agent relationships
@@ -107,12 +92,12 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 - Model-aware API-equivalent cost estimates using the current official price catalog; these are estimates, not bills or subscription charges
 - Privacy-minimized project and session analytics with keyed project identifiers and image counts only—never attachment contents
 - Automatic file-event refresh plus manual, 30-second, 1-, 2-, 5-, 15-, and 30-minute modes
-- Bounded incremental JSONL ingestion on macOS and a changed-file memory cache on Windows
+- Bounded incremental JSONL ingestion with durable SQLite checkpoints
 - Duplicate, replay, partial-line, truncation, and same-inode rewrite protection
 - Resumable 32 MiB / roughly five-second import slices for large histories
-- Native menu bar/notification-area popover and Settings window
-- Optional launch at login through macOS Service Management or the current-user Windows startup key
-- Daily signed update checks on macOS and a manually opened release page on Windows
+- Native menu bar popover and Settings window
+- Optional launch at login through macOS Service Management
+- Daily signed update checks with a manual check-for-updates action
 - Secure local-history clearing with a persistent re-import cutoff
 - No notifications, advertising, or telemetry
 
@@ -124,7 +109,7 @@ Codex session JSONL
   → bounded incremental reader
   → cumulative snapshot normalization
   → local normalized event cache
-  → menu bar or notification-area totals
+  → menu bar totals
 ```
 
 Codex token-count events are cumulative snapshots. CodexMeter derives component-wise increases and ignores repeated snapshots. The local total uses the inclusive input count plus output:
@@ -143,10 +128,8 @@ CodexMeter reads JSONL files only inside:
 
 - `~/.codex/sessions`
 - `~/.codex/archived_sessions`
-- `%USERPROFILE%\.codex\sessions` on Windows
-- `%USERPROFILE%\.codex\archived_sessions` on Windows
 
-On macOS, optional profile sync also reads only `tokens.access_token` and `tokens.account_id` from `~/.codex/auth.json` for a fixed read-only request to `https://chatgpt.com/backend-api/wham/profiles/me`. Credentials and the response are held only in memory and are not written to CodexMeter's database or logs. This is a non-public ChatGPT endpoint and may change. Windows remains local-only.
+Optional profile sync also reads only `tokens.access_token` and `tokens.account_id` from `~/.codex/auth.json` for a fixed read-only request to `https://chatgpt.com/backend-api/wham/profiles/me`. Credentials and the response are held only in memory and are not written to CodexMeter's database or logs. This is a non-public ChatGPT endpoint and may change.
 
 The macOS **Limits** view uses the signed Codex app-server's read-only `account/rateLimits/read` RPC. The last successful limit response is held in memory only. CodexMeter never invokes reset-credit consumption, purchase, or account-changing methods.
 
@@ -172,19 +155,19 @@ CodexBar's current feature families have been reviewed as a product reference, b
 
 ## Privacy
 
-Local accounting and analytics remain on-device. The macOS build can check a signed Sparkle update feed; the Windows build opens GitHub Releases only when requested. Optional macOS profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, full project paths, authentication tokens, `.codex/auth.json`, remote profile responses, or attachment contents.
+Local accounting and analytics remain on-device. The app can check a signed Sparkle update feed. Optional profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, full project paths, authentication tokens, `.codex/auth.json`, remote profile responses, or attachment contents.
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 
 ## Platform permissions
 
-| Capability | macOS | Windows | Why |
-| --- | :---: | :---: | --- |
-| Full Disk Access | No | N/A | Reads only supported files under `.codex`. |
-| Accessibility | No | No | Does not control other apps. |
-| Screen Recording | No | No | Does not inspect the screen. |
-| Codex credential access | Optional | No | macOS reads only the access token and account ID after the user enables account totals; Windows never reads authentication data. |
-| Launch at Login | Optional | Optional | Enabled only by the user in Settings. |
+| Capability | Required? | Why |
+| --- | :---: | --- |
+| Full Disk Access | No | Reads only supported files under `.codex`. |
+| Accessibility | No | Does not control other apps. |
+| Screen Recording | No | Does not inspect the screen. |
+| Codex credential access | Optional | Reads only the access token and account ID after the user enables account totals. |
+| Launch at Login | Optional | Enabled only by the user in Settings. |
 
 ## Settings
 
@@ -224,14 +207,6 @@ export CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 export CODE_SIGN_TEAM_ID="TEAMID"
 export NOTARY_PROFILE="codexmeter-notary"
 Scripts/release_public.sh
-```
-
-Build and test the Windows version with the .NET 10 SDK:
-
-```powershell
-dotnet restore .\Windows\CodexMeter.Windows.sln
-dotnet test .\Windows\CodexMeter.Windows.sln --configuration Release
-.\Windows\Scripts\package.ps1 -RuntimeIdentifier win-x64 -ResetManifest
 ```
 
 ## Troubleshooting

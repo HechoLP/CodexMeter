@@ -5,7 +5,6 @@
 /*.xcarchive
 /*.dSYM/
 /Artifacts/
-/Windows/artifacts/
 **/bin/
 **/obj/
 /.swiftpm/
