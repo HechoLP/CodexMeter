@@ -1,6 +1,10 @@
 import AppKit
 import SwiftUI
 
+enum MenuPopoverMetrics {
+    static let width: CGFloat = 344
+}
+
 struct MenuPopoverView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
@@ -24,21 +28,31 @@ struct MenuPopoverView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 header
-                localUsageSummary
-                Divider()
-                if usesProfileTotals {
-                    profilePeriodLinks
-                } else {
-                    localPeriodLinks
+                ScrollView {
+                    VStack(spacing: 0) {
+                        localUsageSummary
+                        if accountLimitsEnabled {
+                            Divider()
+                            accountLimitsPreview
+                        }
+                        Divider()
+                        if usesProfileTotals {
+                            profilePeriodLinks
+                        } else {
+                            localPeriodLinks
+                        }
+                        if analyticsEnabled {
+                            Divider()
+                            exploreLinks
+                        }
+                    }
                 }
-                if accountLimitsEnabled || analyticsEnabled {
-                    Divider()
-                    detailLinks
-                }
+                .scrollIndicators(.hidden)
+                .frame(maxHeight: 540)
                 Divider()
                 footer
             }
-            .frame(width: 320)
+            .frame(width: MenuPopoverMetrics.width)
             .background(.background)
             .navigationDestination(for: UsagePeriod.self) { period in
                 PeriodDetailView(period: period)
@@ -68,6 +82,71 @@ struct MenuPopoverView: View {
             guard isRefreshing, !reduceMotion else { return }
             refreshTurns += 1
         }
+    }
+
+    private var accountLimitsPreview: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            NavigationLink(value: MenuDestination.limits) {
+                HStack(spacing: 8) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Text("Account Limits")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if let windows = limitStore.snapshot?.windows, !windows.isEmpty {
+                        let visibleCount = visibleAccountLimitWindows(windows).count
+                        Text("\(visibleCount) \(visibleCount == 1 ? "window" : "windows")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Open all account limit details")
+
+            if let snapshot = limitStore.snapshot {
+                let windows = visibleAccountLimitWindows(snapshot.windows)
+                if windows.isEmpty {
+                    compactLimitStatus("No Codex limit window was reported.", symbol: "gauge.with.dots.needle.0percent")
+                } else {
+                    ForEach(Array(windows.prefix(2))) { window in
+                        compactLimitRow(
+                            window,
+                            showsPace: limitStore.status.allowsPaceEstimates
+                        )
+                    }
+                    if windows.count > 2 {
+                        Text("\(windows.count - 2) more windows in Limits")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if limitStore.status == .stale {
+                        compactLimitStatus(
+                            "Offline · showing last known limits",
+                            symbol: "wifi.slash"
+                        )
+                    }
+                }
+            } else if limitStore.isRefreshing || limitStore.status == .loading {
+                HStack(spacing: 9) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading account limits…")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .frame(minHeight: 28)
+            } else {
+                compactLimitStatus(limitStore.statusMessage, symbol: "exclamationmark.triangle")
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
     }
 
     private var header: some View {
@@ -134,7 +213,7 @@ struct MenuPopoverView: View {
                     }
                     if analyticsEnabled, costEstimatesEnabled,
                        let analytics = store.analyticsSnapshots[.today] {
-                        EstimatedCostLabel(snapshot: analytics)
+                        EstimatedCostLabel(snapshot: analytics, showsUnavailable: false)
                     }
                 }
             }
@@ -175,22 +254,20 @@ struct MenuPopoverView: View {
         .padding(.bottom, 6)
     }
 
-    private var detailLinks: some View {
-        VStack(spacing: 0) {
-            if accountLimitsEnabled {
-                destinationLink("Limits", detail: limitSummary, symbol: "gauge.with.dots.needle.50percent", destination: .limits)
+    private var exploreLinks: some View {
+        HStack(spacing: 0) {
+            exploreLink("Usage", symbol: "chart.xyaxis.line", destination: .usage)
+            if projectsEnabled {
+                Divider().frame(height: 30)
+                exploreLink("Projects", symbol: "folder", destination: .projects)
             }
-            if analyticsEnabled {
-                destinationLink("Usage", detail: "Today · 7D · 30D", symbol: "chart.xyaxis.line", destination: .usage)
-                if projectsEnabled {
-                    destinationLink("Projects", detail: "Local usage by project", symbol: "folder", destination: .projects)
-                }
-                if sessionsEnabled {
-                    destinationLink("Sessions", detail: "Sessions and sub-agents", symbol: "text.bubble", destination: .sessions)
-                }
+            if sessionsEnabled {
+                Divider().frame(height: 30)
+                exploreLink("Sessions", symbol: "text.bubble", destination: .sessions)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
     }
 
     private var footer: some View {
@@ -252,6 +329,7 @@ struct MenuPopoverView: View {
             .frame(width: 28, height: 28)
             .contentShape(Rectangle())
             .disabled(isRefreshing || store.isMaintainingData || store.isImportingHistory)
+            .keyboardShortcut("r", modifiers: .command)
             .help("Refresh usage")
             .accessibilityLabel("Refresh usage")
 
@@ -263,19 +341,35 @@ struct MenuPopoverView: View {
             .buttonStyle(.plain)
             .frame(width: 28, height: 28)
             .contentShape(Rectangle())
+            .keyboardShortcut(",", modifiers: .command)
             .help("Open Settings")
             .accessibilityLabel("Open Settings")
 
-            Button {
-                NSApplication.shared.terminate(nil)
+            Menu {
+                Button("Open OpenAI Status") {
+                    open("https://status.openai.com")
+                }
+                Button("Open CodexMeter on GitHub") {
+                    open("https://github.com/HechoLP/CodexMeter")
+                }
+                Button("Check for Updates…") {
+                    UpdateService.shared.checkForUpdates()
+                }
+                .disabled(!UpdateService.shared.isAvailable)
+                Divider()
+                Button("Quit CodexMeter") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .keyboardShortcut("q", modifiers: .command)
             } label: {
-                Image(systemName: "power")
+                Image(systemName: "ellipsis.circle")
             }
-            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .frame(width: 28, height: 28)
             .contentShape(Rectangle())
-            .help("Quit CodexMeter")
-            .accessibilityLabel("Quit CodexMeter")
+            .help("More actions")
+            .accessibilityLabel("More actions")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
@@ -366,46 +460,108 @@ struct MenuPopoverView: View {
         )
     }
 
-    private var limitSummary: String {
-        guard limitStore.isEnabled else { return "Disabled" }
-        guard let allWindows = limitStore.snapshot?.windows, !allWindows.isEmpty else {
-            return limitStore.statusMessage
+    private func visibleAccountLimitWindows(_ windows: [AccountLimitWindow]) -> [AccountLimitWindow] {
+        let visible = additionalLimitsEnabled
+            ? windows
+            : windows.filter { $0.limitID.lowercased() == "codex" }
+        return visible.sorted {
+            if $0.windowDurationMinutes == $1.windowDurationMinutes {
+                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            return $0.windowDurationMinutes < $1.windowDurationMinutes
         }
-        let windows = additionalLimitsEnabled
-            ? allWindows
-            : allWindows.filter { $0.limitID.lowercased() == "codex" }
-        guard !windows.isEmpty else { return "No Codex limit reported" }
-        let remaining = windows.map(\.remainingPercent).min() ?? 0
-        return "\(Int(remaining.rounded()))% minimum remaining"
     }
 
-    private func destinationLink(
+    @ViewBuilder
+    private func compactLimitRow(
+        _ window: AccountLimitWindow,
+        now: Date = Date(),
+        showsPace: Bool
+    ) -> some View {
+        let remaining = window.remainingPercent
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(limitTitle(window))
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                if remaining <= 25 {
+                    Label(remaining <= 10 ? "Critical" : "Low", systemImage: "exclamationmark.triangle.fill")
+                        .labelStyle(.titleOnly)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(remaining <= 10 ? .red : .orange)
+                }
+                Spacer()
+                Text("\(Int(remaining.rounded()))% left")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+            }
+            ProgressView(value: remaining, total: 100)
+                .tint(limitAccent(remaining))
+                .accessibilityLabel("\(limitTitle(window)) remaining")
+                .accessibilityValue("\(Int(remaining.rounded())) percent")
+            HStack(spacing: 4) {
+                if let reset = window.resetsAt {
+                    Text("Resets")
+                    Text(reset, style: .relative)
+                }
+                if showsPace, let pace = window.pace(at: now) {
+                    if window.resetsAt != nil {
+                        Text("·")
+                    }
+                    Text(pace.compactSummary)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .help("Pace compares current use with even use across the reported limit window.")
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func compactLimitStatus(_ message: String, symbol: String) -> some View {
+        Label(message, systemImage: symbol)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+    }
+
+    private func limitTitle(_ window: AccountLimitWindow) -> String {
+        window.displayName.caseInsensitiveCompare("Codex") == .orderedSame
+            ? window.windowLabel
+            : "\(window.displayName) · \(window.windowLabel)"
+    }
+
+    private func limitAccent(_ remaining: Double) -> Color {
+        if remaining <= 10 { return .red }
+        if remaining <= 25 { return .orange }
+        return .accentColor
+    }
+
+    private func exploreLink(
         _ title: String,
-        detail: String,
         symbol: String,
         destination: MenuDestination
     ) -> some View {
         NavigationLink(value: destination) {
-            HStack(spacing: 10) {
+            VStack(spacing: 4) {
                 Image(systemName: symbol)
-                    .frame(width: 16)
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.caption.weight(.medium))
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, minHeight: 42)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Open \(title)")
+        .accessibilityHint("Shows detailed local Codex \(title.lowercased())")
+    }
+
+    private func open(_ rawURL: String) {
+        guard let url = URL(string: rawURL) else { return }
+        NSWorkspace.shared.open(url)
     }
 }

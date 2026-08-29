@@ -556,7 +556,10 @@ enum RefreshMode: String, CaseIterable, Identifiable, Sendable {
     case automatic
     case thirtySeconds = "30"
     case oneMinute = "60"
+    case twoMinutes = "120"
     case fiveMinutes = "300"
+    case fifteenMinutes = "900"
+    case thirtyMinutes = "1800"
     case manual
 
     var id: String { rawValue }
@@ -566,7 +569,10 @@ enum RefreshMode: String, CaseIterable, Identifiable, Sendable {
         case .automatic: "Automatic"
         case .thirtySeconds: "30 Seconds"
         case .oneMinute: "1 Minute"
+        case .twoMinutes: "2 Minutes"
         case .fiveMinutes: "5 Minutes"
+        case .fifteenMinutes: "15 Minutes"
+        case .thirtyMinutes: "30 Minutes"
         case .manual: "Manual"
         }
     }
@@ -578,7 +584,10 @@ enum RefreshMode: String, CaseIterable, Identifiable, Sendable {
         case .automatic: 60
         case .thirtySeconds: 30
         case .oneMinute: 60
+        case .twoMinutes: 120
         case .fiveMinutes: 300
+        case .fifteenMinutes: 900
+        case .thirtyMinutes: 1_800
         case .manual: nil
         }
     }

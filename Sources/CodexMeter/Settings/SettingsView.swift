@@ -197,7 +197,7 @@ private struct GeneralSettingsView: View {
                         Text(mode.title).tag(mode.rawValue)
                     }
                 }
-                Text("Automatic uses file events with a lightweight one-minute fallback check.")
+                Text("Automatic reacts to Codex file changes and uses a lightweight one-minute fallback check. Fixed intervals are available when you prefer predictable polling.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

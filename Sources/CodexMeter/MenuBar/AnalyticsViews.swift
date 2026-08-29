@@ -38,6 +38,9 @@ struct AccountLimitsView: View {
                     Text("Read-only account limits reported by Codex. CodexMeter never consumes reset credits.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text("Pace compares reported use with an even-use schedule. Any run-out time is a current-window estimate, not a quota guarantee.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     HStack(spacing: 5) {
                         Image(systemName: limitStore.status == .stale ? "wifi.slash" : "clock")
                         Text(limitStatusText(snapshot))
@@ -57,7 +60,7 @@ struct AccountLimitsView: View {
             }
             .padding(16)
         }
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 300, maxHeight: 520)
         .navigationTitle("Limits")
         .toolbar {
@@ -93,6 +96,22 @@ struct AccountLimitsView: View {
                 Text("Resets \(reset.formatted(.dateTime.month(.abbreviated).day().hour().minute())) · \(reset, style: .relative)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            if limitStore.status.allowsPaceEstimates,
+               let pace = window.pace(at: Date()) {
+                HStack(spacing: 4) {
+                    Image(systemName: pace.state == .ahead ? "exclamationmark.triangle" : "speedometer")
+                        .accessibilityHidden(true)
+                    Text(pace.summary)
+                    if let projected = pace.projectedExhaustion {
+                        Text("· estimated run-out")
+                        Text(projected, style: .relative)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(pace.state == .ahead ? .orange : .secondary)
+                .accessibilityElement(children: .combine)
+                .help("Pace compares current use with even use across the reported limit window. Run-out time uses the current window average.")
             }
         }
         .padding(12)
@@ -184,7 +203,7 @@ struct UsageAnalyticsView: View {
             }
             .padding(16)
         }
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 360, maxHeight: 560)
         .navigationTitle("Usage")
         .task(id: range) { await store.refreshAnalytics(range: range) }
@@ -365,7 +384,7 @@ struct ProjectsAnalyticsView: View {
                 }
             }
         }
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 340, maxHeight: 540)
     }
 }
@@ -409,7 +428,7 @@ struct SessionsAnalyticsView: View {
                 }
             }
         }
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 340, maxHeight: 540)
         .navigationTitle("Sessions")
         .task(id: range) { await store.refreshAnalytics(range: range) }
@@ -451,7 +470,7 @@ struct ProjectDetailView: View {
                 .padding(16)
             }
         }
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 300, maxHeight: 520)
         .navigationTitle("Project")
     }
@@ -497,7 +516,7 @@ struct SessionDetailView: View {
                 .padding(16)
             }
         }
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 340, maxHeight: 540)
         .navigationTitle("Session")
     }
@@ -557,7 +576,7 @@ struct ModelDetailView: View {
                 .padding(16)
             }
         }
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 300, maxHeight: 520)
         .navigationTitle("Model")
     }
@@ -565,13 +584,20 @@ struct ModelDetailView: View {
 
 struct EstimatedCostLabel: View {
     let snapshot: AnalyticsSnapshot
+    let showsUnavailable: Bool
+
+    init(snapshot: AnalyticsSnapshot, showsUnavailable: Bool = true) {
+        self.snapshot = snapshot
+        self.showsUnavailable = showsUnavailable
+    }
 
     var body: some View {
         EstimatedCostText(
             models: snapshot.models,
             through: snapshot.through,
             quality: snapshot.quality,
-            compact: false
+            compact: false,
+            showsUnavailable: showsUnavailable
         )
     }
 }
@@ -582,6 +608,21 @@ struct EstimatedCostText: View {
     let through: Date
     let quality: DataQuality
     let compact: Bool
+    let showsUnavailable: Bool
+
+    nonisolated init(
+        models: [ModelUsageSummary],
+        through: Date,
+        quality: DataQuality,
+        compact: Bool,
+        showsUnavailable: Bool = true
+    ) {
+        self.models = models
+        self.through = through
+        self.quality = quality
+        self.compact = compact
+        self.showsUnavailable = showsUnavailable
+    }
 
     var body: some View {
         if costEstimatesEnabled {
@@ -590,7 +631,7 @@ struct EstimatedCostText: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .help("Current official API pricing estimate. This is not a bill or subscription charge.")
-            } else {
+            } else if showsUnavailable {
                 Text("Estimated cost unavailable")
                     .font(.caption)
                     .foregroundStyle(.secondary)

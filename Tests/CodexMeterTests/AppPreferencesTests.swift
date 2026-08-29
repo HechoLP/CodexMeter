@@ -81,4 +81,15 @@ final class AppPreferencesTests: XCTestCase {
         let permissions = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
         XCTAssertEqual(permissions.intValue & 0o777, 0o700)
     }
+
+    func testRefreshModesExposePredictablePollingChoices() {
+        XCTAssertEqual(RefreshMode.thirtySeconds.pollingInterval, 30)
+        XCTAssertEqual(RefreshMode.oneMinute.pollingInterval, 60)
+        XCTAssertEqual(RefreshMode.twoMinutes.pollingInterval, 120)
+        XCTAssertEqual(RefreshMode.fiveMinutes.pollingInterval, 300)
+        XCTAssertEqual(RefreshMode.fifteenMinutes.pollingInterval, 900)
+        XCTAssertEqual(RefreshMode.thirtyMinutes.pollingInterval, 1_800)
+        XCTAssertNil(RefreshMode.manual.pollingInterval)
+        XCTAssertTrue(RefreshMode.automatic.usesFileEvents)
+    }
 }

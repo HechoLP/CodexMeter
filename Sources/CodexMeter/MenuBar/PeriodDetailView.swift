@@ -80,7 +80,7 @@ struct PeriodDetailView: View {
             Spacer(minLength: 0)
         }
         .padding(18)
-        .frame(width: 320)
+        .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 240, alignment: .topLeading)
         .navigationTitle(title)
     }
