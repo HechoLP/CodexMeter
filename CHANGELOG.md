@@ -4,6 +4,12 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-29
+
+### Fixed
+
+- Prevented the menu bar popover's scrollable usage body from collapsing to zero height, which could leave only the title and footer visible after opening the app.
+
 ## [1.1.1] - 2026-08-29
 
 ### Changed
