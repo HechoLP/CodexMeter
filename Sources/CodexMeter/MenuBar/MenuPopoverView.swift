@@ -3,6 +3,9 @@ import SwiftUI
 
 enum MenuPopoverMetrics {
     static let width: CGFloat = 344
+    static let minimumBodyHeight: CGFloat = 300
+    static let idealBodyHeight: CGFloat = 440
+    static let maximumBodyHeight: CGFloat = 540
 }
 
 struct MenuPopoverView: View {
@@ -48,7 +51,14 @@ struct MenuPopoverView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
-                .frame(maxHeight: 540)
+                // A ScrollView has no useful intrinsic height inside MenuBarExtra.
+                // Without a lower bound AppKit can reopen the popover at the
+                // header-and-footer minimum, collapsing the entire usage body.
+                .frame(
+                    minHeight: MenuPopoverMetrics.minimumBodyHeight,
+                    idealHeight: MenuPopoverMetrics.idealBodyHeight,
+                    maxHeight: MenuPopoverMetrics.maximumBodyHeight
+                )
                 Divider()
                 footer
             }
