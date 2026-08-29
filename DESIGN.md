@@ -17,7 +17,7 @@ spacing:
   popover-edge: "18px"
 components:
   overview-popover:
-    width: "344px"
+    width: "372px"
   limit-card:
     rounded: "{rounded.detail-card}"
     padding: "{spacing.section}"
@@ -89,7 +89,7 @@ The palette follows macOS semantic colors so it remains correct in light, dark, 
 
 ## Layout
 
-The menu popover is a fixed compact column (344px). The header and footer remain stable while the middle region scrolls up to 540px. Major overview sections use dividers; details use the same width so navigation never causes a horizontal jump.
+The menu popover is a fixed compact column (372px). The header identifies the active provider, the footer keeps primary actions visible, and the middle region scrolls only beyond a practical 700px ceiling. The overview follows a provider-first vertical reading path: account limits, token usage, history, and detailed destinations. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
 
 The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at overview edges. The overview prioritizes today's local usage, then account limits, nearby periods, and three compact analytic shortcuts.
 
@@ -152,7 +152,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 ### Do:
 
-- **Do** keep the first screen focused on current local usage, actionable account limits, nearby periods, and direct navigation.
+- **Do** keep the first screen focused on the active provider, actionable account limits, current local usage, nearby periods, and direct navigation.
 - **Do** use semantic system colors, SwiftUI text styles, SF Symbols, VoiceOver labels, keyboard shortcuts, and Reduce Motion.
 - **Do** show unknown or incomplete cost data as unavailable in detailed analytics instead of zero.
 - **Do** keep local token totals, account-wide profile totals, quota percentages, and API-equivalent estimates visibly distinct.
@@ -160,7 +160,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 ### Don't:
 
-- **Don't** copy CodexBar branding, assets, provider tab layout, or long single-page composition.
+- **Don't** copy CodexBar branding or assets; reuse only provider-first information-architecture ideas that improve scanning for CodexMeter's real features.
 - **Don't** place charts, projects, sessions, credits, every provider, and every limit on the overview.
 - **Don't** show empty or speculative provider tabs.
 - **Don't** use purple/blue AI gradients, neon, decorative glass, giant cards, or custom dashboard chrome.

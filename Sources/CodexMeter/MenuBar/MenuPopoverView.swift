@@ -2,15 +2,15 @@ import AppKit
 import SwiftUI
 
 enum MenuPopoverMetrics {
-    static let width: CGFloat = 344
-    static let minimumBodyHeight: CGFloat = 300
-    static let idealBodyHeight: CGFloat = 500
-    static let maximumBodyHeight: CGFloat = 540
+    static let width: CGFloat = 372
+    static let minimumBodyHeight: CGFloat = 420
+    static let idealBodyHeight: CGFloat = 620
+    static let maximumBodyHeight: CGFloat = 700
 }
 
 enum MenuPopoverCategory: String, CaseIterable, Identifiable {
-    case localUsage
     case accountLimits
+    case localUsage
     case tokenHistory
     case explore
 
@@ -18,9 +18,9 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .localUsage: "Local Usage"
         case .accountLimits: "Account Limits"
-        case .tokenHistory: "Token History"
+        case .localUsage: "Token Usage"
+        case .tokenHistory: "History"
         case .explore: "Explore"
         }
     }
@@ -48,6 +48,7 @@ struct MenuPopoverView: View {
     @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
     @AppStorage("accountLimitsEnabled") private var accountLimitsEnabled = AppPreferences.defaultAccountLimitsEnabled
     @AppStorage("additionalLimitsEnabled") private var additionalLimitsEnabled = AppPreferences.defaultAdditionalLimitsEnabled
+    @AppStorage("resetCreditsEnabled") private var resetCreditsEnabled = AppPreferences.defaultResetCreditsEnabled
     @AppStorage("projectsEnabled") private var projectsEnabled = AppPreferences.defaultProjectsEnabled
     @AppStorage("sessionsEnabled") private var sessionsEnabled = AppPreferences.defaultSessionsEnabled
     @State private var refreshTurns = 0
@@ -60,13 +61,11 @@ struct MenuPopoverView: View {
                 header
                 ScrollView {
                     VStack(spacing: 0) {
-                        localUsageSection
                         if accountLimitsEnabled {
-                            Divider()
                             accountLimitsPreview
+                            Divider()
                         }
-                        Divider()
-                        tokenHistorySection
+                        localUsageSection
                         if analyticsEnabled {
                             Divider()
                             exploreSection
@@ -118,91 +117,115 @@ struct MenuPopoverView: View {
     }
 
     private var accountLimitsPreview: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 0) {
             NavigationLink(value: MenuDestination.limits) {
-                HStack(spacing: 8) {
-                    Image(systemName: MenuPopoverCategory.accountLimits.symbol)
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                    Text(MenuPopoverCategory.accountLimits.title)
-                        .font(.subheadline.weight(.semibold))
-                        .accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    if let windows = limitStore.snapshot?.windows, !windows.isEmpty {
-                        let visibleCount = visibleAccountLimitWindows(windows).count
-                        Text("\(visibleCount) \(visibleCount == 1 ? "window" : "windows")")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-                .contentShape(Rectangle())
+                categoryHeader(.accountLimits, context: limitHeaderContext, showsDisclosure: true)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("menu.category.accountLimits")
             .accessibilityHint("Open all account limit details")
 
-            if let snapshot = limitStore.snapshot {
-                let windows = visibleAccountLimitWindows(snapshot.windows)
-                if windows.isEmpty {
-                    compactLimitStatus("No Codex limit window was reported.", symbol: "gauge.with.dots.needle.0percent")
-                } else {
-                    ForEach(Array(windows.prefix(2))) { window in
-                        compactLimitRow(
-                            window,
-                            showsPace: limitStore.status.allowsPaceEstimates
+            VStack(alignment: .leading, spacing: 12) {
+                if let snapshot = limitStore.snapshot {
+                    let windows = visibleAccountLimitWindows(snapshot.windows)
+                    if windows.isEmpty {
+                        compactLimitStatus(
+                            "No Codex limit window was reported.",
+                            symbol: "gauge.with.dots.needle.0percent"
                         )
+                    } else {
+                        ForEach(Array(windows.prefix(3))) { window in
+                            compactLimitRow(
+                                window,
+                                showsPace: limitStore.status.allowsPaceEstimates
+                            )
+                        }
+                        if windows.count > 3 {
+                            Text("\(windows.count - 3) more in Account Limits")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if limitStore.status == .stale {
+                            compactLimitStatus(
+                                "Offline · showing last known limits",
+                                symbol: "wifi.slash"
+                            )
+                        }
                     }
-                    if windows.count > 2 {
-                        Text("\(windows.count - 2) more windows in Limits")
-                            .font(.caption)
+                    if resetCreditsEnabled, let credits = snapshot.resetCredits {
+                        resetCreditsSummary(credits)
+                    }
+                } else if limitStore.isRefreshing || limitStore.status == .loading {
+                    HStack(spacing: 9) {
+                        ProgressView().controlSize(.small)
+                        Text("Reading account limits…")
                             .foregroundStyle(.secondary)
                     }
-                    if limitStore.status == .stale {
-                        compactLimitStatus(
-                            "Offline · showing last known limits",
-                            symbol: "wifi.slash"
-                        )
-                    }
+                    .font(.caption)
+                    .frame(minHeight: 36)
+                } else {
+                    compactLimitStatus(limitStore.statusMessage, symbol: "exclamationmark.triangle")
                 }
-            } else if limitStore.isRefreshing || limitStore.status == .loading {
-                HStack(spacing: 9) {
-                    ProgressView().controlSize(.small)
-                    Text("Reading account limits…")
-                        .foregroundStyle(.secondary)
-                }
-                .font(.caption)
-                .frame(minHeight: 28)
-            } else {
-                compactLimitStatus(limitStore.statusMessage, symbol: "exclamationmark.triangle")
             }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 16)
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 11)
-        .padding(.bottom, 10)
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "diamond")
-                .font(.system(size: 13, weight: .semibold))
-                .accessibilityHidden(true)
-            Text("CodexMeter")
-                .font(.headline)
-            Spacer()
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "diamond")
+                    .font(.system(size: 13, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text("CodexMeter")
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 15)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            HStack(spacing: 12) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Codex")
+                        .font(.headline)
+                    Text(providerScopeText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 12)
+                Label(store.sourceStatusText, systemImage: providerStatusSymbol)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 13)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Codex, \(providerScopeText), \(store.sourceStatusText)")
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 12)
     }
 
     private var localUsageSection: some View {
         VStack(spacing: 0) {
-            categoryHeader(.localUsage, context: "This Mac · Today")
+            categoryHeader(.localUsage, context: "This Mac")
             localUsageSummary
+            Divider().padding(.leading, 18)
+            categoryHeader(.tokenHistory, context: historyContext)
+            if usesProfileTotals {
+                profilePeriodLinks
+            } else {
+                localPeriodLinks
+            }
         }
     }
 
@@ -271,41 +294,26 @@ struct MenuPopoverView: View {
         .padding(.bottom, 12)
     }
 
-    private var tokenHistorySection: some View {
-        VStack(spacing: 0) {
-            categoryHeader(.tokenHistory, context: historyContext)
-            if usesProfileTotals {
-                profilePeriodLinks
-            } else {
-                localPeriodLinks
-            }
-        }
-    }
-
     private var localPeriodLinks: some View {
-        HStack(spacing: 0) {
-            periodSummaryLink("This Week", period: .week, value: displayedTotal(for: .week))
-            Divider().frame(height: 34)
-            periodSummaryLink("This Month", period: .month, value: displayedTotal(for: .month))
-            Divider().frame(height: 34)
-            periodSummaryLink("Local History", period: .allTime, value: displayedTotal(for: .allTime))
+        VStack(spacing: 0) {
+            periodRowLink("This Week", period: .week, value: displayedTotal(for: .week))
+            periodRowLink("This Month", period: .month, value: displayedTotal(for: .month))
+            periodRowLink("Local History", period: .allTime, value: displayedTotal(for: .allTime))
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 9)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
     }
 
     private var profilePeriodLinks: some View {
-        HStack(spacing: 0) {
+        VStack(spacing: 0) {
             if let snapshot = profileStore.snapshot {
-                periodSummaryLink("This Week", period: .week, value: snapshot.week)
-                Divider().frame(height: 34)
-                periodSummaryLink("This Month", period: .month, value: snapshot.month)
-                Divider().frame(height: 34)
-                periodSummaryLink("Lifetime", period: .allTime, value: snapshot.lifetime)
+                periodRowLink("This Week", period: .week, value: snapshot.week)
+                periodRowLink("This Month", period: .month, value: snapshot.month)
+                periodRowLink("Lifetime", period: .allTime, value: snapshot.lifetime)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 9)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
     }
 
     private var exploreSection: some View {
@@ -316,49 +324,48 @@ struct MenuPopoverView: View {
     }
 
     private var exploreLinks: some View {
-        HStack(spacing: 0) {
-            exploreLink("Usage", symbol: "chart.xyaxis.line", destination: .usage)
+        VStack(spacing: 0) {
+            exploreRowLink("Usage dashboard", symbol: "chart.xyaxis.line", destination: .usage)
             if projectsEnabled {
-                Divider().frame(height: 30)
-                exploreLink("Projects", symbol: "folder", destination: .projects)
+                exploreRowLink("Projects", symbol: "folder", destination: .projects)
             }
             if sessionsEnabled {
-                Divider().frame(height: 30)
-                exploreLink("Sessions", symbol: "text.bubble", destination: .sessions)
+                exploreRowLink("Sessions", symbol: "text.bubble", destination: .sessions)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 12)
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        VStack(spacing: 8) {
             if shouldShowStatus {
-                Label {
-                    if profileStore.isEnabled, let profileSnapshot = profileStore.snapshot {
-                        if profileStore.status == .ready {
-                            Text("Profile through \(profileDate(profileSnapshot.statsAsOf))")
+                HStack {
+                    Label {
+                        if profileStore.isEnabled, let profileSnapshot = profileStore.snapshot {
+                            if profileStore.status == .ready {
+                                Text("Account totals through \(profileDate(profileSnapshot.statsAsOf))")
+                            } else {
+                                Text("Through \(profileDate(profileSnapshot.statsAsOf)) · \(profileStore.statusMessage)")
+                            }
+                        } else if profileStore.isEnabled {
+                            Text("\(profileStore.statusMessage) · showing This Mac")
+                        } else if showLastUpdated,
+                                  !store.isRefreshing,
+                                  !store.isImportingHistory,
+                                  let lastSourceRefreshAt = store.lastSourceRefreshAt,
+                                  store.snapshot.quality != .stale,
+                                  store.snapshot.quality != .error {
+                            HStack(spacing: 3) {
+                                Text("Updated")
+                                Text(lastSourceRefreshAt, style: .relative)
+                            }
                         } else {
-                            Text("Profile through \(profileDate(profileSnapshot.statsAsOf)) · \(profileStore.statusMessage)")
+                            Text(store.statusMessage)
                         }
-                    } else if profileStore.isEnabled {
-                        Text("\(profileStore.statusMessage) · showing This Mac")
-                    } else if showLastUpdated,
-                       !store.isRefreshing,
-                       !store.isImportingHistory,
-                       let lastSourceRefreshAt = store.lastSourceRefreshAt,
-                       store.snapshot.quality != .stale,
-                       store.snapshot.quality != .error {
-                        HStack(spacing: 3) {
-                            Text("Updated")
-                            Text(lastSourceRefreshAt, style: .relative)
-                        }
-                    } else {
-                        Text(store.statusMessage)
+                    } icon: {
+                        Image(systemName: statusSymbol)
                     }
-                } icon: {
-                    Image(systemName: statusSymbol)
-                }
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -367,73 +374,75 @@ struct MenuPopoverView: View {
                         reduceMotion ? nil : .easeOut(duration: 0.18),
                         value: store.statusMessage
                     )
-            }
-            Spacer()
-            Button {
-                Task {
-                    async let localRefresh: Void = store.refresh()
-                    async let profileRefresh: Void = profileStore.refresh(
-                        weekStart: WeekStart(rawValue: weekStartRawValue) ?? .monday
-                    )
-                    async let limitsRefresh: Void = limitStore.refresh()
-                    _ = await (localRefresh, profileRefresh, limitsRefresh)
+                    Spacer()
                 }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .rotationEffect(.degrees(Double(refreshTurns) * 360))
-                    .animation(
-                        reduceMotion ? nil : .easeInOut(duration: 0.5),
-                        value: refreshTurns
-                    )
+            }
+
+            HStack(spacing: 18) {
+                Button {
+                    Task {
+                        async let localRefresh: Void = store.refresh()
+                        async let profileRefresh: Void = profileStore.refresh(
+                            weekStart: WeekStart(rawValue: weekStartRawValue) ?? .monday
+                        )
+                        async let limitsRefresh: Void = limitStore.refresh()
+                        _ = await (localRefresh, profileRefresh, limitsRefresh)
+                    }
+                } label: {
+                    Label {
+                        Text("Refresh")
+                    } icon: {
+                        Image(systemName: "arrow.clockwise")
+                            .rotationEffect(.degrees(Double(refreshTurns) * 360))
+                            .animation(
+                                reduceMotion ? nil : .easeInOut(duration: 0.5),
+                                value: refreshTurns
+                            )
+                    }
+                }
+                .disabled(isRefreshing || store.isMaintainingData || store.isImportingHistory)
+                .keyboardShortcut("r", modifiers: .command)
+                .help("Refresh usage")
+
+                Button {
+                    SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .keyboardShortcut(",", modifiers: .command)
+                .help("Open Settings")
+
+                Spacer()
+
+                Menu {
+                    Button("Open OpenAI Status") {
+                        open("https://status.openai.com")
+                    }
+                    Button("Open CodexMeter on GitHub") {
+                        open("https://github.com/HechoLP/CodexMeter")
+                    }
+                    Button("Check for Updates…") {
+                        UpdateService.shared.checkForUpdates()
+                    }
+                    .disabled(!UpdateService.shared.isAvailable)
+                    Divider()
+                    Button("Quit CodexMeter") {
+                        NSApplication.shared.terminate(nil)
+                    }
+                    .keyboardShortcut("q", modifiers: .command)
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .help("More actions")
             }
             .buttonStyle(.plain)
-            .frame(width: 28, height: 28)
-            .contentShape(Rectangle())
-            .disabled(isRefreshing || store.isMaintainingData || store.isImportingHistory)
-            .keyboardShortcut("r", modifiers: .command)
-            .help("Refresh usage")
-            .accessibilityLabel("Refresh usage")
-
-            Button {
-                SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(.plain)
-            .frame(width: 28, height: 28)
-            .contentShape(Rectangle())
-            .keyboardShortcut(",", modifiers: .command)
-            .help("Open Settings")
-            .accessibilityLabel("Open Settings")
-
-            Menu {
-                Button("Open OpenAI Status") {
-                    open("https://status.openai.com")
-                }
-                Button("Open CodexMeter on GitHub") {
-                    open("https://github.com/HechoLP/CodexMeter")
-                }
-                Button("Check for Updates…") {
-                    UpdateService.shared.checkForUpdates()
-                }
-                .disabled(!UpdateService.shared.isAvailable)
-                Divider()
-                Button("Quit CodexMeter") {
-                    NSApplication.shared.terminate(nil)
-                }
-                .keyboardShortcut("q", modifiers: .command)
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(width: 28, height: 28)
-            .contentShape(Rectangle())
-            .help("More actions")
-            .accessibilityLabel("More actions")
+            .font(.caption.weight(.medium))
+            .frame(minHeight: 28)
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
     }
 
     private var shouldShowStatus: Bool {
@@ -454,6 +463,23 @@ struct MenuPopoverView: View {
 
     private var usesProfileTotals: Bool {
         profileStore.isEnabled && profileStore.snapshot != nil
+    }
+
+    private var providerScopeText: String {
+        profileStore.isEnabled ? "This Mac + ChatGPT account totals" : "This Mac activity"
+    }
+
+    private var providerStatusSymbol: String {
+        if store.isRefreshing || store.isImportingHistory { return "arrow.triangle.2.circlepath" }
+        return store.sourceCount > 0 ? "checkmark.circle" : "exclamationmark.triangle"
+    }
+
+    private var limitHeaderContext: String {
+        guard let windows = limitStore.snapshot?.windows else {
+            return limitStore.status == .loading ? "Updating" : "Unavailable"
+        }
+        let count = visibleAccountLimitWindows(windows).count
+        return "\(count) \(count == 1 ? "window" : "windows")"
     }
 
     private var historyContext: String {
@@ -481,7 +507,8 @@ struct MenuPopoverView: View {
 
     private func categoryHeader(
         _ category: MenuPopoverCategory,
-        context: String? = nil
+        context: String? = nil,
+        showsDisclosure: Bool = false
     ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: category.symbol)
@@ -489,19 +516,27 @@ struct MenuPopoverView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(category.title)
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
             Spacer(minLength: 8)
             if let context {
                 Text(context)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
         }
         .padding(.horizontal, 18)
-        .padding(.top, 10)
-        .padding(.bottom, 6)
+        .padding(.top, 14)
+        .padding(.bottom, 9)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("menu.category.\(category.rawValue)")
@@ -531,29 +566,27 @@ struct MenuPopoverView: View {
         .accessibilityLabel("\(title), \(formatted(value)) tokens")
     }
 
-    private func periodSummaryLink(_ title: String, period: UsagePeriod, value: Int64) -> some View {
+    private func periodRowLink(_ title: String, period: UsagePeriod, value: Int64) -> some View {
         NavigationLink(value: period) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 3) {
-                    Text(title)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Text(title)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer(minLength: 12)
                 Text(formatted(value))
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                     .monospacedDigit()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                    .minimumScaleFactor(0.8)
                     .contentTransition(.numericText())
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: value)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -632,7 +665,27 @@ struct MenuPopoverView: View {
         Label(message, systemImage: symbol)
             .font(.caption)
             .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+    }
+
+    private func resetCreditsSummary(_ credits: ResetCreditSummary) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.counterclockwise.circle")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Reset credits")
+                .font(.caption.weight(.semibold))
+            Spacer()
+            Text(credits.unlimited ? "Unlimited" : credits.availableCount?.formatted() ?? "Available")
+                .font(.caption.weight(.semibold).monospacedDigit())
+            if let expiration = credits.expiresAt {
+                Text("· \(expiration, format: .dateTime.month(.abbreviated).day())")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.top, 2)
+        .accessibilityElement(children: .combine)
     }
 
     private func limitTitle(_ window: AccountLimitWindow) -> String {
@@ -647,21 +700,28 @@ struct MenuPopoverView: View {
         return .accentColor
     }
 
-    private func exploreLink(
+    private func exploreRowLink(
         _ title: String,
         symbol: String,
         destination: MenuDestination
     ) -> some View {
         NavigationLink(value: destination) {
-            VStack(spacing: 4) {
+            HStack(spacing: 10) {
                 Image(systemName: symbol)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .frame(width: 18)
                     .accessibilityHidden(true)
                 Text(title)
-                    .font(.caption.weight(.medium))
+                    .font(.subheadline)
+                Spacer(minLength: 12)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, minHeight: 42)
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, minHeight: 38)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
