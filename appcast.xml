@@ -4,24 +4,40 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.0.6</title>
-            <pubDate>Fri, 28 Aug 2026 13:33:18 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.0.6</link>
-            <sparkle:version>106</sparkle:version>
-            <sparkle:shortVersionString>1.0.6</sparkle:shortVersionString>
+            <title>1.1.0</title>
+            <pubDate>Sat, 29 Aug 2026 14:49:43 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.0</link>
+            <sparkle:version>110</sparkle:version>
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.0.6
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.0
 
-CodexMeter 1.0.6 corrects local token totals on macOS and Windows.
+CodexMeter 1.1.0 turns the macOS menu popover into a faster, more useful view of live local usage, Codex limits, and private on-device analytics. It also fixes the database-compatibility problem that could make Today suddenly display zero after running a development build.
 
-## Fixes
+## macOS highlights
 
-- Local Total now uses `Input + Output`.
-- Cached Input remains visible as the portion of Input served from cache, but is no longer added to Total a second time.
-- Today, This Week, This Month, and Local History are recalculated from the existing component data without a database migration.
-- Settings, tooltips, architecture documentation, and Windows installation links now describe the corrected accounting semantics.
+- Keeps this Mac's live Today total and input, cached-input, and output breakdown at the top of the first screen.
+- Shows the nearest Codex limit windows, reset countdowns, low-quota warnings, and an explicitly labeled even-use pace estimate.
+- Adds Today, 7-day, and 30-day token charts plus model, project, and session drill-down views.
+- Adds model-aware API-equivalent cost estimates that are clearly separated from subscription billing.
+- Adds quick access to Usage, Projects, Sessions, update checks, the OpenAI status page, GitHub, and Quit.
+- Adds fixed 2-, 15-, and 30-minute refresh choices while preserving automatic and manual refresh modes.
 
-Account-wide ChatGPT profile totals remain separate and unchanged.
+## Accuracy and recovery
+
+- Today always uses live local usage rather than a delayed account-profile day.
+- Removed the former Profile day row from the primary summary.
+- Isolated preview and development data under `CodexMeter-Development`, preventing an unreleased database migration from breaking the installed app's local usage reader.
+- Preserved the established Total definition: Input + Output. Cached input remains an auditable subset of Input and is not counted twice.
+
+## Privacy and scope
+
+- Usage analytics stay on this Mac in owner-only local storage.
+- Project paths are minimized to keyed identifiers and folder basenames; prompts, responses, source code, terminal output, credentials, and attachment contents are not stored.
+- Limit data is read-only and retrieved through the signed local Codex app-server. CodexMeter does not consume reset credits or mutate account settings.
+- API-equivalent costs are estimates, not bills or subscription charges.
+
+Windows remains a certificate-free self-contained portable app with the corrected local Total semantics from 1.0.6. The new limits, cost, project, and session analytics in this release are currently macOS-only.
 
 ## Integrity and platform trust
 
@@ -31,7 +47,7 @@ These packages are distributed without Apple Developer ID, Apple notarization, o
 
 ```bash
 brew update
-brew upgrade --cask codexmeter
+brew upgrade --cask HechoLP/tap/codexmeter
 xattr -dr com.apple.quarantine /Applications/CodexMeter.app
 open /Applications/CodexMeter.app
 ```
@@ -42,10 +58,10 @@ Fresh installations can use `brew install --cask HechoLP/tap/codexmeter`.
 
 Download the x64 or ARM64 ZIP together with `SHA256SUMS-windows.txt`, compare the PowerShell `Get-FileHash` result with the manifest, and extract the verified package to a permanent folder.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.0.6/CodexMeter-1.0.6.zip" length="2158510" type="application/octet-stream" sparkle:edSignature="ZHcSKJPTftofWM3FjiXPcN74gxlohmyx2QFCCQmqc44tXnvNto9dCj81IfvPd/zvM+3aFyFVkgZBlNu0ER2XCQ=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.0/CodexMeter-1.1.0.zip" length="2914484" type="application/octet-stream" sparkle:edSignature="N69yp7xaty4Ag8iYMSxia2dbYivvDp4eyaL2GTSlALZyy8Dlwm2YUTjix1FZ1t2wy7YbcsFz+cz67uf5xo8fDA=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: /BMa9cQjFKUyaOCa0D17Jly/JiNBrgHyCXOaFuX6RM96ThFVn7/Wlxd8YTFYE6WLmiPdjKt26H5cbCa9BhZKAg==
-length: 2609
+edSignature: mQ8fXkefhkJIoNp0LJPCLmK/4gr5DfD6dBtiWBxfGP1wxD0E83Iwg5x70z8fg1tmZ64uXOltULZOQQ8sdbO+DA==
+length: 4182
 -->
