@@ -4,28 +4,29 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.1.2</title>
-            <pubDate>Sat, 29 Aug 2026 19:15:09 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.2</link>
-            <sparkle:version>112</sparkle:version>
-            <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
+            <title>1.1.3</title>
+            <pubDate>Sat, 29 Aug 2026 20:00:48 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.3</link>
+            <sparkle:version>113</sparkle:version>
+            <sparkle:shortVersionString>1.1.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.2
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.3
 
-CodexMeter 1.1.2 fixes a menu bar layout regression that could hide the entire usage body and leave only the title and footer visible.
+CodexMeter 1.1.3 makes the menu bar overview easier to scan by dividing it into four clear categories without removing any existing feature.
 
-## Fixed
+## Improved overview
 
-- Keeps the scrollable usage and limit body at a usable height whenever the menu bar popover opens or reopens.
-- Adds a macOS layout regression test that verifies the popover cannot shrink to the header-and-footer-only state.
-- Preserves all existing usage data and accounting behavior; the issue affected presentation only.
+- **Local Usage** keeps today's total and its Input, Cached input, and Output breakdown together.
+- **Account Limits** groups the nearest limit windows and remains one click away from full limit details.
+- **Token History** identifies whether period totals come from this Mac or the optional ChatGPT account snapshot.
+- **Explore** keeps Usage, Projects, and Sessions as compact, consistent destinations.
+- VoiceOver now recognizes the category labels as headings for faster navigation.
 
 ## Verification
 
-- Complete Swift unit and integration suite
-- Native AppKit hosting-size regression test
-- Signed local Codex app-server limit integration
-- 10,000- and 100,000-event ingestion stress suite
+- Complete Swift unit and integration suite: 143 tests passed, with two optional tests skipped
+- Native AppKit hosting-size and category-order regression tests
+- Impeccable layout detector completed without findings
 - Universal 2 architecture, bundle metadata, ad-hoc signature, archive, checksum, and Sparkle feed verification
 
 ## Install or update with Homebrew
@@ -45,17 +46,17 @@ The app is ad-hoc signed and not Apple-notarized. Download the DMG and `SHA256SU
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.1.2.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+grep ' CodexMeter-1.1.3.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
 xattr -dr com.apple.quarantine /Applications/CodexMeter.app
 open /Applications/CodexMeter.app
 ```
 
 Do not remove quarantine when the checksum does not match the official manifest.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.2/CodexMeter-1.1.2.zip" length="2914674" type="application/octet-stream" sparkle:edSignature="BbzDV7P9pXzY23hc1W1APb7R0yg6oFciTQTk7VE5k6rbV/U2i7yE0uEOx0+fk0f2QLvbET100Vg6H4HJImMfBw=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.3/CodexMeter-1.1.3.zip" length="2927047" type="application/octet-stream" sparkle:edSignature="bWPfssdmLYpIJ8MfX8Y7jcpOsgn1Fn1b5TCogF558ZSfHK7q5rUNzn4qSiXvnRDroTsi5iJGwA9e1aKtwEz4Bw=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: CVOMYA+/bBU9si2iYedl2M5UahTMB6eGW/AcSrVynN/C6h+VutpPNvpBhu2B+h+cEbgvFi99hxFTGcSenh2KCQ==
-length: 2814
+edSignature: NUgiXRn3BRNTOjndz87TXEpYdbvBitY6MBlRBgOhf/g4wlZoJ1MGgtbH0pdpPau7URgEOIC8F06GHGevjgB3AA==
+length: 3020
 -->
