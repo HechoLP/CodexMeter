@@ -8,6 +8,33 @@ enum MenuPopoverMetrics {
     static let maximumBodyHeight: CGFloat = 540
 }
 
+enum MenuPopoverCategory: String, CaseIterable, Identifiable {
+    case localUsage
+    case accountLimits
+    case tokenHistory
+    case explore
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .localUsage: "Local Usage"
+        case .accountLimits: "Account Limits"
+        case .tokenHistory: "Token History"
+        case .explore: "Explore"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .localUsage: "chart.bar"
+        case .accountLimits: "gauge.with.dots.needle.50percent"
+        case .tokenHistory: "clock.arrow.circlepath"
+        case .explore: "square.grid.2x2"
+        }
+    }
+}
+
 struct MenuPopoverView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
@@ -33,20 +60,16 @@ struct MenuPopoverView: View {
                 header
                 ScrollView {
                     VStack(spacing: 0) {
-                        localUsageSummary
+                        localUsageSection
                         if accountLimitsEnabled {
                             Divider()
                             accountLimitsPreview
                         }
                         Divider()
-                        if usesProfileTotals {
-                            profilePeriodLinks
-                        } else {
-                            localPeriodLinks
-                        }
+                        tokenHistorySection
                         if analyticsEnabled {
                             Divider()
-                            exploreLinks
+                            exploreSection
                         }
                     }
                 }
@@ -98,11 +121,12 @@ struct MenuPopoverView: View {
         VStack(alignment: .leading, spacing: 11) {
             NavigationLink(value: MenuDestination.limits) {
                 HStack(spacing: 8) {
-                    Image(systemName: "gauge.with.dots.needle.50percent")
+                    Image(systemName: MenuPopoverCategory.accountLimits.symbol)
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
-                    Text("Account Limits")
+                    Text(MenuPopoverCategory.accountLimits.title)
                         .font(.subheadline.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
                     Spacer()
                     if let windows = limitStore.snapshot?.windows, !windows.isEmpty {
                         let visibleCount = visibleAccountLimitWindows(windows).count
@@ -118,6 +142,7 @@ struct MenuPopoverView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("menu.category.accountLimits")
             .accessibilityHint("Open all account limit details")
 
             if let snapshot = limitStore.snapshot {
@@ -173,6 +198,13 @@ struct MenuPopoverView: View {
         .padding(.bottom, 12)
     }
 
+    private var localUsageSection: some View {
+        VStack(spacing: 0) {
+            categoryHeader(.localUsage, context: "This Mac · Today")
+            localUsageSummary
+        }
+    }
+
     private var localUsageSummary: some View {
         Group {
             if store.snapshot.updatedAt == nil {
@@ -206,7 +238,7 @@ struct MenuPopoverView: View {
                                 reduceMotion ? nil : .easeOut(duration: 0.24),
                                 value: store.snapshot.today.totalTokens
                             )
-                        Text("This Mac tokens today")
+                        Text("Total tokens today")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -232,6 +264,17 @@ struct MenuPopoverView: View {
         .padding(.bottom, 16)
     }
 
+    private var tokenHistorySection: some View {
+        VStack(spacing: 0) {
+            categoryHeader(.tokenHistory, context: historyContext)
+            if usesProfileTotals {
+                profilePeriodLinks
+            } else {
+                localPeriodLinks
+            }
+        }
+    }
+
     private var localPeriodLinks: some View {
         VStack(spacing: 0) {
             periodLink("This Week", period: .week, value: displayedTotal(for: .week))
@@ -244,24 +287,19 @@ struct MenuPopoverView: View {
     private var profilePeriodLinks: some View {
         VStack(spacing: 0) {
             if let snapshot = profileStore.snapshot {
-                HStack {
-                    Text("ChatGPT account")
-                        .font(.caption.weight(.semibold))
-                    Spacer()
-                    Text("Through \(profileDate(snapshot.statsAsOf))")
-                        .font(.caption)
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
-
                 periodLink("This Week", period: .week, value: snapshot.week)
                 periodLink("This Month", period: .month, value: snapshot.month)
                 periodLink("Lifetime", period: .allTime, value: snapshot.lifetime)
             }
         }
         .padding(.bottom, 6)
+    }
+
+    private var exploreSection: some View {
+        VStack(spacing: 0) {
+            categoryHeader(.explore)
+            exploreLinks
+        }
     }
 
     private var exploreLinks: some View {
@@ -405,6 +443,13 @@ struct MenuPopoverView: View {
         profileStore.isEnabled && profileStore.snapshot != nil
     }
 
+    private var historyContext: String {
+        guard usesProfileTotals, let snapshot = profileStore.snapshot else {
+            return "This Mac"
+        }
+        return "ChatGPT · Through \(profileDate(snapshot.statsAsOf))"
+    }
+
     private var isRefreshing: Bool {
         store.isRefreshing || profileStore.isRefreshing || limitStore.isRefreshing
     }
@@ -419,6 +464,34 @@ struct MenuPopoverView: View {
 
     private func profileDate(_ date: Date) -> String {
         date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private func categoryHeader(
+        _ category: MenuPopoverCategory,
+        context: String? = nil
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: category.symbol)
+                .frame(width: 14)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text(category.title)
+                .font(.subheadline.weight(.semibold))
+            Spacer(minLength: 8)
+            if let context {
+                Text(context)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("menu.category.\(category.rawValue)")
     }
 
     private func metricRow(_ title: String, value: Int64, symbol: String) -> some View {
