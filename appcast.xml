@@ -4,23 +4,23 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.1.3</title>
-            <pubDate>Sat, 29 Aug 2026 20:00:48 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.3</link>
-            <sparkle:version>113</sparkle:version>
-            <sparkle:shortVersionString>1.1.3</sparkle:shortVersionString>
+            <title>1.1.4</title>
+            <pubDate>Sat, 29 Aug 2026 20:28:03 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.4</link>
+            <sparkle:version>114</sparkle:version>
+            <sparkle:shortVersionString>1.1.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.3
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.4
 
-CodexMeter 1.1.3 makes the menu bar overview easier to scan by dividing it into four clear categories without removing any existing feature.
+CodexMeter 1.1.4 turns the categorized menu bar overview into a compact, at-a-glance summary.
 
-## Improved overview
+## Glanceable overview
 
-- **Local Usage** keeps today's total and its Input, Cached input, and Output breakdown together.
-- **Account Limits** groups the nearest limit windows and remains one click away from full limit details.
-- **Token History** identifies whether period totals come from this Mac or the optional ChatGPT account snapshot.
-- **Explore** keeps Usage, Projects, and Sessions as compact, consistent destinations.
-- VoiceOver now recognizes the category labels as headings for faster navigation.
+- Input, Cached input, and Output now appear side by side directly under today's total.
+- This Week, This Month, and Local History or Lifetime now appear as a single comparable row.
+- The normal popover height shows Local Usage, Account Limits, Token History, and Explore together without unnecessary scrolling.
+- Detailed usage, project, session, limit, and period screens remain one click away.
+- Long token values scale within their summary cell instead of being cut off.
 
 ## Verification
 
@@ -46,17 +46,17 @@ The app is ad-hoc signed and not Apple-notarized. Download the DMG and `SHA256SU
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.1.3.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+grep ' CodexMeter-1.1.4.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
 xattr -dr com.apple.quarantine /Applications/CodexMeter.app
 open /Applications/CodexMeter.app
 ```
 
 Do not remove quarantine when the checksum does not match the official manifest.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.3/CodexMeter-1.1.3.zip" length="2927047" type="application/octet-stream" sparkle:edSignature="bWPfssdmLYpIJ8MfX8Y7jcpOsgn1Fn1b5TCogF558ZSfHK7q5rUNzn4qSiXvnRDroTsi5iJGwA9e1aKtwEz4Bw=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.4/CodexMeter-1.1.4.zip" length="2945095" type="application/octet-stream" sparkle:edSignature="ZcCianhjYbRz6VlxfcGDu1LGNNTIibvlcQLN35FIFDaopWJq30asVFcWe306FtyGIwo68N7cQ24u/8dLcqOSAw=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: NUgiXRn3BRNTOjndz87TXEpYdbvBitY6MBlRBgOhf/g4wlZoJ1MGgtbH0pdpPau7URgEOIC8F06GHGevjgB3AA==
-length: 3020
+edSignature: lJ6Xh5zd+qaAdxhgqQT8T2J3m6wVcmhGgpzYXlymhexqChHtzj6CKm6hLoXJhwUDSTiWkFGj7lf+z39SJBs/Dg==
+length: 2963
 -->
