@@ -13,7 +13,6 @@ update_feed_branch=${CODEXMETER_UPDATE_FEED_BRANCH:-${UPDATE_FEED_BRANCH}}
 require_release_tag=${CODEXMETER_REQUIRE_RELEASE_TAG:-0}
 require_public_repository=${CODEXMETER_REQUIRE_PUBLIC_REPOSITORY:-0}
 release_notes_path="${project_root}/Documentation/ReleaseNotes/${release_version}.md"
-windows_project_path="${project_root}/Windows/src/CodexMeter.Windows/CodexMeter.Windows.csproj"
 
 fail() {
   print -u2 "Release context is invalid: $1"
@@ -40,16 +39,6 @@ fi
 if [[ ! -f "${release_notes_path}" ]]; then
   fail "release notes are missing: ${release_notes_path}"
 fi
-if [[ ! -f "${windows_project_path}" ]]; then
-  fail "Windows project metadata is missing: ${windows_project_path}"
-fi
-windows_version=$(sed -nE \
-  's/^[[:space:]]*<Version>([^<]+)<\/Version>[[:space:]]*$/\1/p' \
-  "${windows_project_path}" | head -n 1)
-if [[ -z "${windows_version}" || "${windows_version}" != "${release_version}" ]]; then
-  fail "Windows version '${windows_version:-missing}' does not match version '${release_version}'"
-fi
-
 if [[ "${require_release_tag}" == "1" ]]; then
   if ! git -C "${project_root}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fail "public release source is not a Git worktree"

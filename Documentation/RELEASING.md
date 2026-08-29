@@ -2,7 +2,7 @@
 
 ## Certificate-free stable release
 
-CodexMeter can publish a stable release without an Apple Developer ID or Microsoft publisher certificate. “Stable” describes the tested application and immutable release process; it does not mean the packages are trusted by Apple Gatekeeper or Microsoft SmartScreen.
+CodexMeter can publish a stable release without an Apple Developer ID. “Stable” describes the tested application and immutable release process; it does not mean the package is trusted by Apple Gatekeeper.
 
 Required maintainer access:
 
@@ -22,17 +22,15 @@ The command verifies the matching tag, clean worktree, release notes, and public
 
 The verifier requires an ad-hoc signature, rejects an Apple certificate authority, checks that Hardened Runtime is absent, and validates the app metadata, empty entitlement allowlist, embedded Sparkle framework, Universal 2 architectures, archive contents, and checksums. `Scripts/generate_appcast.sh` separately verifies the feed signature, archive signature, byte length, and download URL.
 
-## Unified macOS and Windows release
+## macOS release
 
-Both platforms use the same immutable `vVERSION` tag and the same public release in `HechoLP/CodexMeter`.
+The macOS app uses one immutable `vVERSION` tag and one public release in `HechoLP/CodexMeter`.
 
 1. Merge the reviewed release commit to `main` after CI passes.
 2. Create and push `vVERSION` at that exact commit. Never move or replace a published tag.
 3. Run `Scripts/release_stable.sh` on the tagged commit for the macOS ZIP, DMG, checksums, and signed appcast.
-4. Wait for the Windows Release workflow. It tests, formats, packages, smoke-tests x64, verifies both package hashes, and uploads x64/ARM64 artifacts to the workflow run. It does not create the public GitHub Release automatically.
-5. Download the exact Windows workflow artifact; do not rebuild or rename it.
-6. Create one stable public GitHub Release at `vVERSION` and upload the macOS and Windows archives, per-artifact checksums, both checksum manifests, and `appcast.xml`.
-7. Confirm every asset is anonymously downloadable before publishing the exact same signed `appcast.xml` on the public `update-feed` branch.
+4. Create one stable public GitHub Release at `vVERSION` and upload the macOS ZIP, DMG, per-artifact checksums, `SHA256SUMS.txt`, and `appcast.xml`.
+5. Confirm every asset is anonymously downloadable before publishing the exact same signed `appcast.xml` on the public `update-feed` branch.
 
 The configured release repository and feed branch can be overridden only when both are intentionally supplied:
 
@@ -49,7 +47,7 @@ After the dual feed is anonymously reachable and 1.0.4 is verified to read the s
 
 ## First-install trust disclosure
 
-The macOS build is ad-hoc signed and not Apple-notarized. The Windows build is not publisher-signed. Release notes and installation pages must require checksum verification before users bypass quarantine or SmartScreen.
+The macOS build is ad-hoc signed and not Apple-notarized. Release notes and installation pages must require checksum verification before users remove quarantine.
 
 For macOS, document only this app-scoped command after the verified app is copied to Applications:
 
@@ -58,7 +56,7 @@ xattr -dr com.apple.quarantine /Applications/CodexMeter.app
 open /Applications/CodexMeter.app
 ```
 
-Do not advertise these packages as Apple-trusted or Microsoft-trusted. SHA-256 verifies the first download; Sparkle Ed25519 signatures authenticate later macOS updates. Homebrew installation also verifies the exact published ZIP checksum.
+Do not advertise the package as Apple-trusted. SHA-256 verifies the first download; Sparkle Ed25519 signatures authenticate later updates. Homebrew installation also verifies the exact published ZIP checksum.
 
 ## Homebrew Cask
 

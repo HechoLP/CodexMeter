@@ -4,6 +4,18 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-29
+
+### Changed
+
+- Refocused CodexMeter on its native macOS app, with macOS-only product, architecture, privacy, security, installation, and release documentation.
+- Simplified the stable release gate and CI pipeline so all automated verification targets the supported macOS application.
+
+### Removed
+
+- Removed the Windows application, tests, packaging scripts, CI job, release workflow, installation guide, and preview release notes from the current product tree.
+- Removed Windows packages from the current release path. Historical tags and changelog entries remain intact as an immutable record of earlier releases.
+
 ## [1.1.0] - 2026-08-29
 
 ### Added
