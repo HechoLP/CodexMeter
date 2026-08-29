@@ -4,30 +4,33 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.1.4</title>
-            <pubDate>Sat, 29 Aug 2026 20:28:03 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.4</link>
-            <sparkle:version>114</sparkle:version>
-            <sparkle:shortVersionString>1.1.4</sparkle:shortVersionString>
+            <title>1.1.5</title>
+            <pubDate>Sat, 29 Aug 2026 20:53:14 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.5</link>
+            <sparkle:version>115</sparkle:version>
+            <sparkle:shortVersionString>1.1.5</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.4
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.5
 
-CodexMeter 1.1.4 turns the categorized menu bar overview into a compact, at-a-glance summary.
+CodexMeter 1.1.5 reorganizes the menu popover into a provider-first vertical layout inspired by the scanability of mature multi-provider menu bar tools while preserving CodexMeter's own identity and data boundaries.
 
-## Glanceable overview
+## Easier reading order
 
-- Input, Cached input, and Output now appear side by side directly under today's total.
-- This Week, This Month, and Local History or Lifetime now appear as a single comparable row.
-- The normal popover height shows Local Usage, Account Limits, Token History, and Explore together without unnecessary scrolling.
-- Detailed usage, project, session, limit, and period screens remain one click away.
-- Long token values scale within their summary cell instead of being cut off.
+- The top of the popover now identifies Codex, its active data scope, and local connection status.
+- Account limits appear before token history, with up to three visible windows, reset countdowns, pace, and optional reset-credit context.
+- Today's total and its Input, Cached input, and Output breakdown remain together under Token Usage.
+- This Week, This Month, and Local History or Lifetime use full-width rows with stable right-aligned values.
+- Usage, Projects, and Sessions use larger navigation rows with consistent icons and disclosure indicators.
+- Refresh, Settings, and More are visible text actions instead of icon-only controls.
+
+No unsupported Claude, Gemini, or other provider tab is shown. Future providers can join the same structure only after their data and status handling are implemented.
 
 ## Verification
 
 - Complete Swift unit and integration suite: 143 tests passed, with two optional tests skipped
 - Native AppKit hosting-size and category-order regression tests
 - Impeccable layout detector completed without findings
-- Universal 2 architecture, bundle metadata, ad-hoc signature, archive, checksum, and Sparkle feed verification
+- Universal 2 application build and certificate-free release-script verification
 
 ## Install or update with Homebrew
 
@@ -46,17 +49,17 @@ The app is ad-hoc signed and not Apple-notarized. Download the DMG and `SHA256SU
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.1.4.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+grep ' CodexMeter-1.1.5.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
 xattr -dr com.apple.quarantine /Applications/CodexMeter.app
 open /Applications/CodexMeter.app
 ```
 
 Do not remove quarantine when the checksum does not match the official manifest.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.4/CodexMeter-1.1.4.zip" length="2945095" type="application/octet-stream" sparkle:edSignature="ZcCianhjYbRz6VlxfcGDu1LGNNTIibvlcQLN35FIFDaopWJq30asVFcWe306FtyGIwo68N7cQ24u/8dLcqOSAw=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.5/CodexMeter-1.1.5.zip" length="2965292" type="application/octet-stream" sparkle:edSignature="TNVkgy3aFffGaGXS9rTi+mo5zn875aHfO63eTEyDqE8p77+VMO0knNCzFl2Ar1OGcInr3P2lzpNicW3x+Li4Bw=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: lJ6Xh5zd+qaAdxhgqQT8T2J3m6wVcmhGgpzYXlymhexqChHtzj6CKm6hLoXJhwUDSTiWkFGj7lf+z39SJBs/Dg==
-length: 2963
+edSignature: 77qd+Pju1C+z6TABvDuDU9CEW6wJIUx7S18Ws2pr0aMdmF1MmRK8Q0e3QhD4tZLKaoKllQXdb23fsix9EGP1Dw==
+length: 3390
 -->
