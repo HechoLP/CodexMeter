@@ -143,6 +143,12 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 - **Shape:** Each target is at least 42px high with an SF Symbol and visible label.
 - **Behavior:** Hidden preferences remove their destination instead of leaving disabled placeholders.
 
+### Usage Analytics Detail
+
+- **Shape:** Stable 520px content height at the same 372px popover width.
+- **Structure:** Range and metric controls stay pinned directly below the navigation title; only chart and model content scrolls.
+- **Position:** The content scroller always opens at its top anchor so navigation never creates blank space above the filters or clips the first chart below the fold.
+
 ### Footer Actions
 
 - **Character:** Stable utility actions with 28px targets.

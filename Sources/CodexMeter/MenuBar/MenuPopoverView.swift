@@ -3,6 +3,7 @@ import SwiftUI
 
 enum MenuPopoverMetrics {
     static let width: CGFloat = 372
+    static let analyticsDetailHeight: CGFloat = 520
 }
 
 enum MenuPopoverSection: String, CaseIterable, Identifiable {

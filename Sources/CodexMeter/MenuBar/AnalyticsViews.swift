@@ -182,8 +182,8 @@ struct UsageAnalyticsView: View {
     @State private var selectedBucketDate: Date?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 0) {
+            VStack(spacing: 10) {
                 rangePicker
                 if costEstimatesEnabled {
                     Picker("Chart metric", selection: $chartMetric) {
@@ -192,19 +192,35 @@ struct UsageAnalyticsView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Divider()
+            analyticsSnapshotStatus(store)
+
+            ScrollView {
                 if let snapshot = store.analyticsSnapshots[range] {
-                    analyticsSnapshotStatus(store)
-                    totalCard(snapshot)
-                    usageChart(snapshot)
-                    modelBreakdown(snapshot)
+                    VStack(alignment: .leading, spacing: 16) {
+                        totalCard(snapshot)
+                        usageChart(snapshot)
+                        modelBreakdown(snapshot)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(16)
                 } else {
                     loading
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(16)
                 }
             }
-            .padding(16)
+            .defaultScrollAnchor(.top)
         }
-        .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 360, maxHeight: 560)
+        .frame(
+            width: MenuPopoverMetrics.width,
+            height: MenuPopoverMetrics.analyticsDetailHeight,
+            alignment: .top
+        )
         .navigationTitle("Usage")
         .task(id: range) { await store.refreshAnalytics(range: range) }
         .onChange(of: range) { _, _ in selectedBucketDate = nil }

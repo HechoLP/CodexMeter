@@ -41,8 +41,25 @@ final class MenuPopoverLayoutTests: XCTestCase {
         XCTAssertFalse(containsScrollView(in: hostingView))
     }
 
+    func testUsageDetailRequestsStableHeightAndKeepsOneContentScroller() {
+        _ = NSApplication.shared
+        let view = UsageAnalyticsView()
+            .environmentObject(UsageStore())
+        let hostingView = NSHostingView(rootView: view)
+
+        hostingView.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(hostingView.fittingSize.width, MenuPopoverMetrics.width)
+        XCTAssertEqual(hostingView.fittingSize.height, MenuPopoverMetrics.analyticsDetailHeight)
+        XCTAssertEqual(scrollViewCount(in: hostingView), 1)
+    }
+
     private func containsScrollView(in view: NSView) -> Bool {
         view is NSScrollView || view.subviews.contains(where: containsScrollView)
+    }
+
+    private func scrollViewCount(in view: NSView) -> Int {
+        (view is NSScrollView ? 1 : 0) + view.subviews.reduce(0) { $0 + scrollViewCount(in: $1) }
     }
 }
 
