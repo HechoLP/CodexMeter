@@ -4,7 +4,7 @@ import SwiftUI
 enum MenuPopoverMetrics {
     static let width: CGFloat = 344
     static let minimumBodyHeight: CGFloat = 300
-    static let idealBodyHeight: CGFloat = 440
+    static let idealBodyHeight: CGFloat = 500
     static let maximumBodyHeight: CGFloat = 540
 }
 
@@ -118,7 +118,7 @@ struct MenuPopoverView: View {
     }
 
     private var accountLimitsPreview: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: 9) {
             NavigationLink(value: MenuDestination.limits) {
                 HStack(spacing: 8) {
                     Image(systemName: MenuPopoverCategory.accountLimits.symbol)
@@ -181,7 +181,8 @@ struct MenuPopoverView: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 12)
+        .padding(.top, 11)
+        .padding(.bottom, 10)
     }
 
     private var header: some View {
@@ -228,7 +229,7 @@ struct MenuPopoverView: View {
                 .frame(minHeight: 96)
                 .accessibilityElement(children: .combine)
             } else {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(formatted(store.snapshot.today.totalTokens))
                             .font(.system(size: 32, weight: .semibold, design: .rounded))
@@ -246,12 +247,18 @@ struct MenuPopoverView: View {
                     .accessibilityLabel("This Mac total tokens today, \(formatted(store.snapshot.today.totalTokens))")
                     .help("Cached input is already included in Input. Total equals Input plus Output.")
 
-                    VStack(spacing: 8) {
-                        metricRow("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")
+                    HStack(spacing: 0) {
+                        metricSummary("Input", value: store.snapshot.today.inputTokens, symbol: "arrow.up")
                         if showCachedInput {
-                            metricRow("Cached input", value: store.snapshot.today.cachedInputTokens, symbol: "bolt.horizontal")
+                            Divider().frame(height: 34)
+                            metricSummary(
+                                "Cached input",
+                                value: store.snapshot.today.cachedInputTokens,
+                                symbol: "bolt.horizontal"
+                            )
                         }
-                        metricRow("Output", value: store.snapshot.today.outputTokens, symbol: "arrow.down")
+                        Divider().frame(height: 34)
+                        metricSummary("Output", value: store.snapshot.today.outputTokens, symbol: "arrow.down")
                     }
                     if analyticsEnabled, costEstimatesEnabled,
                        let analytics = store.analyticsSnapshots[.today] {
@@ -261,7 +268,7 @@ struct MenuPopoverView: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.bottom, 16)
+        .padding(.bottom, 12)
     }
 
     private var tokenHistorySection: some View {
@@ -276,23 +283,29 @@ struct MenuPopoverView: View {
     }
 
     private var localPeriodLinks: some View {
-        VStack(spacing: 0) {
-            periodLink("This Week", period: .week, value: displayedTotal(for: .week))
-            periodLink("This Month", period: .month, value: displayedTotal(for: .month))
-            periodLink("Local History", period: .allTime, value: displayedTotal(for: .allTime))
+        HStack(spacing: 0) {
+            periodSummaryLink("This Week", period: .week, value: displayedTotal(for: .week))
+            Divider().frame(height: 34)
+            periodSummaryLink("This Month", period: .month, value: displayedTotal(for: .month))
+            Divider().frame(height: 34)
+            periodSummaryLink("Local History", period: .allTime, value: displayedTotal(for: .allTime))
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 9)
     }
 
     private var profilePeriodLinks: some View {
-        VStack(spacing: 0) {
+        HStack(spacing: 0) {
             if let snapshot = profileStore.snapshot {
-                periodLink("This Week", period: .week, value: snapshot.week)
-                periodLink("This Month", period: .month, value: snapshot.month)
-                periodLink("Lifetime", period: .allTime, value: snapshot.lifetime)
+                periodSummaryLink("This Week", period: .week, value: snapshot.week)
+                Divider().frame(height: 34)
+                periodSummaryLink("This Month", period: .month, value: snapshot.month)
+                Divider().frame(height: 34)
+                periodSummaryLink("Lifetime", period: .allTime, value: snapshot.lifetime)
             }
         }
-        .padding(.bottom, 6)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 9)
     }
 
     private var exploreSection: some View {
@@ -315,7 +328,7 @@ struct MenuPopoverView: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 7)
+        .padding(.vertical, 5)
     }
 
     private var footer: some View {
@@ -487,53 +500,66 @@ struct MenuPopoverView: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("menu.category.\(category.rawValue)")
     }
 
-    private func metricRow(_ title: String, value: Int64, symbol: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .frame(width: 14)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text(title)
-                .foregroundStyle(.secondary)
-            Spacer()
+    private func metricSummary(_ title: String, value: Int64, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .lineLimit(1)
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
             Text(formatted(value))
+                .font(.caption.weight(.semibold))
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
                 .contentTransition(.numericText())
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: value)
         }
-        .font(.subheadline)
+        .padding(.horizontal, 7)
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(title), \(formatted(value)) tokens")
     }
 
-    private func periodLink(_ title: String, period: UsagePeriod, value: Int64) -> some View {
+    private func periodSummaryLink(_ title: String, period: UsagePeriod, value: Int64) -> some View {
         NavigationLink(value: period) {
-            HStack {
-                Text(title)
-                Spacer()
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 3) {
+                    Text(title)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
                 Text(formatted(value))
-                    .foregroundStyle(.secondary)
+                    .font(.caption.weight(.semibold))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
                     .contentTransition(.numericText())
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: value)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
             }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
             .contentShape(Rectangle())
-            .padding(.horizontal, 18)
-            .padding(.vertical, 8)
         }
         .buttonStyle(.plain)
         .disabled(!usesProfileTotals && store.snapshot.updatedAt == nil)
         .accessibilityLabel("\(title), \(formatted(value)) tokens")
+        .accessibilityHint("Open \(title.lowercased()) details")
     }
 
     private func formatted(_ value: Int64) -> String {
