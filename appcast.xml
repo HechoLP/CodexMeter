@@ -4,29 +4,26 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.1.1</title>
-            <pubDate>Sat, 29 Aug 2026 15:10:20 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.1</link>
-            <sparkle:version>111</sparkle:version>
-            <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+            <title>1.1.2</title>
+            <pubDate>Sat, 29 Aug 2026 19:15:09 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.2</link>
+            <sparkle:version>112</sparkle:version>
+            <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.1
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.2
 
-CodexMeter 1.1.1 makes the project macOS-only so development, testing, documentation, and releases can concentrate on the native menu bar app.
+CodexMeter 1.1.2 fixes a menu bar layout regression that could hide the entire usage body and leave only the title and footer visible.
 
-## macOS focus
+## Fixed
 
-- Removes the Windows application and its separate .NET implementation from the current source tree.
-- Removes Windows build, test, packaging, and release automation.
-- Simplifies CI and the stable release gate around the Universal 2 macOS app.
-- Updates the product, architecture, privacy, security, installation, and maintainer documentation to describe one supported platform.
-- Keeps all existing macOS usage accounting, limits, analytics, settings, launch-at-login, Homebrew, and signed Sparkle update behavior.
-
-Historical tags and changelog entries remain available as an accurate record of previous releases; Windows is no longer part of the supported product or current download path.
+- Keeps the scrollable usage and limit body at a usable height whenever the menu bar popover opens or reopens.
+- Adds a macOS layout regression test that verifies the popover cannot shrink to the header-and-footer-only state.
+- Preserves all existing usage data and accounting behavior; the issue affected presentation only.
 
 ## Verification
 
-- Swift unit and integration suite
+- Complete Swift unit and integration suite
+- Native AppKit hosting-size regression test
 - Signed local Codex app-server limit integration
 - 10,000- and 100,000-event ingestion stress suite
 - Universal 2 architecture, bundle metadata, ad-hoc signature, archive, checksum, and Sparkle feed verification
@@ -48,17 +45,17 @@ The app is ad-hoc signed and not Apple-notarized. Download the DMG and `SHA256SU
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.1.1.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+grep ' CodexMeter-1.1.2.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
 xattr -dr com.apple.quarantine /Applications/CodexMeter.app
 open /Applications/CodexMeter.app
 ```
 
 Do not remove quarantine when the checksum does not match the official manifest.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.1/CodexMeter-1.1.1.zip" length="2914506" type="application/octet-stream" sparkle:edSignature="YvY+1Me8rmXwsedVhU3AiGVzuoReeGe/lLSFhcw+6yuHfJs0FGSvZ3JryQKg0kEdWc6YeRHTHHPH+lU0FF/XBg=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.2/CodexMeter-1.1.2.zip" length="2914674" type="application/octet-stream" sparkle:edSignature="BbzDV7P9pXzY23hc1W1APb7R0yg6oFciTQTk7VE5k6rbV/U2i7yE0uEOx0+fk0f2QLvbET100Vg6H4HJImMfBw=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 93Fwcx3O39LCgrhjBHzsNSWzdimQw0Y/dQDpRNqQIhqhISuMwKZ/kdPTxtx6UjW53Bj6dCyKtJQS1D15aPNIAA==
-length: 3143
+edSignature: CVOMYA+/bBU9si2iYedl2M5UahTMB6eGW/AcSrVynN/C6h+VutpPNvpBhu2B+h+cEbgvFi99hxFTGcSenh2KCQ==
+length: 2814
 -->
