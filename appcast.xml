@@ -4,46 +4,34 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.1.0</title>
-            <pubDate>Sat, 29 Aug 2026 14:49:43 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.0</link>
-            <sparkle:version>110</sparkle:version>
-            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+            <title>1.1.1</title>
+            <pubDate>Sat, 29 Aug 2026 15:10:20 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.1</link>
+            <sparkle:version>111</sparkle:version>
+            <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.0
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.1
 
-CodexMeter 1.1.0 turns the macOS menu popover into a faster, more useful view of live local usage, Codex limits, and private on-device analytics. It also fixes the database-compatibility problem that could make Today suddenly display zero after running a development build.
+CodexMeter 1.1.1 makes the project macOS-only so development, testing, documentation, and releases can concentrate on the native menu bar app.
 
-## macOS highlights
+## macOS focus
 
-- Keeps this Mac's live Today total and input, cached-input, and output breakdown at the top of the first screen.
-- Shows the nearest Codex limit windows, reset countdowns, low-quota warnings, and an explicitly labeled even-use pace estimate.
-- Adds Today, 7-day, and 30-day token charts plus model, project, and session drill-down views.
-- Adds model-aware API-equivalent cost estimates that are clearly separated from subscription billing.
-- Adds quick access to Usage, Projects, Sessions, update checks, the OpenAI status page, GitHub, and Quit.
-- Adds fixed 2-, 15-, and 30-minute refresh choices while preserving automatic and manual refresh modes.
+- Removes the Windows application and its separate .NET implementation from the current source tree.
+- Removes Windows build, test, packaging, and release automation.
+- Simplifies CI and the stable release gate around the Universal 2 macOS app.
+- Updates the product, architecture, privacy, security, installation, and maintainer documentation to describe one supported platform.
+- Keeps all existing macOS usage accounting, limits, analytics, settings, launch-at-login, Homebrew, and signed Sparkle update behavior.
 
-## Accuracy and recovery
+Historical tags and changelog entries remain available as an accurate record of previous releases; Windows is no longer part of the supported product or current download path.
 
-- Today always uses live local usage rather than a delayed account-profile day.
-- Removed the former Profile day row from the primary summary.
-- Isolated preview and development data under `CodexMeter-Development`, preventing an unreleased database migration from breaking the installed app's local usage reader.
-- Preserved the established Total definition: Input + Output. Cached input remains an auditable subset of Input and is not counted twice.
+## Verification
 
-## Privacy and scope
+- Swift unit and integration suite
+- Signed local Codex app-server limit integration
+- 10,000- and 100,000-event ingestion stress suite
+- Universal 2 architecture, bundle metadata, ad-hoc signature, archive, checksum, and Sparkle feed verification
 
-- Usage analytics stay on this Mac in owner-only local storage.
-- Project paths are minimized to keyed identifiers and folder basenames; prompts, responses, source code, terminal output, credentials, and attachment contents are not stored.
-- Limit data is read-only and retrieved through the signed local Codex app-server. CodexMeter does not consume reset credits or mutate account settings.
-- API-equivalent costs are estimates, not bills or subscription charges.
-
-Windows remains a certificate-free self-contained portable app with the corrected local Total semantics from 1.0.6. The new limits, cost, project, and session analytics in this release are currently macOS-only.
-
-## Integrity and platform trust
-
-These packages are distributed without Apple Developer ID, Apple notarization, or a Microsoft publisher certificate. Verify the official SHA-256 manifest before bypassing Gatekeeper or SmartScreen. The macOS automatic-update feed and ZIP archive are separately authenticated with Sparkle Ed25519 signatures.
-
-## macOS with Homebrew
+## Install or update with Homebrew
 
 ```bash
 brew update
@@ -54,14 +42,23 @@ open /Applications/CodexMeter.app
 
 Fresh installations can use `brew install --cask HechoLP/tap/codexmeter`.
 
-## Windows portable download
+## First direct-download launch
 
-Download the x64 or ARM64 ZIP together with `SHA256SUMS-windows.txt`, compare the PowerShell `Get-FileHash` result with the manifest, and extract the verified package to a permanent folder.
+The app is ad-hoc signed and not Apple-notarized. Download the DMG and `SHA256SUMS.txt` from the official release, verify the checksum, copy `CodexMeter.app` to Applications, and remove quarantine from this app only:
+
+```bash
+cd ~/Downloads
+grep ' CodexMeter-1.1.1.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+xattr -dr com.apple.quarantine /Applications/CodexMeter.app
+open /Applications/CodexMeter.app
+```
+
+Do not remove quarantine when the checksum does not match the official manifest.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.0/CodexMeter-1.1.0.zip" length="2914484" type="application/octet-stream" sparkle:edSignature="N69yp7xaty4Ag8iYMSxia2dbYivvDp4eyaL2GTSlALZyy8Dlwm2YUTjix1FZ1t2wy7YbcsFz+cz67uf5xo8fDA=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.1/CodexMeter-1.1.1.zip" length="2914506" type="application/octet-stream" sparkle:edSignature="YvY+1Me8rmXwsedVhU3AiGVzuoReeGe/lLSFhcw+6yuHfJs0FGSvZ3JryQKg0kEdWc6YeRHTHHPH+lU0FF/XBg=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: mQ8fXkefhkJIoNp0LJPCLmK/4gr5DfD6dBtiWBxfGP1wxD0E83Iwg5x70z8fg1tmZ64uXOltULZOQQ8sdbO+DA==
-length: 4182
+edSignature: 93Fwcx3O39LCgrhjBHzsNSWzdimQw0Y/dQDpRNqQIhqhISuMwKZ/kdPTxtx6UjW53Bj6dCyKtJQS1D15aPNIAA==
+length: 3143
 -->
