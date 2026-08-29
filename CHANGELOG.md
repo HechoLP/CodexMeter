@@ -4,6 +4,13 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-08-29
+
+### Changed
+
+- Replaced the vertical token breakdown and period lists with compact horizontal comparisons so the overview can be understood without scrolling.
+- Increased the normal popover overview height while preserving the bounded scroll fallback for smaller screens and larger accessibility text.
+
 ## [1.1.3] - 2026-08-29
 
 ### Changed
