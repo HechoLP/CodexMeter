@@ -46,10 +46,10 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .accountLimits: "Codex Usage Limits"
-        case .localUsage: "Today’s Tokens"
-        case .tokenHistory: "Usage History"
-        case .explore: "Detailed Views"
+        case .accountLimits: "Usage limits"
+        case .localUsage: "Today"
+        case .tokenHistory: "History"
+        case .explore: "Details"
         }
     }
 
@@ -191,7 +191,7 @@ struct MenuPopoverView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Codex Limits are turned off", systemImage: "gauge.with.dots.needle.0percent")
                     .font(.headline)
-                Text("Turn on Account Limits in Settings to see Codex quota windows and reset times.")
+                Text("Enable Account Limits in Settings.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Open Settings") {
@@ -207,7 +207,7 @@ struct MenuPopoverView: View {
     private var accountLimitsPreview: some View {
         VStack(alignment: .leading, spacing: 0) {
             MenuLink(destination: .limits) {
-                categoryHeader(.accountLimits, context: limitHeaderContext, showsDisclosure: true)
+                categoryHeader(.accountLimits, showsDisclosure: true)
             }
             .accessibilityIdentifier("menu.category.accountLimits")
             .accessibilityHint("Open all account limit details")
@@ -222,15 +222,14 @@ struct MenuPopoverView: View {
                         )
                     } else {
                         ForEach(Array(windows.prefix(3))) { window in
-                            compactLimitRow(
-                                window,
-                                showsPace: limitStore.status.allowsPaceEstimates
-                            )
+                            compactLimitRow(window)
                         }
                         if windows.count > 3 {
-                            Text("\(windows.count - 3) more in Codex Usage Limits")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            MenuLink(destination: .limits) {
+                                Text("View \(windows.count - 3) more")
+                                    .font(.caption)
+                                    .padding(.vertical, 6)
+                            }
                         }
                         if limitStore.status == .stale {
                             compactLimitStatus(
@@ -363,9 +362,6 @@ struct MenuPopoverView: View {
                                 reduceMotion ? nil : .easeOut(duration: 0.24),
                                 value: store.snapshot.today.totalTokens
                             )
-                        Text("Total tokens today")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("This Mac total tokens today, \(formatted(store.snapshot.today.totalTokens))")
@@ -418,15 +414,13 @@ struct MenuPopoverView: View {
     }
 
     private var exploreSection: some View {
-        VStack(spacing: 0) {
-            categoryHeader(.explore)
-            exploreLinks
-        }
+        exploreLinks
+            .padding(.top, 8)
     }
 
     private var exploreLinks: some View {
         VStack(spacing: 0) {
-            exploreRowLink("Usage dashboard", symbol: "chart.xyaxis.line", destination: .usage)
+            exploreRowLink("Usage", symbol: "chart.xyaxis.line", destination: .usage)
             if projectsEnabled {
                 exploreRowLink("Projects", symbol: "folder", destination: .projects)
             }
@@ -587,14 +581,6 @@ struct MenuPopoverView: View {
         profileStore.isEnabled && profileStore.snapshot != nil
     }
 
-    private var limitHeaderContext: String {
-        guard let windows = limitStore.snapshot?.windows else {
-            return limitStore.status == .loading ? "Updating" : "Unavailable"
-        }
-        let count = visibleAccountLimitWindows(windows).count
-        return "\(count) \(count == 1 ? "limit" : "limits")"
-    }
-
     private var historyContext: String {
         guard usesProfileTotals, let snapshot = profileStore.snapshot else {
             return "This Mac"
@@ -718,11 +704,7 @@ struct MenuPopoverView: View {
     }
 
     @ViewBuilder
-    private func compactLimitRow(
-        _ window: AccountLimitWindow,
-        now: Date = Date(),
-        showsPace: Bool
-    ) -> some View {
+    private func compactLimitRow(_ window: AccountLimitWindow) -> some View {
         let remaining = window.remainingPercent
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
@@ -748,18 +730,11 @@ struct MenuPopoverView: View {
                     Text("Resets")
                     Text(reset, style: .relative)
                 }
-                if showsPace, let pace = window.pace(at: now) {
-                    if window.resetsAt != nil {
-                        Text("·")
-                    }
-                    Text(pace.compactSummary)
-                }
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
-            .help("Pace compares current use with even use across the reported limit window.")
         }
         .accessibilityElement(children: .combine)
     }

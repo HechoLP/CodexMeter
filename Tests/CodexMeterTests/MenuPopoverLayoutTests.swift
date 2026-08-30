@@ -16,7 +16,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
         XCTAssertTrue(MenuPopoverCategory.allCases.allSatisfy { !$0.symbol.isEmpty })
         XCTAssertEqual(
             MenuPopoverCategory.allCases.map(\.title),
-            ["Codex Usage Limits", "Today’s Tokens", "Usage History", "Detailed Views"]
+            ["Usage limits", "Today", "History", "Details"]
         )
     }
 
@@ -195,6 +195,87 @@ final class MenuPopoverLayoutTests: XCTestCase {
         XCTAssertEqual(sizes[0], NSSize(width: 100, height: 28))
     }
 
+    func testUnknownCostIsOmittedFromRowsButRetainedInDetails() throws {
+        _ = NSApplication.shared
+        let suite = "CodexMeter.MenuCopyTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let through = Date(timeIntervalSince1970: 1_800_000_000)
+        let model = ModelUsageSummary(modelID: "unpriced-model", usage: TokenUsage(inputTokens: 10, cachedInputTokens: 2, outputTokens: 1))
+        var rowSizes: [NSSize] = []
+        for enabled in [false, true] {
+            defaults.set(enabled, forKey: "costEstimatesEnabled")
+            let row = NSHostingView(rootView:
+                analyticsRow("Model", tokens: 11, models: [model], through: through, quality: .exact)
+                    .frame(width: MenuPopoverMetrics.width)
+                    .defaultAppStorage(defaults)
+            )
+            row.layoutSubtreeIfNeeded()
+            rowSizes.append(row.fittingSize)
+        }
+        XCTAssertEqual(rowSizes[0], rowSizes[1], "Unknown costs must not add a repeated row or a zero estimate")
+        for quality: DataQuality in [.exact, .partial, .stale, .error] {
+            let detail = NSHostingView(rootView:
+                EstimatedCostText(models: [model], through: through, quality: quality, compact: false)
+                    .defaultAppStorage(defaults)
+            )
+            detail.layoutSubtreeIfNeeded()
+            XCTAssertGreaterThan(detail.fittingSize.height, 0, "Unavailable costs must remain explicit in details")
+        }
+    }
+
+    func testAvailableCostStillAppearsInAnalyticsRows() throws {
+        _ = NSApplication.shared
+        let suite = "CodexMeter.MenuCopyTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let through = Date(timeIntervalSince1970: 1_800_000_000)
+        let model = ModelUsageSummary(modelID: "gpt-5.5", usage: TokenUsage(inputTokens: 10, cachedInputTokens: 2, outputTokens: 1))
+        var rowHeights: [CGFloat] = []
+        for enabled in [false, true] {
+            defaults.set(enabled, forKey: "costEstimatesEnabled")
+            let row = NSHostingView(rootView:
+                analyticsRow("Model", tokens: 11, models: [model], through: through, quality: .exact)
+                    .frame(width: MenuPopoverMetrics.width)
+                    .defaultAppStorage(defaults)
+            )
+            row.layoutSubtreeIfNeeded()
+            rowHeights.append(row.fittingSize.height)
+        }
+        XCTAssertGreaterThan(rowHeights[1], rowHeights[0], "Valid estimates still need their secondary row")
+    }
+
+    func testLimitsKeepCompactDetailsInReadyAndStaleStates() async throws {
+        _ = NSApplication.shared
+        let suite = "CodexMeter.MenuCopyTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "accountLimitsEnabled")
+        defaults.set(true, forKey: "additionalLimitsEnabled")
+        defaults.set(true, forKey: "resetCreditsEnabled")
+        let store = AccountLimitStore(provider: MenuCopyTestLimitProvider(), defaults: defaults, pollingInterval: nil)
+        for stale in [false, true] {
+            await store.refresh()
+            XCTAssertEqual(store.status, stale ? .stale : .ready)
+            let hostingView = NSHostingView(rootView:
+                MenuPopoverView(navigation: MenuNavigation(path: [.limits]))
+                    .environmentObject(UsageStore())
+                    .environmentObject(ProfileUsageStore())
+                    .environmentObject(store)
+                    .defaultAppStorage(defaults)
+                    .environment(\.colorScheme, .dark)
+            )
+            hostingView.appearance = NSAppearance(named: .darkAqua)
+            for _ in 0..<5 {
+                hostingView.setFrameSize(hostingView.fittingSize)
+                hostingView.layoutSubtreeIfNeeded()
+            }
+            XCTAssertEqual(hostingView.fittingSize.width, MenuPopoverMetrics.width)
+            XCTAssertLessThanOrEqual(hostingView.fittingSize.height, MenuPopoverMetrics.detailMaximumHeight + MenuPopoverMetrics.detailHeaderHeight + 1)
+            try captureIfRequested(hostingView, name: stale ? "Limits-stale" : "Limits-ready")
+        }
+    }
+
     private func viewport(height: CGFloat) -> some View {
         ContentFittingScrollView(maximumHeight: 440) {
             Color.clear.frame(height: height)
@@ -274,5 +355,26 @@ final class MenuPopoverLayoutTests: XCTestCase {
 private struct CollapsedPopoverTestLimitProvider: AccountLimitProviding {
     func readLimits() async throws -> AccountLimitsSnapshot {
         throw AccountLimitError.trustedAppServerNotFound
+    }
+}
+
+private actor MenuCopyTestLimitProvider: AccountLimitProviding {
+    private var didRead = false
+
+    func readLimits() async throws -> AccountLimitsSnapshot {
+        guard !didRead else { throw AccountLimitError.trustedAppServerNotFound }
+        didRead = true
+        let now = Date()
+        return AccountLimitsSnapshot(
+            windows: [
+                AccountLimitWindow(id: "weekly", limitID: "codex", displayName: "Codex", windowDurationMinutes: 10_080,
+                                   usedPercent: 1, resetsAt: now.addingTimeInterval(6 * 86_400)),
+                AccountLimitWindow(id: "spark-short", limitID: "spark", displayName: "GPT-5.3-Codex-Spark", windowDurationMinutes: 300,
+                                   usedPercent: 90, resetsAt: now.addingTimeInterval(3 * 3_600)),
+                AccountLimitWindow(id: "spark-weekly", limitID: "spark", displayName: "GPT-5.3-Codex-Spark", windowDurationMinutes: 10_080,
+                                   usedPercent: 0, resetsAt: now.addingTimeInterval(6 * 86_400))
+            ],
+            resetCredits: ResetCreditSummary(availableCount: 1, unlimited: false, expiresAt: nil), fetchedAt: now
+        )
     }
 }

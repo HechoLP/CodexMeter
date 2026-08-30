@@ -25,12 +25,13 @@ struct AccountLimitsView: View {
                     if resetCreditsEnabled, let credits = snapshot.resetCredits {
                         resetCreditsCard(credits)
                     }
-                    Text("Read-only account limits reported by Codex. CodexMeter never consumes reset credits.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Pace compares reported use with an even-use schedule. Any run-out time is a current-window estimate, not a quota guarantee.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    DisclosureGroup("About these limits") {
+                        Text("Reported by Codex; read-only. Reset credits are never consumed here. Pace assumes even use; run-out times are estimates, not guarantees.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 4)
+                    }
+                    .font(.caption)
                     HStack(spacing: 5) {
                         Image(systemName: limitStore.status == .stale ? "wifi.slash" : "clock")
                         Text(limitStatusText(snapshot))
@@ -72,9 +73,10 @@ struct AccountLimitsView: View {
                 .accessibilityLabel("\(window.displayName), \(window.windowLabel), remaining")
                 .accessibilityValue("\(Int(window.remainingPercent.rounded())) percent")
             if let reset = window.resetsAt {
-                Text("Resets \(reset.formatted(.dateTime.month(.abbreviated).day().hour().minute())) · \(reset, style: .relative)")
+                Text("Resets \(reset, style: .relative)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .help("Resets \(reset.formatted(date: .complete, time: .shortened))")
             }
             if limitStore.status.allowsPaceEstimates,
                let pace = window.pace(at: Date()) {
@@ -242,7 +244,7 @@ struct UsageAnalyticsView: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-            Text("tokens · \(range.title)")
+            Text("tokens")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if costEstimatesEnabled {
@@ -494,13 +496,10 @@ struct SessionDetailView: View {
                     }
                     if attachmentMetadataEnabled {
                         LabeledContent("Whole-session images", value: session.imageAttachmentCount.formatted())
+                            .help("Counts cover the whole session after the local-history cutoff, not just this range. Local metadata may be incomplete; attachment contents are never stored.")
                     }
                     usageBreakdown(session.usage)
                     modelRows(session.models)
-                    if attachmentMetadataEnabled {
-                        Text("Image counts cover the whole session after the local-history cutoff, not only the selected chart range. They use reliable local metadata only and may be incomplete when a source record exceeds the parser safety limit. Attachment contents are never stored.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
                 }
                 .padding(16)
             }
@@ -525,7 +524,7 @@ struct SessionDetailView: View {
                     }
                     .font(.caption)
                 }
-                Text("Sub-agent usage is shown separately and is not added to the parent session total again.")
+                Text("Sub-agent tokens are separate from this total.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
@@ -611,7 +610,7 @@ struct EstimatedCostText: View {
     var body: some View {
         if costEstimatesEnabled {
             if let amount = estimatedCost(for: models, through: through, quality: quality) {
-                Text(compact ? "~\(currency(amount))" : "Current API pricing estimate · ~\(currency(amount))")
+                Text(compact ? "~\(currency(amount))" : "Estimated API cost · ~\(currency(amount))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .help("Current official API pricing estimate. This is not a bill or subscription charge.")
@@ -630,7 +629,7 @@ struct EstimatedCostText: View {
 }
 
 @ViewBuilder
-private func analyticsRow(
+func analyticsRow(
     _ title: String,
     detail: String? = nil,
     tokens: Int64,
@@ -661,7 +660,8 @@ private func analyticsRow(
                         .help(detail)
                 }
                 Spacer(minLength: 0)
-                EstimatedCostText(models: models, through: through, quality: quality, compact: true)
+                // Unknown costs belong in the item's detail, not on every list row.
+                EstimatedCostText(models: models, through: through, quality: quality, compact: true, showsUnavailable: false)
                     .lineLimit(1)
             }
         }

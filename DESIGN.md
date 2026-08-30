@@ -136,7 +136,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 - **Character:** Actionable without pretending to be a billing dashboard.
 - **Order:** Pin the primary Codex Weekly window first in both the preview and Limits detail. Keep the remaining windows ordered by duration and name; do not change reported values or synthesize a missing Weekly window.
-- **Content:** At most two limit windows, percent remaining, reset countdown, and even-use pace; additional windows move to Limits.
+- **Content:** At most three limit windows, percent remaining, and reset countdown. Additional windows and even-use pace remain in Limits detail. Do not repeat the number of visible windows in the heading.
 - **State:** Healthy uses the system accent; low and critical states combine color with text.
 - **Disclosure:** Projected run-out appears only in the detailed Limits screen and is labeled as an estimate.
 
@@ -153,6 +153,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 - **Position:** Native range and metric controls keep intrinsic height directly below the title, with 12pt vertical padding. Only the chart or list scrolls, anchored at the top; filters never absorb surplus height.
 - **Navigation:** Back returns to the previous destination and preserves its range, metric, and selected chart day. Command-[ also goes back.
 - **Reading Order:** Align the name and token total on the first row; dates, session counts, and estimated costs are secondary below. Full truncated names remain available as help text. Detail totals use the same rounded, tabular type as the overview at a smaller 28pt size.
+- **Concise Copy:** State today's period and source once above its total. Omit generic headings above self-explanatory navigation rows. Unknown cost messages appear in the summary or item detail, not on every project, model, and session row; unavailable estimates must never become zero. Keep API estimates visibly labeled. Long limit explanations are collapsed under “About these limits”; reset timestamps and image-count methodology use contextual help. Source dates, stale/error messages, and low-limit warnings stay visible.
 - **Charts:** Rounded bar ends and the system accent match the rest of the app; do not hard-code a blue gradient.
 - **Verification:** Render the production `MenuPopoverView`, including its actual header and destination, with loading, empty, and populated content. Assert title-to-filter spacing and viewport bounds, and verify the viewport shrinks and grows with content instead of testing a substitute navigation host.
 
