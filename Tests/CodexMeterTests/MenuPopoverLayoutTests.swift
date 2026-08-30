@@ -41,35 +41,30 @@ final class MenuPopoverLayoutTests: XCTestCase {
         XCTAssertFalse(containsScrollView(in: hostingView))
     }
 
-    func testAllAnalyticsDetailsKeepTheSameHeightAndOneContentScroller() {
+    func testAllAnalyticsDetailsHaveBoundedHeightAndOneContentScroller() {
         _ = NSApplication.shared
         let empty = Dictionary(uniqueKeysWithValues: AnalyticsRange.allCases.map {
             ($0, AnalyticsSnapshot.empty(range: $0, through: Date(), calendar: .current))
         })
         for snapshots in [[:], empty, analyticsFixtures] {
-            for (name, screen) in analyticsScreens {
+            for destination in analyticsDestinations {
                 let hostingView = NSHostingView(rootView:
-                    screen.environmentObject(UsageStore(analyticsSnapshots: snapshots))
+                    popover(destination: destination, snapshots: snapshots)
                 )
                 hostingView.layoutSubtreeIfNeeded()
-                XCTAssertEqual(hostingView.fittingSize.width, MenuPopoverMetrics.width, name)
-                XCTAssertEqual(hostingView.fittingSize.height, MenuPopoverMetrics.analyticsDetailHeight, name)
-                XCTAssertEqual(scrollViewCount(in: hostingView), 1, name)
+                XCTAssertEqual(hostingView.fittingSize.width, MenuPopoverMetrics.width)
+                XCTAssertLessThanOrEqual(hostingView.fittingSize.height, 580)
+                XCTAssertEqual(scrollViewCount(in: hostingView), 1)
             }
         }
     }
 
-    func testAnalyticsFiltersStayAtTopOfTheirAllocatedHeight() throws {
+    func testProductionPopoverPlacesFiltersDirectlyBelowItsHeader() throws {
         _ = NSApplication.shared
-        for (name, screen) in analyticsScreens {
+        for destination in analyticsDestinations {
+            let name = destination.title(usesProfileTotals: false)
             let hostingView = NSHostingView(rootView:
-                NavigationStack(path: .constant([name])) {
-                    Text("Token Usage")
-                        .frame(width: MenuPopoverMetrics.width, height: 340)
-                        .navigationDestination(for: String.self) { _ in screen }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .environmentObject(UsageStore(analyticsSnapshots: analyticsFixtures))
+                popover(destination: destination, snapshots: analyticsFixtures)
             )
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 372, height: 570),
@@ -83,27 +78,94 @@ final class MenuPopoverLayoutTests: XCTestCase {
             hostingView.layoutSubtreeIfNeeded()
             let controls = descendants(of: NSSegmentedControl.self, in: hostingView)
             XCTAssertFalse(controls.isEmpty, name)
-            for control in controls {
-                let frame = hostingView.convert(control.bounds, from: control)
-                let top = hostingView.isFlipped ? frame.minY : hostingView.bounds.maxY - frame.maxY
-                XCTAssertLessThan(top, 90, "\(name) filter has \(top)pt of space above it")
+            let frames = controls.map { topOriginFrame(of: $0, in: hostingView) }.sorted { $0.minY < $1.minY }
+            let first = try XCTUnwrap(frames.first)
+            XCTAssertEqual(first.minY - MenuPopoverMetrics.detailHeaderHeight, 12, accuracy: 3, name)
+            for frame in frames {
                 XCTAssertLessThan(frame.height, 36, "\(name) filter must keep its native control height")
             }
             let scroll = try XCTUnwrap(descendants(of: NSScrollView.self, in: hostingView).first)
-            XCTAssertGreaterThan(scroll.frame.height, 400, "\(name) content must retain most of the height")
-            let frame = hostingView.convert(scroll.bounds, from: scroll)
-            let top = hostingView.isFlipped ? frame.minY : hostingView.bounds.maxY - frame.maxY
-            XCTAssertLessThan(top, 125, "\(name) content must start immediately below the filters")
+            let scrollFrame = topOriginFrame(of: scroll, in: hostingView)
+            let last = try XCTUnwrap(frames.last)
+            XCTAssertEqual(scrollFrame.minY - last.maxY, 12, accuracy: 3, name)
+            XCTAssertLessThanOrEqual(scrollFrame.height, MenuPopoverMetrics.analyticsViewportMaximumHeight)
+            XCTAssertNil(window.toolbar, "MenuBarExtra must not gain a second, automatic navigation toolbar")
             try captureIfRequested(hostingView, name: name)
         }
     }
 
-    private var analyticsScreens: [(String, AnyView)] {
-        [
-            ("Usage", AnyView(UsageAnalyticsView())),
-            ("Projects", AnyView(ProjectsAnalyticsView())),
-            ("Sessions", AnyView(SessionsAnalyticsView()))
-        ]
+    func testNavigationReturnsToParentAndPreservesItsSelections() {
+        let navigation = MenuNavigation()
+        navigation.push(.usage)
+        navigation.usageRange = .thirtyDays
+        navigation.chartMetric = .cost
+        navigation.push(.model(id: "model", range: .thirtyDays))
+        navigation.back()
+        XCTAssertEqual(navigation.destination, .usage)
+        XCTAssertEqual(navigation.usageRange, .thirtyDays)
+        XCTAssertEqual(navigation.chartMetric, .cost)
+        navigation.back()
+        XCTAssertNil(navigation.destination)
+        navigation.back()
+        XCTAssertTrue(navigation.path.isEmpty)
+    }
+
+    func testEveryDestinationKeepsThePopoverWidthAndBoundedHeight() {
+        _ = NSApplication.shared
+        let destinations: [MenuDestination] = analyticsDestinations + [
+            .limits,
+            .project(id: "project-0", range: .thirtyDays),
+            .session(id: "session-0", range: .sevenDays),
+            .model(id: "test-model", range: .sevenDays)
+        ] + UsagePeriod.allCases.map { .period($0) }
+        for destination in destinations {
+            let hostingView = NSHostingView(rootView:
+                popover(destination: destination, snapshots: analyticsFixtures)
+            )
+            hostingView.layoutSubtreeIfNeeded()
+            XCTAssertEqual(hostingView.fittingSize.width, MenuPopoverMetrics.width, "\(destination)")
+            XCTAssertLessThanOrEqual(hostingView.fittingSize.height, 580, "\(destination)")
+            XCTAssertGreaterThan(hostingView.fittingSize.height, MenuPopoverMetrics.detailHeaderHeight)
+        }
+    }
+
+    func testContentViewportFitsShortContentAndCapsLongContent() async {
+        _ = NSApplication.shared
+        let hostingView = NSHostingView(rootView: viewport(height: 90))
+        // Reuse the same host: data loading and filter changes must both grow
+        // and shrink an already open detail screen, not just size its first render.
+        for height: CGFloat in [90, 900, 260, 90] {
+            hostingView.rootView = viewport(height: height)
+            for _ in 0..<8 {
+                hostingView.setFrameSize(hostingView.fittingSize)
+                hostingView.layoutSubtreeIfNeeded()
+                await Task.yield()
+            }
+            XCTAssertEqual(hostingView.fittingSize.height, min(height, 440), accuracy: 1)
+        }
+    }
+
+    private func viewport(height: CGFloat) -> some View {
+        ContentFittingScrollView(maximumHeight: 440) {
+            Color.clear.frame(height: height)
+        }
+        .frame(width: MenuPopoverMetrics.width)
+    }
+
+    private var analyticsDestinations: [MenuDestination] { [.usage, .projects, .sessions] }
+
+    private func popover(destination: MenuDestination, snapshots: [AnalyticsRange: AnalyticsSnapshot]) -> some View {
+        MenuPopoverView(navigation: MenuNavigation(path: [destination]))
+            .environmentObject(UsageStore(analyticsSnapshots: snapshots))
+            .environmentObject(ProfileUsageStore())
+            .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+    }
+
+    private func topOriginFrame(of view: NSView, in hostingView: NSView) -> NSRect {
+        let frame = hostingView.convert(view.bounds, from: view)
+        return NSRect(x: frame.minX,
+                      y: hostingView.isFlipped ? frame.minY : hostingView.bounds.maxY - frame.maxY,
+                      width: frame.width, height: frame.height)
     }
 
     private func captureIfRequested(_ view: NSView, name: String) throws {

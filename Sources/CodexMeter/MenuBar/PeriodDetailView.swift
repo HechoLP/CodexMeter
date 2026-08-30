@@ -82,7 +82,6 @@ struct PeriodDetailView: View {
         .padding(18)
         .frame(width: MenuPopoverMetrics.width)
         .frame(minHeight: 240, alignment: .topLeading)
-        .navigationTitle(title)
     }
 
     private var statusSymbol: String {

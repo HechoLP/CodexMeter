@@ -145,10 +145,11 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 ### Analytics Details
 
-- **Shape:** Usage, Projects, and Sessions share a stable 520pt content height at the same 372pt popover width, including loading and empty states.
-- **Structure:** Native range and metric controls use intrinsic vertical sizing in a compact 12pt-padded header. They must never consume the expandable space reserved for the data viewport.
-- **Position:** The navigation stack reports its intrinsic height to the menu-bar window. Only the chart or list scrolls, anchored at the top, and fills the remaining height below the controls.
-- **Verification:** Check native control positions and viewport height inside a navigation host with populated content, not only the outer fitting size or the number of scroll views.
+- **Shape:** All destinations keep the 372pt popover width. Short content determines its own height; longer analytics scroll within a 440pt viewport, while other long details cap their viewport at 520pt.
+- **Structure:** A 44pt header owns the back button and title in the same vertical layout as the content. Do not embed `NavigationStack` or an automatic window toolbar in `MenuBarExtra`; a second navigation/safe-area owner can leave a large gap above the filters.
+- **Position:** Native range and metric controls keep intrinsic height directly below the title, with 12pt vertical padding. Only the chart or list scrolls, anchored at the top; filters never absorb surplus height.
+- **Navigation:** Back returns to the previous destination and preserves its range, metric, and selected chart day. Command-[ also goes back.
+- **Verification:** Render the production `MenuPopoverView`, including its actual header and destination, with loading, empty, and populated content. Assert title-to-filter spacing and viewport bounds, and verify the viewport shrinks and grows with content instead of testing a substitute navigation host.
 
 ### Footer Actions
 

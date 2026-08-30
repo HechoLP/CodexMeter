@@ -1,23 +1,13 @@
 import Charts
 import SwiftUI
 
-enum MenuDestination: Hashable {
-    case limits
-    case usage
-    case projects
-    case sessions
-    case project(id: String, range: AnalyticsRange)
-    case session(id: String, range: AnalyticsRange)
-    case model(id: String, range: AnalyticsRange)
-}
-
 struct AccountLimitsView: View {
     @EnvironmentObject private var limitStore: AccountLimitStore
     @AppStorage("additionalLimitsEnabled") private var additionalLimitsEnabled = AppPreferences.defaultAdditionalLimitsEnabled
     @AppStorage("resetCreditsEnabled") private var resetCreditsEnabled = AppPreferences.defaultResetCreditsEnabled
 
     var body: some View {
-        ScrollView {
+        ContentFittingScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let snapshot = limitStore.snapshot {
                     let windows = visibleWindows(snapshot.windows)
@@ -61,17 +51,6 @@ struct AccountLimitsView: View {
             .padding(16)
         }
         .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 300, maxHeight: 520)
-        .navigationTitle("Limits")
-        .toolbar {
-            Button {
-                Task { await limitStore.refresh() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .disabled(limitStore.isRefreshing)
-            .help("Refresh account limits")
-        }
         .task {
             if limitStore.snapshot == nil { await limitStore.refresh() }
         }
@@ -166,7 +145,7 @@ struct AccountLimitsView: View {
     }
 }
 
-private enum AnalyticsChartMetric: String, CaseIterable, Identifiable {
+enum AnalyticsChartMetric: String, CaseIterable, Identifiable {
     case tokens
     case cost
 
@@ -174,8 +153,7 @@ private enum AnalyticsChartMetric: String, CaseIterable, Identifiable {
     var title: String { self == .tokens ? "Tokens" : "Cost" }
 }
 
-/// Keep native pickers at their intrinsic height while the data viewport takes
-/// the remaining space, including during MenuBarExtra navigation size probes.
+/// One compact header followed by a content-fitting, height-limited viewport.
 private struct AnalyticsDetailLayout<Controls: View, Content: View>: View {
     @EnvironmentObject private var store: UsageStore
     @ViewBuilder var controls: Controls
@@ -192,18 +170,13 @@ private struct AnalyticsDetailLayout<Controls: View, Content: View>: View {
             Divider()
             analyticsSnapshotStatus(store)
                 .fixedSize(horizontal: false, vertical: true)
-            ScrollView {
+            ContentFittingScrollView(maximumHeight: MenuPopoverMetrics.analyticsViewportMaximumHeight) {
                 content
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .defaultScrollAnchor(.top)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(
-            width: MenuPopoverMetrics.width,
-            height: MenuPopoverMetrics.analyticsDetailHeight,
-            alignment: .topLeading
-        )
+        .frame(width: MenuPopoverMetrics.width, alignment: .topLeading)
     }
 }
 
@@ -222,17 +195,19 @@ private struct AnalyticsRangePicker: View {
 
 struct UsageAnalyticsView: View {
     @EnvironmentObject private var store: UsageStore
+    @EnvironmentObject private var navigation: MenuNavigation
     @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
-    @State private var range = AnalyticsRange.sevenDays
-    @State private var chartMetric = AnalyticsChartMetric.tokens
-    @State private var selectedBucketDate: Date?
+
+    private var range: AnalyticsRange { navigation.usageRange }
+    private var chartMetric: AnalyticsChartMetric { navigation.chartMetric }
+    private var selectedBucketDate: Date? { navigation.selectedBucketDate }
 
     var body: some View {
         AnalyticsDetailLayout {
-            VStack(spacing: 10) {
-                AnalyticsRangePicker(range: $range)
+            VStack(alignment: .leading, spacing: 10) {
+                AnalyticsRangePicker(range: $navigation.usageRange)
                 if costEstimatesEnabled {
-                    Picker("Chart metric", selection: $chartMetric) {
+                    Picker("Chart metric", selection: $navigation.chartMetric) {
                         ForEach(AnalyticsChartMetric.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
@@ -255,10 +230,9 @@ struct UsageAnalyticsView: View {
                     .padding(16)
             }
         }
-        .navigationTitle("Usage")
         .task(id: range) { await store.refreshAnalytics(range: range) }
-        .onChange(of: range) { _, _ in selectedBucketDate = nil }
-        .onChange(of: chartMetric) { _, _ in selectedBucketDate = nil }
+        .onChange(of: range) { _, _ in navigation.selectedBucketDate = nil }
+        .onChange(of: chartMetric) { _, _ in navigation.selectedBucketDate = nil }
     }
 
     private func totalCard(_ snapshot: AnalyticsSnapshot) -> some View {
@@ -292,7 +266,7 @@ struct UsageAnalyticsView: View {
                     .foregroundStyle(.blue.gradient)
                 }
                 .chartYAxis(.hidden)
-                .chartXSelection(value: $selectedBucketDate)
+                .chartXSelection(value: $navigation.selectedBucketDate)
                 .frame(height: 112)
                 .accessibilityLabel("\(chartMetric.title) chart for \(range.title)")
             }
@@ -326,7 +300,7 @@ struct UsageAnalyticsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 ForEach(snapshot.models) { model in
-                    NavigationLink(value: MenuDestination.model(id: model.id, range: range)) {
+                    MenuLink(destination: .model(id: model.id, range: range)) {
                         HStack {
                             Text(model.displayName).lineLimit(1)
                             Spacer()
@@ -383,13 +357,14 @@ struct UsageAnalyticsView: View {
 
 struct ProjectsAnalyticsView: View {
     @EnvironmentObject private var store: UsageStore
-    @State private var range = AnalyticsRange.thirtyDays
+    @EnvironmentObject private var navigation: MenuNavigation
+    private var range: AnalyticsRange { navigation.projectsRange }
 
     var body: some View {
         analyticsList {
             if let snapshot = store.analyticsSnapshots[range] {
                 ForEach(snapshot.projects) { project in
-                    NavigationLink(value: MenuDestination.project(id: project.id, range: range)) {
+                    MenuLink(destination: .project(id: project.id, range: range)) {
                         analyticsRow(
                             project.name,
                             detail: pluralized(project.sessionCount, singular: "session", plural: "sessions"),
@@ -403,13 +378,12 @@ struct ProjectsAnalyticsView: View {
                 }
             }
         }
-        .navigationTitle("Projects")
         .task(id: range) { await store.refreshAnalytics(range: range) }
     }
 
     private func analyticsList<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         AnalyticsDetailLayout {
-            AnalyticsRangePicker(range: $range)
+            AnalyticsRangePicker(range: $navigation.projectsRange)
         } content: {
             VStack(spacing: 0) {
                 if store.analyticsSnapshots[range] == nil {
@@ -426,13 +400,14 @@ struct ProjectsAnalyticsView: View {
 
 struct SessionsAnalyticsView: View {
     @EnvironmentObject private var store: UsageStore
-    @State private var range = AnalyticsRange.sevenDays
+    @EnvironmentObject private var navigation: MenuNavigation
+    private var range: AnalyticsRange { navigation.sessionsRange }
     @AppStorage("agentDetailsEnabled") private var agentDetailsEnabled = AppPreferences.defaultAgentDetailsEnabled
     @AppStorage("attachmentMetadataEnabled") private var attachmentMetadataEnabled = AppPreferences.defaultAttachmentMetadataEnabled
 
     var body: some View {
         AnalyticsDetailLayout {
-            AnalyticsRangePicker(range: $range)
+            AnalyticsRangePicker(range: $navigation.sessionsRange)
         } content: {
             VStack(spacing: 0) {
                 if store.analyticsSnapshots[range] == nil {
@@ -442,7 +417,7 @@ struct SessionsAnalyticsView: View {
                 }
                 if let snapshot = store.analyticsSnapshots[range] {
                     ForEach(snapshot.sessions) { session in
-                        NavigationLink(value: MenuDestination.session(id: session.id, range: range)) {
+                        MenuLink(destination: .session(id: session.id, range: range)) {
                             analyticsRow(
                                 session.displayName,
                                 detail: sessionDetail(session),
@@ -457,7 +432,6 @@ struct SessionsAnalyticsView: View {
                 }
             }
         }
-        .navigationTitle("Sessions")
         .task(id: range) { await store.refreshAnalytics(range: range) }
     }
 
@@ -479,7 +453,7 @@ struct ProjectDetailView: View {
     let range: AnalyticsRange
 
     var body: some View {
-        ScrollView {
+        ContentFittingScrollView {
             if let snapshot = store.analyticsSnapshots[range],
                let project = snapshot.projects.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -498,8 +472,6 @@ struct ProjectDetailView: View {
             }
         }
         .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 300, maxHeight: 520)
-        .navigationTitle("Project")
     }
 }
 
@@ -511,7 +483,7 @@ struct SessionDetailView: View {
     @AppStorage("attachmentMetadataEnabled") private var attachmentMetadataEnabled = AppPreferences.defaultAttachmentMetadataEnabled
 
     var body: some View {
-        ScrollView {
+        ContentFittingScrollView {
             if let snapshot = store.analyticsSnapshots[range],
                let session = snapshot.sessions.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -544,8 +516,6 @@ struct SessionDetailView: View {
             }
         }
         .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 340, maxHeight: 540)
-        .navigationTitle("Session")
     }
 
     @ViewBuilder
@@ -555,7 +525,7 @@ struct SessionDetailView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Text("Sub-agents").font(.subheadline.weight(.semibold))
                 ForEach(children) { child in
-                    NavigationLink(value: MenuDestination.session(id: child.id, range: range)) {
+                    MenuLink(destination: .session(id: child.id, range: range)) {
                         HStack {
                             Text(child.displayName).lineLimit(1)
                             Spacer()
@@ -579,7 +549,7 @@ struct ModelDetailView: View {
     let range: AnalyticsRange
 
     var body: some View {
-        ScrollView {
+        ContentFittingScrollView {
             if let snapshot = store.analyticsSnapshots[range],
                let model = snapshot.models.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -604,8 +574,6 @@ struct ModelDetailView: View {
             }
         }
         .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 300, maxHeight: 520)
-        .navigationTitle("Model")
     }
 }
 

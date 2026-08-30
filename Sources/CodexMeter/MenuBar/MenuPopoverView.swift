@@ -3,7 +3,9 @@ import SwiftUI
 
 enum MenuPopoverMetrics {
     static let width: CGFloat = 372
-    static let analyticsDetailHeight: CGFloat = 520
+    static let detailMaximumHeight: CGFloat = 520
+    static let analyticsViewportMaximumHeight: CGFloat = 440
+    static let detailHeaderHeight: CGFloat = 44
 }
 
 enum MenuPopoverSection: String, CaseIterable, Identifiable {
@@ -62,6 +64,7 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
 }
 
 struct MenuPopoverView: View {
+    @StateObject private var navigation: MenuNavigation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
     @EnvironmentObject private var profileStore: ProfileUsageStore
@@ -82,9 +85,18 @@ struct MenuPopoverView: View {
 
     private let formatter = TokenFormatter()
 
+    init(navigation: MenuNavigation = MenuNavigation()) {
+        _navigation = StateObject(wrappedValue: navigation)
+    }
+
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            if let destination = navigation.destination {
+                detailHeader(destination)
+                Divider()
+                destinationView(destination)
+                    .id(destination)
+            } else {
                 header
                 Group {
                     switch selectedSection {
@@ -100,36 +112,64 @@ struct MenuPopoverView: View {
                 Divider()
                 footer
             }
-            .frame(width: MenuPopoverMetrics.width)
-            .background(.background)
-            .navigationDestination(for: UsagePeriod.self) { period in
-                PeriodDetailView(period: period)
-                    .environmentObject(store)
-                    .environmentObject(profileStore)
-            }
-            .navigationDestination(for: MenuDestination.self) { destination in
-                switch destination {
-                case .limits:
-                    AccountLimitsView()
-                case .usage:
-                    UsageAnalyticsView()
-                case .projects:
-                    ProjectsAnalyticsView()
-                case .sessions:
-                    SessionsAnalyticsView()
-                case let .project(id, range):
-                    ProjectDetailView(id: id, range: range)
-                case let .session(id, range):
-                    SessionDetailView(id: id, range: range)
-                case let .model(id, range):
-                    ModelDetailView(id: id, range: range)
-                }
-            }
         }
+        .frame(width: MenuPopoverMetrics.width, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
+        .background(.background)
+        .environmentObject(navigation)
         .onChange(of: isRefreshing) { _, isRefreshing in
             guard isRefreshing, !reduceMotion else { return }
             refreshTurns += 1
+        }
+    }
+
+    private func detailHeader(_ destination: MenuDestination) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                navigation.back()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.subheadline.weight(.medium))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .keyboardShortcut("[", modifiers: .command)
+            .accessibilityLabel("Back")
+            .accessibilityIdentifier("menu.navigation.back")
+            .help("Back")
+            Text(destination.title(usesProfileTotals: usesProfileTotals))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
+            if destination == .limits {
+                Button {
+                    Task { await limitStore.refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .frame(width: 28, height: 28)
+                }
+                .disabled(limitStore.isRefreshing)
+                .accessibilityLabel("Refresh account limits")
+                .help("Refresh account limits")
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .frame(height: MenuPopoverMetrics.detailHeaderHeight)
+    }
+
+    @ViewBuilder
+    private func destinationView(_ destination: MenuDestination) -> some View {
+        switch destination {
+        case .limits: AccountLimitsView()
+        case .usage: UsageAnalyticsView()
+        case .projects: ProjectsAnalyticsView()
+        case .sessions: SessionsAnalyticsView()
+        case let .period(period): PeriodDetailView(period: period)
+        case let .project(id, range): ProjectDetailView(id: id, range: range)
+        case let .session(id, range): SessionDetailView(id: id, range: range)
+        case let .model(id, range): ModelDetailView(id: id, range: range)
         }
     }
 
@@ -166,7 +206,7 @@ struct MenuPopoverView: View {
 
     private var accountLimitsPreview: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink(value: MenuDestination.limits) {
+            MenuLink(destination: .limits) {
                 categoryHeader(.accountLimits, context: limitHeaderContext, showsDisclosure: true)
             }
             .buttonStyle(.plain)
@@ -634,7 +674,7 @@ struct MenuPopoverView: View {
     }
 
     private func periodRowLink(_ title: String, period: UsagePeriod, value: Int64) -> some View {
-        NavigationLink(value: period) {
+        MenuLink(destination: .period(period)) {
             HStack(spacing: 10) {
                 Text(title)
                     .font(.subheadline)
@@ -772,7 +812,7 @@ struct MenuPopoverView: View {
         symbol: String,
         destination: MenuDestination
     ) -> some View {
-        NavigationLink(value: destination) {
+        MenuLink(destination: destination) {
             HStack(spacing: 10) {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .medium))
