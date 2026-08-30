@@ -66,6 +66,6 @@ struct MenuLink<Label: View>: View {
             label
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MenuInteractionStyle())
     }
 }

@@ -145,6 +145,56 @@ final class MenuPopoverLayoutTests: XCTestCase {
         }
     }
 
+    func testPolishedPopoverFitsBothAppearancesWithLongNamesAndLargeTotals() throws {
+        _ = NSApplication.shared
+        let destinations: [MenuDestination?] = [nil, .usage, .projects, .sessions]
+        for dark in [false, true] {
+            for destination in destinations {
+                let name = destination?.title(usesProfileTotals: false) ?? "Overview"
+                let hostingView = NSHostingView(rootView:
+                    popover(destination: destination, snapshots: makeAnalyticsFixtures(longContent: true))
+                        .environment(\.colorScheme, dark ? .dark : .light)
+                )
+                hostingView.appearance = NSAppearance(named:
+                    dark ? .accessibilityHighContrastDarkAqua : .accessibilityHighContrastAqua
+                )
+                // Settle the measured scroll content before capturing an
+                // unattached host, as a real menu window resizes with its content.
+                for _ in 0..<5 {
+                    hostingView.setFrameSize(hostingView.fittingSize)
+                    hostingView.layoutSubtreeIfNeeded()
+                }
+                XCTAssertEqual(hostingView.fittingSize.width, MenuPopoverMetrics.width, name)
+                // Overview keeps all three sections visible; detail screens
+                // retain their tighter, independently bounded content viewport.
+                XCTAssertLessThanOrEqual(hostingView.fittingSize.height, destination == nil ? 700 : 580, name)
+                XCTAssertEqual(scrollViewCount(in: hostingView), destination == nil ? 0 : 1)
+                if destination != nil {
+                    let first = try XCTUnwrap(descendants(of: NSSegmentedControl.self, in: hostingView)
+                        .map { topOriginFrame(of: $0, in: hostingView) }.min { $0.minY < $1.minY })
+                    XCTAssertEqual(first.minY - MenuPopoverMetrics.detailHeaderHeight, 12, accuracy: 3, name)
+                }
+                try captureIfRequested(hostingView, name: "\(name)-\(dark ? "dark" : "light")")
+            }
+        }
+    }
+
+    func testMenuInteractionStylingKeepsDisabledControlsTheSameSize() {
+        _ = NSApplication.shared
+        var sizes: [NSSize] = []
+        for enabled in [true, false] {
+            let hostingView = NSHostingView(rootView:
+                Button("Refresh") {}.frame(width: 100, height: 28)
+                    .buttonStyle(MenuInteractionStyle())
+                    .disabled(!enabled)
+            )
+            hostingView.layoutSubtreeIfNeeded()
+            sizes.append(hostingView.fittingSize)
+        }
+        XCTAssertEqual(sizes[0], sizes[1])
+        XCTAssertEqual(sizes[0], NSSize(width: 100, height: 28))
+    }
+
     private func viewport(height: CGFloat) -> some View {
         ContentFittingScrollView(maximumHeight: 440) {
             Color.clear.frame(height: height)
@@ -154,8 +204,8 @@ final class MenuPopoverLayoutTests: XCTestCase {
 
     private var analyticsDestinations: [MenuDestination] { [.usage, .projects, .sessions] }
 
-    private func popover(destination: MenuDestination, snapshots: [AnalyticsRange: AnalyticsSnapshot]) -> some View {
-        MenuPopoverView(navigation: MenuNavigation(path: [destination]))
+    private func popover(destination: MenuDestination?, snapshots: [AnalyticsRange: AnalyticsSnapshot]) -> some View {
+        MenuPopoverView(navigation: MenuNavigation(path: destination.map { [$0] } ?? []))
             .environmentObject(UsageStore(analyticsSnapshots: snapshots))
             .environmentObject(ProfileUsageStore())
             .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
@@ -183,9 +233,17 @@ final class MenuPopoverLayoutTests: XCTestCase {
     }
 
     private var analyticsFixtures: [AnalyticsRange: AnalyticsSnapshot] {
+        makeAnalyticsFixtures()
+    }
+
+    private func makeAnalyticsFixtures(longContent: Bool = false) -> [AnalyticsRange: AnalyticsSnapshot] {
         let now = Date(timeIntervalSince1970: 1_788_055_200)
-        let usage = TokenUsage(inputTokens: 1_000_000, cachedInputTokens: 900_000, outputTokens: 5_000)
-        let models = [ModelUsageSummary(modelID: "test-model", usage: usage)]
+        let usage = TokenUsage(inputTokens: longContent ? 1_234_567_890_123 : 1_000_000,
+                               cachedInputTokens: 900_000, outputTokens: 5_000)
+        let models = [ModelUsageSummary(
+            modelID: longContent ? "test-model-with-a-long-identifier" : "test-model", usage: usage
+        )]
+        let projectName = longContent ? "A long project name · 긴 프로젝트 이름" : "Project"
         return Dictionary(uniqueKeysWithValues: AnalyticsRange.allCases.map { range in
             (range, AnalyticsSnapshot(
                 range: range, interval: range.interval(through: now, calendar: .current), through: now,
@@ -193,10 +251,10 @@ final class MenuPopoverLayoutTests: XCTestCase {
                 buckets: [UsageBucket(start: now.addingTimeInterval(-60), end: now, models: models)],
                 models: models,
                 projects: (0..<20).map { index in
-                    ProjectUsageSummary(id: "project-\(index)", name: "Project \(index)", usage: usage, models: models, sessionCount: 1)
+                    ProjectUsageSummary(id: "project-\(index)", name: "\(projectName) \(index)", usage: usage, models: models, sessionCount: 1)
                 },
                 sessions: (0..<20).map { index in
-                    SessionUsageSummary(id: "session-\(index)", projectID: "project-\(index)", projectName: "Project \(index)",
+                    SessionUsageSummary(id: "session-\(index)", projectID: "project-\(index)", projectName: "\(projectName) \(index)",
                         startedAt: now, lastActivityAt: now, usage: usage, models: models,
                         directSubagentCount: 0, imageAttachmentCount: 0, parentSessionID: nil)
                 }

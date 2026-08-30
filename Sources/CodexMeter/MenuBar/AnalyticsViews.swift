@@ -238,7 +238,10 @@ struct UsageAnalyticsView: View {
     private func totalCard(_ snapshot: AnalyticsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(snapshot.usage.totalTokens.formatted())
-                .font(.title2.weight(.semibold).monospacedDigit())
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
             Text("tokens · \(range.title)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -263,7 +266,8 @@ struct UsageAnalyticsView: View {
                         x: .value("Time", bucket.start),
                         y: .value(chartMetric.title, chartValue(bucket, quality: snapshot.quality))
                     )
-                    .foregroundStyle(.blue.gradient)
+                    .foregroundStyle(Color.accentColor)
+                    .cornerRadius(3)
                 }
                 .chartYAxis(.hidden)
                 .chartXSelection(value: $navigation.selectedBucketDate)
@@ -301,27 +305,15 @@ struct UsageAnalyticsView: View {
             } else {
                 ForEach(snapshot.models) { model in
                     MenuLink(destination: .model(id: model.id, range: range)) {
-                        HStack {
-                            Text(model.displayName).lineLimit(1)
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 1) {
-                                Text(model.usage.totalTokens.formatted())
-                                    .monospacedDigit().foregroundStyle(.secondary)
-                                if costEstimatesEnabled {
-                                    EstimatedCostText(
-                                        models: [model],
-                                        through: snapshot.through,
-                                        quality: snapshot.quality,
-                                        compact: true
-                                    )
-                                }
-                            }
-                            Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
-                        }
+                        analyticsRow(
+                            model.displayName,
+                            tokens: model.usage.totalTokens,
+                            models: [model],
+                            through: snapshot.through,
+                            quality: snapshot.quality,
+                            horizontalPadding: 8
+                        )
                     }
-                    .font(.caption)
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -374,7 +366,6 @@ struct ProjectsAnalyticsView: View {
                             quality: snapshot.quality
                         )
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -427,7 +418,6 @@ struct SessionsAnalyticsView: View {
                                 quality: snapshot.quality
                             )
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -534,7 +524,6 @@ struct SessionDetailView: View {
                         }
                     }
                     .font(.caption)
-                    .buttonStyle(.plain)
                 }
                 Text("Sub-agent usage is shown separately and is not added to the parent session total again.")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -643,25 +632,46 @@ struct EstimatedCostText: View {
 @ViewBuilder
 private func analyticsRow(
     _ title: String,
-    detail: String,
+    detail: String? = nil,
     tokens: Int64,
     models: [ModelUsageSummary],
     through: Date,
-    quality: DataQuality
+    quality: DataQuality,
+    horizontalPadding: CGFloat = 16
 ) -> some View {
     HStack(spacing: 10) {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).lineLimit(1)
-            Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                    .help(title)
+                Spacer(minLength: 8)
+                Text(tokens.formatted())
+                    .font(.subheadline.monospacedDigit())
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help(detail)
+                }
+                Spacer(minLength: 0)
+                EstimatedCostText(models: models, through: through, quality: quality, compact: true)
+                    .lineLimit(1)
+            }
         }
-        Spacer()
-        VStack(alignment: .trailing, spacing: 1) {
-            Text(tokens.formatted()).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            EstimatedCostText(models: models, through: through, quality: quality, compact: true)
-        }
-        Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+        Image(systemName: "chevron.right")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
-    .padding(.horizontal, 16).padding(.vertical, 9)
+    .padding(.horizontal, horizontalPadding)
+    .padding(.vertical, 10)
     .contentShape(Rectangle())
 }
 
@@ -669,7 +679,11 @@ private func analyticsRow(
 private func analyticsHeader(_ title: String, tokens: Int64) -> some View {
     VStack(alignment: .leading, spacing: 3) {
         Text(title).font(.headline)
-        Text(tokens.formatted()).font(.title2.weight(.semibold).monospacedDigit())
+        Text(tokens.formatted())
+            .font(.system(size: 28, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
         Text("tokens").font(.caption).foregroundStyle(.secondary)
     }
 }

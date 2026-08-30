@@ -154,7 +154,7 @@ struct MenuPopoverView: View {
                 .help("Refresh account limits")
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MenuInteractionStyle())
         .padding(.horizontal, 12)
         .frame(height: MenuPopoverMetrics.detailHeaderHeight)
     }
@@ -209,7 +209,6 @@ struct MenuPopoverView: View {
             MenuLink(destination: .limits) {
                 categoryHeader(.accountLimits, context: limitHeaderContext, showsDisclosure: true)
             }
-            .buttonStyle(.plain)
             .accessibilityIdentifier("menu.category.accountLimits")
             .accessibilityHint("Open all account limit details")
 
@@ -297,7 +296,7 @@ struct MenuPopoverView: View {
                 Image(systemName: section.symbol)
                     .font(.system(size: 14, weight: .medium))
                 Text(section.title)
-                    .font(.caption.weight(.semibold))
+                    .font(.subheadline.weight(.medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.86)
             }
@@ -309,7 +308,7 @@ struct MenuPopoverView: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MenuInteractionStyle())
         .keyboardShortcut(section == .overview ? "1" : "2", modifiers: .command)
         .accessibilityLabel(section.title)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
@@ -354,7 +353,7 @@ struct MenuPopoverView: View {
                 .frame(minHeight: 96)
                 .accessibilityElement(children: .combine)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(formatted(store.snapshot.today.totalTokens))
                             .font(.system(size: 32, weight: .semibold, design: .rounded))
@@ -503,6 +502,8 @@ struct MenuPopoverView: View {
                                 value: refreshTurns
                             )
                     }
+                    .padding(.horizontal, 6)
+                    .frame(minHeight: 28)
                 }
                 .disabled(isRefreshing || store.isMaintainingData || store.isImportingHistory)
                 .keyboardShortcut("r", modifiers: .command)
@@ -512,6 +513,8 @@ struct MenuPopoverView: View {
                     SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
                 } label: {
                     Label("Settings", systemImage: "gearshape")
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: 28)
                 }
                 .keyboardShortcut(",", modifiers: .command)
                 .help("Open Settings")
@@ -536,12 +539,15 @@ struct MenuPopoverView: View {
                     .keyboardShortcut("q", modifiers: .command)
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
+                        .font(.caption.weight(.medium))
+                        .frame(minHeight: 28)
                 }
                 .menuStyle(.borderlessButton)
+                .controlSize(.small)
                 .menuIndicator(.hidden)
                 .help("More actions")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MenuInteractionStyle())
             .font(.caption.weight(.medium))
             .frame(minHeight: 28)
         }
@@ -623,8 +629,7 @@ struct MenuPopoverView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(category.title)
-                .font(.caption.weight(.semibold))
-                .textCase(.uppercase)
+                .font(.subheadline.weight(.semibold))
             Spacer(minLength: 8)
             if let context {
                 Text(context)
@@ -660,7 +665,7 @@ struct MenuPopoverView: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
             Text(formatted(value))
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.medium))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -696,7 +701,6 @@ struct MenuPopoverView: View {
             .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .disabled(!usesProfileTotals && store.snapshot.updatedAt == nil)
         .accessibilityLabel("\(title), \(formatted(value)) tokens")
         .accessibilityHint("Open \(title.lowercased()) details")
@@ -831,7 +835,6 @@ struct MenuPopoverView: View {
             .frame(maxWidth: .infinity, minHeight: 38)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel("Open \(title)")
         .accessibilityHint("Shows detailed local Codex \(title.lowercased())")
     }

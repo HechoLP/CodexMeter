@@ -82,6 +82,7 @@ The palette follows macOS semantic colors so it remains correct in light, dark, 
 - **Primary Metric** (semibold, 32px): Today's total and the strongest number on the overview.
 - **Headline** (semantic headline): Product title and primary empty-state messages.
 - **Section Label** (semibold subheadline): Limits and analytic section headings.
+- **Heading Tone:** Use the category's natural capitalization, not forced uppercase. The interface stays calm without weakening hierarchy.
 - **Body Row** (semantic subheadline): Token components and period totals.
 - **Supporting Label** (caption and caption2): Reset times, pace, data status, and explanatory text.
 
@@ -122,6 +123,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 - **Token Usage:** Local and optional account-wide token totals, period history, and analytic destinations.
 - **Codex Limits:** Read-only Codex quota windows, reset timing, pace, and reset-credit availability.
 - **Behavior:** Two equal-width native buttons switch content in place. The selected mode uses the system accent and both modes remain keyboard and VoiceOver accessible.
+- **Feedback:** Clickable rows and utility buttons use a subtle neutral hover/pressed fill and an accent keyboard-focus outline. Feedback never changes geometry, honors Increase Contrast, and skips its short fade under Reduce Motion.
 - **Separation:** The header contains no provider status card, connection badge, or generated explanatory subtitle.
 
 ### Primary Token Summary
@@ -149,6 +151,8 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 - **Structure:** A 44pt header owns the back button and title in the same vertical layout as the content. Do not embed `NavigationStack` or an automatic window toolbar in `MenuBarExtra`; a second navigation/safe-area owner can leave a large gap above the filters.
 - **Position:** Native range and metric controls keep intrinsic height directly below the title, with 12pt vertical padding. Only the chart or list scrolls, anchored at the top; filters never absorb surplus height.
 - **Navigation:** Back returns to the previous destination and preserves its range, metric, and selected chart day. Command-[ also goes back.
+- **Reading Order:** Align the name and token total on the first row; dates, session counts, and estimated costs are secondary below. Full truncated names remain available as help text. Detail totals use the same rounded, tabular type as the overview at a smaller 28pt size.
+- **Charts:** Rounded bar ends and the system accent match the rest of the app; do not hard-code a blue gradient.
 - **Verification:** Render the production `MenuPopoverView`, including its actual header and destination, with loading, empty, and populated content. Assert title-to-filter spacing and viewport bounds, and verify the viewport shrinks and grows with content instead of testing a substitute navigation host.
 
 ### Footer Actions
