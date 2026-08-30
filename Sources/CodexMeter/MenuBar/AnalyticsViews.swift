@@ -119,7 +119,7 @@ struct AccountLimitsView: View {
     }
 
     private func visibleWindows(_ windows: [AccountLimitWindow]) -> [AccountLimitWindow] {
-        additionalLimitsEnabled ? windows : windows.filter { $0.limitID.lowercased() == "codex" }
+        AccountLimitPresentation.visibleWindows(windows, includesAdditional: additionalLimitsEnabled)
     }
 
     private func limitStatusText(_ snapshot: AccountLimitsSnapshot) -> String {

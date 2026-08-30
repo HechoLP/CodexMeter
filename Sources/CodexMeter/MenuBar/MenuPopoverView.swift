@@ -714,15 +714,7 @@ struct MenuPopoverView: View {
     }
 
     private func visibleAccountLimitWindows(_ windows: [AccountLimitWindow]) -> [AccountLimitWindow] {
-        let visible = additionalLimitsEnabled
-            ? windows
-            : windows.filter { $0.limitID.lowercased() == "codex" }
-        return visible.sorted {
-            if $0.windowDurationMinutes == $1.windowDurationMinutes {
-                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-            }
-            return $0.windowDurationMinutes < $1.windowDurationMinutes
-        }
+        AccountLimitPresentation.visibleWindows(windows, includesAdditional: additionalLimitsEnabled)
     }
 
     @ViewBuilder

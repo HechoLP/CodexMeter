@@ -135,6 +135,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 ### Account Limit Preview
 
 - **Character:** Actionable without pretending to be a billing dashboard.
+- **Order:** Pin the primary Codex Weekly window first in both the preview and Limits detail. Keep the remaining windows ordered by duration and name; do not change reported values or synthesize a missing Weekly window.
 - **Content:** At most two limit windows, percent remaining, reset countdown, and even-use pace; additional windows move to Limits.
 - **State:** Healthy uses the system accent; low and critical states combine color with text.
 - **Disclosure:** Projected run-out appears only in the detailed Limits screen and is labeled as an estimate.
