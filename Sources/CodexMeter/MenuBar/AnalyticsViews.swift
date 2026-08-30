@@ -174,6 +174,52 @@ private enum AnalyticsChartMetric: String, CaseIterable, Identifiable {
     var title: String { self == .tokens ? "Tokens" : "Cost" }
 }
 
+/// Keep native pickers at their intrinsic height while the data viewport takes
+/// the remaining space, including during MenuBarExtra navigation size probes.
+private struct AnalyticsDetailLayout<Controls: View, Content: View>: View {
+    @EnvironmentObject private var store: UsageStore
+    @ViewBuilder var controls: Controls
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            controls
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .layoutPriority(1)
+            Divider()
+            analyticsSnapshotStatus(store)
+                .fixedSize(horizontal: false, vertical: true)
+            ScrollView {
+                content
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .defaultScrollAnchor(.top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(
+            width: MenuPopoverMetrics.width,
+            height: MenuPopoverMetrics.analyticsDetailHeight,
+            alignment: .topLeading
+        )
+    }
+}
+
+private struct AnalyticsRangePicker: View {
+    @Binding var range: AnalyticsRange
+
+    var body: some View {
+        Picker("Range", selection: $range) {
+            ForEach(AnalyticsRange.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 struct UsageAnalyticsView: View {
     @EnvironmentObject private var store: UsageStore
     @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
@@ -182,57 +228,37 @@ struct UsageAnalyticsView: View {
     @State private var selectedBucketDate: Date?
 
     var body: some View {
-        VStack(spacing: 0) {
+        AnalyticsDetailLayout {
             VStack(spacing: 10) {
-                rangePicker
+                AnalyticsRangePicker(range: $range)
                 if costEstimatesEnabled {
                     Picker("Chart metric", selection: $chartMetric) {
                         ForEach(AnalyticsChartMetric.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            Divider()
-            analyticsSnapshotStatus(store)
-
-            ScrollView {
-                if let snapshot = store.analyticsSnapshots[range] {
-                    VStack(alignment: .leading, spacing: 16) {
-                        totalCard(snapshot)
-                        usageChart(snapshot)
-                        modelBreakdown(snapshot)
-                    }
+        } content: {
+            if let snapshot = store.analyticsSnapshots[range] {
+                VStack(alignment: .leading, spacing: 16) {
+                    totalCard(snapshot)
+                    usageChart(snapshot)
+                    modelBreakdown(snapshot)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(16)
+            } else {
+                loading
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .padding(16)
-                } else {
-                    loading
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .padding(16)
-                }
             }
-            .defaultScrollAnchor(.top)
         }
-        .frame(
-            width: MenuPopoverMetrics.width,
-            height: MenuPopoverMetrics.analyticsDetailHeight,
-            alignment: .top
-        )
         .navigationTitle("Usage")
         .task(id: range) { await store.refreshAnalytics(range: range) }
         .onChange(of: range) { _, _ in selectedBucketDate = nil }
         .onChange(of: chartMetric) { _, _ in selectedBucketDate = nil }
-    }
-
-    private var rangePicker: some View {
-        Picker("Range", selection: $range) {
-            ForEach(AnalyticsRange.allCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
     }
 
     private func totalCard(_ snapshot: AnalyticsSnapshot) -> some View {
@@ -360,7 +386,7 @@ struct ProjectsAnalyticsView: View {
     @State private var range = AnalyticsRange.thirtyDays
 
     var body: some View {
-        analyticsList(title: "Projects", emptyText: "No project-tagged usage in this range.") {
+        analyticsList {
             if let snapshot = store.analyticsSnapshots[range] {
                 ForEach(snapshot.projects) { project in
                     NavigationLink(value: MenuDestination.project(id: project.id, range: range)) {
@@ -381,27 +407,20 @@ struct ProjectsAnalyticsView: View {
         .task(id: range) { await store.refreshAnalytics(range: range) }
     }
 
-    private func analyticsList<Content: View>(title: String, emptyText: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 0) {
-            Picker("Range", selection: $range) {
-                ForEach(AnalyticsRange.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden().padding(16)
-            Divider()
-            analyticsSnapshotStatus(store)
-            ScrollView {
-                VStack(spacing: 0) {
-                    if store.analyticsSnapshots[range] == nil {
-                        analyticsPlaceholder(store: store, title: "Projects Unavailable", minimumHeight: 180)
-                    } else if store.analyticsSnapshots[range]?.projects.isEmpty == true {
-                        Text(emptyText).font(.caption).foregroundStyle(.secondary).padding(24)
-                    }
-                    content()
+    private func analyticsList<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        AnalyticsDetailLayout {
+            AnalyticsRangePicker(range: $range)
+        } content: {
+            VStack(spacing: 0) {
+                if store.analyticsSnapshots[range] == nil {
+                    analyticsPlaceholder(store: store, title: "Projects Unavailable", minimumHeight: 180)
+                } else if store.analyticsSnapshots[range]?.projects.isEmpty == true {
+                    Text("No project-tagged usage in this range.")
+                        .font(.caption).foregroundStyle(.secondary).padding(24)
                 }
+                content()
             }
         }
-        .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 340, maxHeight: 540)
     }
 }
 
@@ -412,40 +431,32 @@ struct SessionsAnalyticsView: View {
     @AppStorage("attachmentMetadataEnabled") private var attachmentMetadataEnabled = AppPreferences.defaultAttachmentMetadataEnabled
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("Range", selection: $range) {
-                ForEach(AnalyticsRange.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden().padding(16)
-            Divider()
-            analyticsSnapshotStatus(store)
-            ScrollView {
-                VStack(spacing: 0) {
-                    if store.analyticsSnapshots[range] == nil {
-                        analyticsPlaceholder(store: store, title: "Sessions Unavailable", minimumHeight: 180)
-                    } else if store.analyticsSnapshots[range]?.sessions.isEmpty == true {
-                        Text("No sessions in this range.").font(.caption).foregroundStyle(.secondary).padding(24)
-                    }
-                    if let snapshot = store.analyticsSnapshots[range] {
-                        ForEach(snapshot.sessions) { session in
-                            NavigationLink(value: MenuDestination.session(id: session.id, range: range)) {
-                                analyticsRow(
-                                    session.displayName,
-                                    detail: sessionDetail(session),
-                                    tokens: session.usage.totalTokens,
-                                    models: session.models,
-                                    through: snapshot.through,
-                                    quality: snapshot.quality
-                                )
-                            }
-                            .buttonStyle(.plain)
+        AnalyticsDetailLayout {
+            AnalyticsRangePicker(range: $range)
+        } content: {
+            VStack(spacing: 0) {
+                if store.analyticsSnapshots[range] == nil {
+                    analyticsPlaceholder(store: store, title: "Sessions Unavailable", minimumHeight: 180)
+                } else if store.analyticsSnapshots[range]?.sessions.isEmpty == true {
+                    Text("No sessions in this range.").font(.caption).foregroundStyle(.secondary).padding(24)
+                }
+                if let snapshot = store.analyticsSnapshots[range] {
+                    ForEach(snapshot.sessions) { session in
+                        NavigationLink(value: MenuDestination.session(id: session.id, range: range)) {
+                            analyticsRow(
+                                session.displayName,
+                                detail: sessionDetail(session),
+                                tokens: session.usage.totalTokens,
+                                models: session.models,
+                                through: snapshot.through,
+                                quality: snapshot.quality
+                            )
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
-        .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 340, maxHeight: 540)
         .navigationTitle("Sessions")
         .task(id: range) { await store.refreshAnalytics(range: range) }
     }

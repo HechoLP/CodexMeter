@@ -143,11 +143,12 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 - **Shape:** Each target is at least 42px high with an SF Symbol and visible label.
 - **Behavior:** Hidden preferences remove their destination instead of leaving disabled placeholders.
 
-### Usage Analytics Detail
+### Analytics Details
 
-- **Shape:** Stable 520px content height at the same 372px popover width.
-- **Structure:** Range and metric controls stay pinned directly below the navigation title; only chart and model content scrolls.
-- **Position:** The content scroller always opens at its top anchor so navigation never creates blank space above the filters or clips the first chart below the fold.
+- **Shape:** Usage, Projects, and Sessions share a stable 520pt content height at the same 372pt popover width, including loading and empty states.
+- **Structure:** Native range and metric controls use intrinsic vertical sizing in a compact 12pt-padded header. They must never consume the expandable space reserved for the data viewport.
+- **Position:** The navigation stack reports its intrinsic height to the menu-bar window. Only the chart or list scrolls, anchored at the top, and fills the remaining height below the controls.
+- **Verification:** Check native control positions and viewport height inside a navigation host with populated content, not only the outer fitting size or the number of scroll views.
 
 ### Footer Actions
 

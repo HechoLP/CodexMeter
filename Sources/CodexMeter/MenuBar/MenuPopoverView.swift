@@ -126,6 +126,7 @@ struct MenuPopoverView: View {
                 }
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .onChange(of: isRefreshing) { _, isRefreshing in
             guard isRefreshing, !reduceMotion else { return }
             refreshTurns += 1
