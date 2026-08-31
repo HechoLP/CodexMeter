@@ -4,7 +4,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
-[![macOS Release](https://img.shields.io/badge/macOS-v1.1.5-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.1.5.md)
+[![macOS Release](https://img.shields.io/badge/macOS-v1.2.0-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.2.0.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -37,6 +37,13 @@ Install the certificate-free stable release from the public personal Tap:
 brew install --cask HechoLP/tap/codexmeter
 ```
 
+To update an existing installation, including releases with automatic updates enabled:
+
+```bash
+brew update
+brew upgrade --cask --greedy HechoLP/tap/codexmeter
+```
+
 Homebrew verifies the published ZIP against the Cask's SHA-256 checksum. Because the app is ad-hoc signed and not Apple-notarized, macOS still blocks its first launch. After confirming that Homebrew installed `HechoLP/tap/codexmeter`, remove quarantine from this app only and open it:
 
 ```bash
@@ -48,9 +55,9 @@ Homebrew 6 no longer provides the old `--no-quarantine` installation option. The
 
 ### Direct download
 
-CodexMeter v1.1.5 is available from the public [CodexMeter repository](https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.5) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
+CodexMeter v1.2.0 is available from the public [CodexMeter repository](https://github.com/HechoLP/CodexMeter/releases/tag/v1.2.0) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
 
-This is the stable 1.1.5 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
+This is the stable 1.2.0 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
 
 ### macOS에서 인증서 없는 릴리스를 처음 실행할 때
 
@@ -58,8 +65,8 @@ This is the stable 1.1.5 application release, but it is not Apple-trusted or not
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.1.5.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.1.5.dmg
+grep ' CodexMeter-1.2.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.2.0.dmg
 ```
 
 열린 DMG에서 `CodexMeter.app`을 `Applications` 폴더로 복사합니다. 체크섬이 일치하고 공식 릴리스임을 확인한 경우에만 아래 명령으로 해당 앱의 격리 속성을 제거하고 실행하세요.

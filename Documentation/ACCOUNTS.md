@@ -53,4 +53,4 @@ Native layout tests render the production Accounts view with synthetic empty, po
 
 Additional popover tests cover both top-level tabs, light and dark appearances, and six account states (empty, populated, long email, error, busy, and 12 saved accounts). They verify that the switch control and full errors fit, no scrolling is added, and rendering never changes credentials or operates Codex. Other popover tests inject a synthetic account store instead of accessing the developer’s Keychain.
 
-A real two-account browser login, Keychain authorization prompt, and restart/switch must still be validated interactively before a public release; automated tests must never change the developer’s running Codex login.
+Manual verification remains outstanding in 1.2.0: a real two-account browser login, Keychain authorization prompt, and desktop restart/switch have not been exercised end to end. Automated tests must never change the developer’s running Codex login. Finish active Codex work before confirming a switch; the official Codex app may require sign-in again if a saved login has expired.
