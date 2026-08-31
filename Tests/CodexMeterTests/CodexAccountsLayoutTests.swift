@@ -28,6 +28,49 @@ final class CodexAccountsLayoutTests: XCTestCase {
         try await assertLayouts(for: .busy)
     }
 
+    func testFooterRecognitionDoesNotCompleteClippedNotice() async throws {
+        _ = NSApplication.shared
+        let size = NSSize(width: 500, height: 300)
+        let host = NSHostingView(rootView:
+            Text("Saved logins stay in this Mac’s Keychain. Switching restarts Codex; finish your work first.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize()
+                .frame(width: 130, height: 24, alignment: .leading)
+                .clipped()
+                .frame(width: size.width, height: size.height, alignment: .bottomLeading)
+                .background(Color(nsColor: .windowBackgroundColor))
+                .environment(\.colorScheme, .light)
+                .environment(\.displayScale, Self.renderScale)
+        )
+        host.sizingOptions = []
+        host.appearance = NSAppearance(named: .aqua)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.contentView = nil }
+        for _ in 0..<8 {
+            host.setFrameSize(size)
+            host.layoutSubtreeIfNeeded()
+            await Task.yield()
+        }
+
+        let bitmap = try renderBitmap(of: host)
+        try captureIfRequested(bitmap, name: "recognition-clipped-notice-light-500x300")
+        let fullText = try recognizedText(in: bitmap)
+        let footerText = try recognizedText(in: bitmap, regionOfInterest:
+            CGRect(x: 0, y: 0, width: 1, height: 0.4))
+        let text = normalized((fullText + footerText).compactMap {
+            $0.topCandidates(1).first?.string
+        }.joined(separator: " "))
+        XCTAssertTrue(text.contains(normalized("Saved logins")), "The visible prefix must be recognized")
+        XCTAssertFalse(text.contains(normalized("Saved logins stay in this Mac’s Keychain.")),
+                       "Dictionary correction must not supply the clipped end of a notice")
+        XCTAssertFalse(text.contains(normalized("Switching restarts Codex; finish your work first.")),
+                       "A missing restart warning must never pass the visibility check")
+    }
+
     private func assertLayouts(for state: AccountLayoutState) async throws {
         _ = NSApplication.shared
         for size in [NSSize(width: 560, height: 400), NSSize(width: 500, height: 300)] {
@@ -86,7 +129,13 @@ final class CodexAccountsLayoutTests: XCTestCase {
                 assertAction(state == .busy ? "Cancel" : "Open Codex",
                              enabled: true, in: hostingView, text: text, context: name)
                 assertNoHorizontalControlOverflow(in: hostingView, context: name)
-                assertFixedTextIsVisible(text, message: fixture.store.message, context: name)
+                // Vision's whole-window recognition can misread the smallest
+                // caption on hosted macOS runners. Inspect the same
+                // unmodified footer pixels as well; keep full-window coordinates
+                // for button geometry and require exact complete notice text.
+                let footerText = try recognizedText(in: bitmap, regionOfInterest:
+                    CGRect(x: 0, y: 0, width: 1, height: 0.4))
+                assertFixedTextIsVisible(text + footerText, message: fixture.store.message, context: name)
                 XCTAssertEqual(fixture.login.replaceCount, 0, "\(name): rendering must not change a login")
                 XCTAssertEqual(fixture.vault.saveCount, 0, "\(name): rendering must not save an account")
                 XCTAssertEqual(fixture.runtime.applicationActionCount, 0, "\(name): rendering must not operate Codex")
@@ -150,9 +199,9 @@ final class CodexAccountsLayoutTests: XCTestCase {
         let lines = text.compactMap { $0.topCandidates(1).first?.string }
         let contents = normalized(lines.joined(separator: " "))
         XCTAssertTrue(contents.contains(normalized("Saved logins stay in this Mac’s Keychain.")),
-                      "\(context): the credential storage notice must be visible")
+                      "\(context): the credential storage notice must be visible; recognized lines: \(lines)")
         XCTAssertTrue(contents.contains(normalized("Switching restarts Codex; finish your work first.")),
-                      "\(context): the restart safety notice must be fully visible")
+                      "\(context): the restart safety notice must be fully visible; recognized lines: \(lines)")
         if let message {
             XCTAssertTrue(contents.contains(normalized(message)),
                           "\(context): the complete status message must fit; recognized lines: \(lines)")
@@ -181,7 +230,8 @@ final class CodexAccountsLayoutTests: XCTestCase {
         return bitmap
     }
 
-    private func recognizedText(in bitmap: NSBitmapImageRep) throws -> [VNRecognizedTextObservation] {
+    private func recognizedText(in bitmap: NSBitmapImageRep,
+                                regionOfInterest: CGRect? = nil) throws -> [VNRecognizedTextObservation] {
         // Vision's accurate mode can merge adjacent text baselines beside an
         // SF Symbol. Its fast mode provides independent line segmentation while
         // the assertions still require the complete rendered status sentence.
@@ -189,8 +239,13 @@ final class CodexAccountsLayoutTests: XCTestCase {
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = level
             request.recognitionLanguages = ["en-US"]
-            request.usesLanguageCorrection = false
+            // The focused caption pass uses Vision's standard dictionary
+            // correction (for example Keychaln -> Keychain). Complete sentences
+            // are still matched exactly; a clipped-notice negative control guards
+            // against mistaking inferred or missing text for visible content.
+            request.usesLanguageCorrection = regionOfInterest != nil
             request.customWords = ["Codex", "Keychain"]
+            if let regionOfInterest { request.regionOfInterest = regionOfInterest }
             return request
         }
         try VNImageRequestHandler(cgImage: XCTUnwrap(bitmap.cgImage), options: [:]).perform(requests)
