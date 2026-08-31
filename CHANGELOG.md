@@ -4,6 +4,28 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-31
+
+### Added
+
+- User-selected Codex account switching from the menu-bar account menu, with a separate account-management window and explicit restart confirmation.
+- Local, non-synchronizing Keychain storage for up to 12 saved logins and isolated browser sign-in through the verified Codex CLI.
+
+### Changed
+
+- Separate Token Usage and Codex Limits tabs, with Weekly limits first and shorter supporting text.
+- Explicit back navigation and content-fitting analytic layouts that keep filters at the top and avoid oversized blank headers.
+- Native hover, focus, and reduced-motion behavior without changing token accounting or the usage database.
+
+### Fixed
+
+- Unrelated terminal, browser-helper, and widget processes no longer incorrectly block account switching.
+- Account identity and error text remain readable in compact popovers; duplicate emails identify their workspace.
+
+### Verification limits
+
+- Automated account tests use synthetic credentials. A real two-account browser login and desktop restart/switch have not been exercised end to end; finish active Codex work before confirming a switch.
+
 ## [1.1.5] - 2026-08-29
 
 ### Changed
