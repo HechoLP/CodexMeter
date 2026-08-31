@@ -39,11 +39,11 @@ The local token database is unchanged by account switching. Its totals are still
 
 Accounts inherits the existing Quiet Instrument design: semantic system typography and label colors, SF Symbols, dividers, and native controls. It introduces no new theme or design tokens.
 
-- The popover uses a compact native account menu shared by both top-level tabs. Long account names truncate in the trigger and remain available in its help text; duplicate emails include a workspace suffix. Extra accounts expand the menu rather than the popover. Busy operations show progress, and errors remain readable below the trigger.
+- The popover uses a compact native account menu shared by both top-level tabs. Long account names truncate in the label beside **Switch** and remain available in its help text; duplicate emails include a workspace suffix. Extra accounts expand the menu rather than the popover. Busy operations show progress, and errors remain readable below the account row.
 - The resizable management window opens at 560 × 400 pt, with a 500 × 300 pt minimum. Only the account list scrolls; footer actions, status, and the Keychain/restart notice remain outside it.
 - Account emails allow two lines; matching emails show a workspace suffix. The current login uses both a checkmark and **Current** text. Switching and removal require native confirmation alerts.
 - Busy operations disable account changes. During registration, **Cancel** remains available in the footer. Switch and removal controls include the account email in their accessibility labels.
-- Errors use primary-label text beside a red warning symbol labeled **Error** for accessibility, so the message remains readable in both appearances and never relies on color alone.
+- The management window uses primary-label error text beside a red warning symbol labeled **Error** for accessibility. The popover uses primary-label error text with a warning symbol below the account row. Both remain readable in either appearance and never rely on color alone.
 
 ## Verification boundary
 
