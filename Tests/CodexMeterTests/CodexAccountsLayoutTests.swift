@@ -6,6 +6,8 @@ import XCTest
 
 @MainActor
 final class CodexAccountsLayoutTests: XCTestCase {
+    private static let renderScale: CGFloat = 2
+
     func testEmptyAccountsFitNativeWindowSizesAndAppearances() async throws {
         try await assertLayouts(for: .empty)
     }
@@ -47,6 +49,7 @@ final class CodexAccountsLayoutTests: XCTestCase {
                     CodexAccountsView(accounts: fixture.store)
                         .background(Color(nsColor: .windowBackgroundColor))
                         .environment(\.colorScheme, dark ? .dark : .light)
+                        .environment(\.displayScale, Self.renderScale)
                 )
                 // Disable host-driven window resizing: these are the production
                 // default and minimum content sizes, not unconstrained fitting sizes.
@@ -66,9 +69,14 @@ final class CodexAccountsLayoutTests: XCTestCase {
                     await Task.yield()
                 }
 
-                let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
-                hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+                let bitmap = try renderBitmap(of: hostingView)
                 try captureIfRequested(bitmap, name: name)
+                let image = try XCTUnwrap(bitmap.cgImage)
+                XCTAssertEqual(bitmap.size, size, "\(name): rendering must preserve the logical viewport")
+                XCTAssertEqual(bitmap.pixelsWide, Int(size.width * Self.renderScale), name)
+                XCTAssertEqual(bitmap.pixelsHigh, Int(size.height * Self.renderScale), name)
+                XCTAssertEqual(image.width, Int(size.width * Self.renderScale), name)
+                XCTAssertEqual(image.height, Int(size.height * Self.renderScale), name)
                 let text = try recognizedText(in: bitmap)
                 XCTAssertEqual(hostingView.bounds.size, size, name)
                 assertAction("Save Current Account", identifier: "accounts.saveCurrent",
@@ -153,6 +161,24 @@ final class CodexAccountsLayoutTests: XCTestCase {
 
     private func normalized(_ text: String) -> String {
         text.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func renderBitmap(of view: NSView) throws -> NSBitmapImageRep {
+        // Do not derive the bitmap from the window/screen backing scale: hosted
+        // macOS CI may be 1x while a developer's display is Retina. The explicit
+        // pixel buffer plus its logical size asks AppKit to draw natively at 2x,
+        // rather than resizing an already-rendered 1x screenshot for OCR.
+        let size = view.bounds.size
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width * Self.renderScale),
+            pixelsHigh: Int(size.height * Self.renderScale),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        bitmap.size = size
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        return bitmap
     }
 
     private func recognizedText(in bitmap: NSBitmapImageRep) throws -> [VNRecognizedTextObservation] {
