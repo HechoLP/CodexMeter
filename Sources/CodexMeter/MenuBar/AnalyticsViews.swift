@@ -494,7 +494,7 @@ struct SessionDetailView: View {
                         LabeledContent("Direct sub-agents", value: session.directSubagentCount.formatted())
                         agentRows(for: session)
                     }
-                    if attachmentMetadataEnabled {
+                    if attachmentMetadataEnabled, store.provider == .codex {
                         LabeledContent("Whole-session images", value: session.imageAttachmentCount.formatted())
                             .help("Counts cover the whole session after the local-history cutoff, not just this range. Local metadata may be incomplete; attachment contents are never stored.")
                     }

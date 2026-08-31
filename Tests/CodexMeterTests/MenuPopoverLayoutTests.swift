@@ -5,6 +5,51 @@ import XCTest
 
 @MainActor
 final class MenuPopoverLayoutTests: XCTestCase {
+    func testClaudeAndCodexProviderScreensFitBothAppearances() throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "usageProvider")
+        defer {
+            if let previous { defaults.set(previous, forKey: "usageProvider") }
+            else { defaults.removeObject(forKey: "usageProvider") }
+        }
+        let usage = TokenUsage(inputTokens: 1_200_000, cachedInputTokens: 900_000,
+                               cacheWriteInputTokens: 100_000, outputTokens: 50_000)
+        let snapshot = UsageSnapshot(today: usage, week: usage, month: usage, allTime: usage,
+                                     quality: .exact, updatedAt: Date())
+        for provider in UsageProvider.allCases {
+            defaults.set(provider.rawValue, forKey: "usageProvider")
+            for dark in [false, true] {
+                for empty in [false, true] {
+                    let name = "\(provider.rawValue)-\(empty ? "empty" : "ready")-\(dark ? "dark" : "light")"
+                    let store = UsageStore(provider: provider,
+                        initialSnapshot: empty ? .empty : snapshot, automaticallyRefresh: false)
+                    let host = NSHostingView(rootView:
+                        MenuPopoverView(accounts: AccountLayoutFixture.emptyStore())
+                            .environmentObject(store)
+                            .environmentObject(ProfileUsageStore())
+                            .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                            .environment(\.colorScheme, dark ? .dark : .light)
+                    )
+                    host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    for _ in 0..<5 {
+                        host.setFrameSize(host.fittingSize)
+                        host.layoutSubtreeIfNeeded()
+                    }
+                    XCTAssertEqual(host.fittingSize.width, MenuPopoverMetrics.width, name)
+                    XCTAssertLessThanOrEqual(host.fittingSize.height, 700, name)
+                    XCTAssertFalse(containsScrollView(in: host), name)
+                    let selector = try XCTUnwrap(descendants(of: NSSegmentedControl.self, in: host).first)
+                    XCTAssertEqual(selector.segmentCount, 2)
+                    XCTAssertEqual(selector.selectedSegment, provider == .codex ? 0 : 1)
+                    XCTAssertTrue(selector.isEnabled)
+                    XCTAssertEqual(selector.label(forSegment: 1), "Claude Code")
+                    try captureIfRequested(host, name: name)
+                }
+            }
+        }
+    }
+
     func testPopoverSectionsSeparateTokenUsageFromCodexLimits() {
         XCTAssertEqual(
             MenuPopoverSection.allCases.map(\.title),
@@ -18,6 +63,33 @@ final class MenuPopoverLayoutTests: XCTestCase {
             MenuPopoverCategory.allCases.map(\.title),
             ["Usage limits", "Today", "History", "Details"]
         )
+    }
+
+    func testClaudeDetailScreensPreserveProviderContext() throws {
+        _ = NSApplication.shared
+        for dark in [false, true] {
+            for destination in analyticsDestinations {
+                let host = NSHostingView(rootView:
+                    MenuPopoverView(accounts: AccountLayoutFixture.emptyStore(),
+                        navigation: MenuNavigation(path: [destination]))
+                        .environmentObject(UsageStore(provider: .claude,
+                            analyticsSnapshots: makeAnalyticsFixtures(provider: .claude),
+                            automaticallyRefresh: false))
+                        .environmentObject(ProfileUsageStore())
+                        .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                        .environment(\.colorScheme, dark ? .dark : .light)
+                )
+                host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                for _ in 0..<5 {
+                    host.setFrameSize(host.fittingSize)
+                    host.layoutSubtreeIfNeeded()
+                }
+                XCTAssertEqual(host.fittingSize.width, MenuPopoverMetrics.width)
+                XCTAssertLessThanOrEqual(host.fittingSize.height, 580)
+                XCTAssertEqual(scrollViewCount(in: host), 1)
+                try captureIfRequested(host, name: "claude-\(destination.title(usesProfileTotals: false))-\(dark ? "dark" : "light")")
+            }
+        }
     }
 
     func testPopoverFittingSizeShowsContentWithoutEmbeddingAScrollView() {
@@ -317,12 +389,13 @@ final class MenuPopoverLayoutTests: XCTestCase {
         makeAnalyticsFixtures()
     }
 
-    private func makeAnalyticsFixtures(longContent: Bool = false) -> [AnalyticsRange: AnalyticsSnapshot] {
+    private func makeAnalyticsFixtures(longContent: Bool = false, provider: UsageProvider = .codex) -> [AnalyticsRange: AnalyticsSnapshot] {
         let now = Date(timeIntervalSince1970: 1_788_055_200)
         let usage = TokenUsage(inputTokens: longContent ? 1_234_567_890_123 : 1_000_000,
                                cachedInputTokens: 900_000, outputTokens: 5_000)
         let models = [ModelUsageSummary(
-            modelID: longContent ? "test-model-with-a-long-identifier" : "test-model", usage: usage
+            modelID: provider == .claude ? "claude-sonnet-4-6"
+                : (longContent ? "test-model-with-a-long-identifier" : "test-model"), usage: usage
         )]
         let projectName = longContent ? "A long project name · 긴 프로젝트 이름" : "Project"
         return Dictionary(uniqueKeysWithValues: AnalyticsRange.allCases.map { range in

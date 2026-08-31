@@ -83,6 +83,7 @@ struct MenuPopoverView: View {
     @AppStorage("sessionsEnabled") private var sessionsEnabled = AppPreferences.defaultSessionsEnabled
     @State private var selectedSection = MenuPopoverSection.overview
     @State private var refreshTurns = 0
+    @AppStorage("usageProvider") private var usageProvider = UsageProvider.codex.rawValue
 
     private let formatter = TokenFormatter()
 
@@ -103,7 +104,7 @@ struct MenuPopoverView: View {
             } else {
                 header
                 Group {
-                    switch selectedSection {
+                    switch store.provider == .claude ? .overview : selectedSection {
                     case .overview:
                         overviewContent
                     case .codex:
@@ -146,6 +147,9 @@ struct MenuPopoverView: View {
                 .lineLimit(1)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
+            Text(store.provider.title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             if destination == .limits {
                 Button {
                     Task { await limitStore.refresh() }
@@ -276,15 +280,29 @@ struct MenuPopoverView: View {
             .padding(.top, 15)
             .padding(.bottom, 12)
 
-            CodexAccountSwitcher(accounts: accounts)
-
-            HStack(spacing: 8) {
-                ForEach(MenuPopoverSection.allCases) { section in
-                    sectionTab(section)
+            Picker("Service", selection: $usageProvider) {
+                ForEach(UsageProvider.allCases) { provider in
+                    Text(provider.title).tag(provider.rawValue)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel("Usage service")
+            .accessibilityIdentifier("menu.provider")
+            .padding(.horizontal, 18)
+            .padding(.bottom, 12)
+
+            if store.provider == .codex {
+                CodexAccountSwitcher(accounts: accounts)
+
+                HStack(spacing: 8) {
+                    ForEach(MenuPopoverSection.allCases) { section in
+                        sectionTab(section)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+            }
 
             Divider()
         }
@@ -325,12 +343,14 @@ struct MenuPopoverView: View {
         VStack(spacing: 0) {
             categoryHeader(.localUsage, context: "This Mac")
             localUsageSummary
-            Divider().padding(.leading, 18)
-            categoryHeader(.tokenHistory, context: historyContext)
-            if usesProfileTotals {
-                profilePeriodLinks
-            } else {
-                localPeriodLinks
+            if store.provider == .codex || store.snapshot.updatedAt != nil {
+                Divider().padding(.leading, 18)
+                categoryHeader(.tokenHistory, context: historyContext)
+                if usesProfileTotals {
+                    profilePeriodLinks
+                } else {
+                    localPeriodLinks
+                }
             }
         }
     }
@@ -349,7 +369,10 @@ struct MenuPopoverView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(store.isRefreshing ? "Reading local usage" : "No local usage yet")
                             .font(.headline)
-                        Text(store.statusMessage)
+                        Text(store.provider == .claude && store.hasLoadedSnapshot
+                             && store.snapshot.quality == .unavailable && !store.isRefreshing
+                             ? "Start a Claude Code session, then Refresh."
+                             : store.statusMessage)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -443,15 +466,15 @@ struct MenuPopoverView: View {
             if shouldShowStatus {
                 HStack {
                     Label {
-                        if selectedSection == .codex {
+                        if store.provider == .codex && selectedSection == .codex {
                             Text(limitStore.statusMessage)
-                        } else if profileStore.isEnabled, let profileSnapshot = profileStore.snapshot {
+                        } else if profileEnabled, let profileSnapshot = profileStore.snapshot {
                             if profileStore.status == .ready {
                                 Text("Account totals through \(profileDate(profileSnapshot.statsAsOf))")
                             } else {
                                 Text("Through \(profileDate(profileSnapshot.statsAsOf)) · \(profileStore.statusMessage)")
                             }
-                        } else if profileStore.isEnabled {
+                        } else if profileEnabled {
                             Text("\(profileStore.statusMessage) · showing This Mac")
                         } else if showLastUpdated,
                                   !store.isRefreshing,
@@ -484,6 +507,10 @@ struct MenuPopoverView: View {
             HStack(spacing: 18) {
                 Button {
                     Task {
+                        guard store.provider == .codex else {
+                            await store.refresh()
+                            return
+                        }
                         async let localRefresh: Void = store.refresh()
                         async let profileRefresh: Void = profileStore.refresh(
                             weekStart: WeekStart(rawValue: weekStartRawValue) ?? .monday
@@ -522,8 +549,10 @@ struct MenuPopoverView: View {
                 Spacer()
 
                 Menu {
-                    Button("Open OpenAI Status") {
-                        open("https://status.openai.com")
+                    if store.provider == .codex {
+                        Button("Open OpenAI Status") {
+                            open("https://status.openai.com")
+                        }
                     }
                     Button("Open CodexMeter on GitHub") {
                         open("https://github.com/HechoLP/CodexMeter")
@@ -556,19 +585,19 @@ struct MenuPopoverView: View {
     }
 
     private var shouldShowStatus: Bool {
-        if selectedSection == .codex {
+        if store.provider == .codex && selectedSection == .codex {
             return accountLimitsEnabled
         }
         let qualityNeedsStatus = switch store.snapshot.quality {
         case .stale, .unavailable, .error: true
         case .exact, .partial: false
         }
-        return profileStore.isEnabled || showLastUpdated || isRefreshing || store.isImportingHistory || qualityNeedsStatus
+        return profileEnabled || showLastUpdated || isRefreshing || store.isImportingHistory || qualityNeedsStatus
     }
 
     private var statusSymbol: String {
         if isRefreshing { return "arrow.triangle.2.circlepath" }
-        if selectedSection == .codex {
+        if store.provider == .codex && selectedSection == .codex {
             return switch limitStore.status {
             case .ready: "checkmark.circle"
             case .stale: "clock.badge.exclamationmark"
@@ -577,14 +606,18 @@ struct MenuPopoverView: View {
             case .unavailable: "exclamationmark.triangle"
             }
         }
-        if profileStore.isEnabled {
+        if profileEnabled {
             return profileStore.status == .ready ? "checkmark.circle" : "exclamationmark.triangle"
         }
         return store.operationAwareStatusSymbol
     }
 
     private var usesProfileTotals: Bool {
-        profileStore.isEnabled && profileStore.snapshot != nil
+        profileEnabled && profileStore.snapshot != nil
+    }
+
+    private var profileEnabled: Bool {
+        store.provider.supportsAccountTotals && profileStore.isEnabled
     }
 
     private var historyContext: String {
@@ -595,7 +628,7 @@ struct MenuPopoverView: View {
     }
 
     private var isRefreshing: Bool {
-        store.isRefreshing || profileStore.isRefreshing || limitStore.isRefreshing
+        store.isRefreshing || (store.provider == .codex && (profileStore.isRefreshing || limitStore.isRefreshing))
     }
 
     private func displayedTotal(for period: UsagePeriod) -> Int64 {
@@ -809,7 +842,7 @@ struct MenuPopoverView: View {
             .contentShape(Rectangle())
         }
         .accessibilityLabel("Open \(title)")
-        .accessibilityHint("Shows detailed local Codex \(title.lowercased())")
+        .accessibilityHint(store.provider.analyticsHint(for: title))
     }
 
     private func open(_ rawURL: String) {

@@ -280,7 +280,8 @@ actor SQLiteDatabase {
         checkpoint: SourceCheckpoint,
         normalizationState: UsageNormalizationState?,
         expectedEpoch: Int64? = nil,
-        expectedNormalizationState: UsageNormalizationState? = nil
+        expectedNormalizationState: UsageNormalizationState? = nil,
+        mergesMessageUsage: Bool = false
     ) throws -> UsageNormalizationState? {
         try execute("BEGIN IMMEDIATE")
         do {
@@ -298,6 +299,28 @@ actor SQLiteDatabase {
                 )
             }
             var insertedEventCount = 0
+            // Claude streaming blocks describe one response repeatedly. Preserve
+            // maxima of its disjoint components, never sum repeated snapshots.
+            // Codex retains its existing cumulative-delta conflict behavior.
+            let messageMerge = mergesMessageUsage ? """
+                input_tokens =
+                    MAX(usage_events.input_tokens - usage_events.cached_input_tokens - COALESCE(usage_events.cache_write_input_tokens, 0),
+                        excluded.input_tokens - excluded.cached_input_tokens - COALESCE(excluded.cache_write_input_tokens, 0))
+                    + MAX(usage_events.cached_input_tokens, excluded.cached_input_tokens)
+                    + MAX(COALESCE(usage_events.cache_write_input_tokens, 0), COALESCE(excluded.cache_write_input_tokens, 0)),
+                cached_input_tokens = MAX(usage_events.cached_input_tokens, excluded.cached_input_tokens),
+                output_tokens = MAX(usage_events.output_tokens, excluded.output_tokens),
+                occurred_at = MIN(usage_events.occurred_at, excluded.occurred_at),
+                """ : ""
+            let cacheWriteMerge = mergesMessageUsage
+                ? "MAX(COALESCE(usage_events.cache_write_input_tokens, 0), COALESCE(excluded.cache_write_input_tokens, 0))"
+                : "COALESCE(excluded.cache_write_input_tokens, usage_events.cache_write_input_tokens)"
+            let sessionMerge = mergesMessageUsage
+                ? "CASE WHEN excluded.occurred_at < usage_events.occurred_at THEN COALESCE(excluded.session_id, usage_events.session_id) ELSE COALESCE(usage_events.session_id, excluded.session_id) END"
+                : "COALESCE(excluded.session_id, usage_events.session_id)"
+            let projectMerge = mergesMessageUsage
+                ? "CASE WHEN excluded.occurred_at < usage_events.occurred_at THEN COALESCE(excluded.project_path, usage_events.project_path) ELSE COALESCE(usage_events.project_path, excluded.project_path) END"
+                : "COALESCE(excluded.project_path, usage_events.project_path)"
             let insert = try prepare(
                 """
                 INSERT INTO usage_events (
@@ -306,13 +329,11 @@ actor SQLiteDatabase {
                     high_context_pricing, source_path, source_generation, source_position
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                 ON CONFLICT DO UPDATE SET
-                    session_id = COALESCE(excluded.session_id, usage_events.session_id),
+                    \(messageMerge)
+                    session_id = \(sessionMerge),
                     model = COALESCE(excluded.model, usage_events.model),
-                    project_path = COALESCE(excluded.project_path, usage_events.project_path),
-                    cache_write_input_tokens = COALESCE(
-                        excluded.cache_write_input_tokens,
-                        usage_events.cache_write_input_tokens
-                    ),
+                    project_path = \(projectMerge),
+                    cache_write_input_tokens = \(cacheWriteMerge),
                     high_context_pricing = COALESCE(
                         excluded.high_context_pricing,
                         usage_events.high_context_pricing

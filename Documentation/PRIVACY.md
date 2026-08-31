@@ -1,5 +1,7 @@
 # Privacy
 
+Claude Code local usage is supported alongside Codex, in a separate owner-only database. The reader visits JSONL transcripts only under `~/.claude/projects` (or `CLAUDE_CONFIG_DIR/projects` when configured in the app environment). It projects message/session IDs, timestamps, model IDs, counts, and a keyed project identity plus folder basename. Claude credentials, settings, browser state, and remote APIs are not accessed or modified. Message content is not decoded into the accounting model or persisted. Data-management actions affect only the provider named in Settings.
+
 CodexMeter processes local Codex usage on-device. The bundled Sparkle updater checks an HTTPS appcast and downloads updates from GitHub Releases. Automatic checks run at most once per day by default and can be disabled in **Settings → General**.
 
 Update requests contain the normal connection metadata needed to reach GitHub, such as the user's IP address and HTTP client information. CodexMeter does not add token totals, prompts, responses, source paths, project metadata, cache contents, Codex credentials, or machine profile data to a request. Update archives and the appcast are verified with the public Ed25519 key embedded in the app before extraction or installation.

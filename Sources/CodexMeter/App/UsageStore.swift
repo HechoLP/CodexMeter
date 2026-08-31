@@ -4,6 +4,7 @@ import SwiftUI
 
 @MainActor
 final class UsageStore: ObservableObject {
+    let provider: UsageProvider
     @Published private(set) var snapshot = UsageSnapshot.empty
     @Published private(set) var hasLoadedSnapshot = false
     @Published private(set) var isRefreshing = false
@@ -128,8 +129,22 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    init(analyticsSnapshots: [AnalyticsRange: AnalyticsSnapshot] = [:]) {
+    init(
+        provider: UsageProvider = .codex,
+        analyticsSnapshots: [AnalyticsRange: AnalyticsSnapshot] = [:],
+        initialSnapshot: UsageSnapshot? = nil,
+        automaticallyRefresh: Bool = true
+    ) {
+        self.provider = provider
+        statusMessage = "Looking for \(provider.title) usage…"
         self.analyticsSnapshots = analyticsSnapshots
+        if let initialSnapshot {
+            self.snapshot = initialSnapshot
+            hasLoadedSnapshot = true
+            lastSourceRefreshAt = initialSnapshot.updatedAt
+            statusMessage = initialSnapshot.updatedAt == nil ? "No \(provider.title) usage found" : "Updated"
+        }
+        guard automaticallyRefresh else { return }
         previousWeekStartRawValue = storedWeekStartRawValue
         previousRefreshModeRawValue = currentRefreshMode.rawValue
         refreshSchedulerTask = Task { [weak self] in
@@ -221,7 +236,7 @@ final class UsageStore: ObservableObject {
                     snapshot = cached
                     statusMessage = "Updating local usage…"
                 } else {
-                    statusMessage = "Scanning local Codex usage…"
+                    statusMessage = "Scanning local \(provider.title) usage…"
                 }
             }
             let result = try await collector.refresh(weekStart: weekStart)
@@ -248,11 +263,11 @@ final class UsageStore: ObservableObject {
             } else {
                 switch result.snapshot.quality {
                 case .exact, .partial:
-                    statusMessage = result.snapshot.updatedAt == nil ? "No Codex usage found" : "Updated just now"
+                    statusMessage = result.snapshot.updatedAt == nil ? "No \(provider.title) usage found" : "Updated just now"
                 case .stale:
                     statusMessage = "Refresh failed"
                 case .unavailable:
-                    statusMessage = result.sourceCount == 0 ? "Codex sessions not found" : "No Codex usage found"
+                    statusMessage = result.sourceCount == 0 ? "\(provider.title) sessions not found" : "No \(provider.title) usage found"
                 case .error:
                     statusMessage = "Refresh failed"
                 }
@@ -269,7 +284,7 @@ final class UsageStore: ObservableObject {
             )
             let resourceMessage: String? = switch error {
             case CodexSourceDiscoveryError.sourceLimitExceeded:
-                "Too many Codex session files to scan safely"
+                "Too many \(provider.title) session files to scan safely"
             case SQLiteDatabaseError.resourceLimit:
                 "Local database safety limit reached"
             default:
@@ -362,13 +377,14 @@ final class UsageStore: ObservableObject {
     private func collector() async throws -> CodexUsageCollector {
         if let collector { return collector }
 
+        let provider = self.provider
         let setup = try await Task.detached(priority: .utility) {
-            let database = try SQLiteDatabase(url: AppPaths.databaseURL)
-            let roots = CodexSourceDiscovery().defaultRoots()
+            let database = try SQLiteDatabase(url: provider.databaseURL)
+            let roots = provider.sourceRoots()
             return (database, roots)
         }.value
 
-        let collector = CodexUsageCollector(database: setup.0, roots: setup.1)
+        let collector = CodexUsageCollector(database: setup.0, roots: setup.1, provider: provider)
         self.collector = collector
         sourceRoots = setup.1
         updateWatcherForRefreshMode()
@@ -502,9 +518,9 @@ final class UsageStore: ObservableObject {
             }
             if cached.quality != .exact {
                 statusMessage = switch cached.quality {
-                case .partial: cached.updatedAt == nil ? "No Codex usage found" : "Updated"
+                case .partial: cached.updatedAt == nil ? "No \(provider.title) usage found" : "Updated"
                 case .stale: "Refresh failed"
-                case .unavailable: "No Codex usage found"
+                case .unavailable: "No \(provider.title) usage found"
                 case .error: "Unable to read local usage"
                 case .exact: statusMessage
                 }

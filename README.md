@@ -1,6 +1,6 @@
-# CodexMeter ◈ — Know where your Codex tokens went.
+# CodexMeter ◈ — Know where your coding tokens went.
 
-> Local Codex token usage, always one click away on macOS.
+> Local Codex and Claude Code token usage, one click away on macOS.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
@@ -12,7 +12,7 @@
 
 <p align="center"><sub>The app popover shown above is an actual CodexMeter screen.</sub></p>
 
-Tiny native macOS menu bar app that turns **local Codex session history** into clear token totals. Local totals stay one click away without an account login, API key, browser cookie, telemetry, or cloud sync. You can also opt in to a separate, memory-only ChatGPT account-total view.
+Tiny native macOS menu bar app that turns **local Codex and Claude Code session history** into separate token totals. Local totals stay one click away without an account login, API key, browser cookie, telemetry, or cloud sync. Codex also offers a separate, opt-in, memory-only ChatGPT account-total view. Claude support is in the current source build, pending release.
 
 ## Why
 
@@ -80,8 +80,8 @@ open /Applications/CodexMeter.app
 
 ## First run
 
-1. Launch CodexMeter after Codex has created local session history.
-2. Select the diamond meter in the macOS menu bar.
+1. Launch CodexMeter after Codex or Claude Code has created local session history.
+2. Select the diamond meter in the macOS menu bar, then choose **Codex** or **Claude Code**.
 3. Open **Settings** to choose the displayed period, refresh mode, menu bar elements, and launch-at-login behavior.
 4. Use **Refresh** whenever you want an immediate reconciliation.
 
@@ -89,9 +89,10 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 
 ## Features
 
+- **Codex and Claude Code** local usage, selected directly in the menu. Each service has independent history, refresh, and data controls; token totals are never mixed. See [Claude Code support](Documentation/CLAUDE.md).
 - User-selected Codex account switching: save logins in this Mac’s Keychain, add another account through Codex’s browser sign-in, and explicitly quit/switch/reopen Codex. No automatic quota-based rotation. See [account setup and supported configurations](Documentation/ACCOUNTS.md).
 
-- Live Today total from local Codex records always stays in the primary summary
+- Live Today total from the selected service's local records always stays in the primary summary
 - Current week/month through the server snapshot date and lifetime totals when explicitly enabled
 - Week, month, and **Local History** totals from local Codex records when account totals are off
 - Input, cached input, output, and total-token breakdowns
@@ -158,7 +159,7 @@ For local analytics, CodexMeter stores canonical model IDs, a keyed HMAC of each
 
 ## Roadmap
 
-Codex is the first supported data source. Future releases are planned to expand CodexMeter into a multi-service local usage meter, including **Claude** and other AI coding assistants where reliable local usage data is available. Support will be added service by service while preserving CodexMeter's local-first privacy model.
+Codex and **Claude Code local session logs** are supported in the current source build. Claude account limits, web/mobile totals, account switching, attachment counts, and cost estimates are not included yet. Additional service integrations will be added where reliable usage data is available, preserving the local-first privacy model.
 
 CodexBar's current feature families have been reviewed as a product reference, but CodexMeter keeps an independent interface and a narrower trust boundary. See the [CodexBar feature strategy](Documentation/CODEXBAR_STRATEGY.md) for what is adopted, adapted, deferred, or intentionally excluded.
 
@@ -172,7 +173,7 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 
 | Capability | Required? | Why |
 | --- | :---: | --- |
-| Full Disk Access | No | Reads only supported files under `.codex`. |
+| Full Disk Access | No | Reads supported local sessions under `.codex` and `.claude/projects` (or `CLAUDE_CONFIG_DIR/projects`). |
 | Accessibility | No | Does not control other apps. |
 | Screen Recording | No | Does not inspect the screen. |
 | Profile credential access | Optional | Reads only the access token and account ID after the user enables account totals. |

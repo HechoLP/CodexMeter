@@ -4,6 +4,16 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Claude Code local token usage with Today/week/month/history totals, model/project/session analytics, and sub-agent relationships.
+- A persistent Codex / Claude Code selector in the menu. Each provider has a separate database and history cutoff; Codex account data never appears as Claude usage.
+- Claude response-ID deduplication and streaming-counter reconciliation, including cache-read and cache-creation input accounting.
+
+### Scope
+
+- Claude web/mobile totals, account limits, account switching, attachment counts, and cost estimates are not included. No Claude credentials or settings are accessed.
+
 ## [1.2.0] - 2026-08-31
 
 ### Added

@@ -4,6 +4,19 @@ import XCTest
 
 @MainActor
 final class SettingsWindowControllerTests: XCTestCase {
+    func testSettingsRebindsItsDataStoreWhenProviderChanges() {
+        _ = NSApplication.shared
+        let controller = SettingsWindowController()
+        defer { controller.closeSettingsForTesting() }
+        let limits = AccountLimitStore(provider: SettingsTestLimitProvider(), pollingInterval: nil)
+        controller.showSettings(for: UsageStore(automaticallyRefresh: false), limitStore: limits)
+        let codexController = controller.settingsContentViewControllerForTesting
+        controller.showSettings(for: UsageStore(provider: .claude, automaticallyRefresh: false), limitStore: limits)
+        XCTAssertFalse(codexController === controller.settingsContentViewControllerForTesting)
+        XCTAssertEqual(controller.settingsContentViewControllerForTesting?.view.window?.title,
+                       "CodexMeter Settings — Claude Code")
+    }
+
     func testSettingsWindowBecomesVisibleAndCanReopen() {
         _ = NSApplication.shared
         let controller = SettingsWindowController()

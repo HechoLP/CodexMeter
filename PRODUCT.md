@@ -12,11 +12,11 @@ The app uses Swift, SwiftUI, AppKit, Foundation, Swift Concurrency, SQLite, OSLo
 
 ## Users
 
-People who use Codex on macOS and want to see the input, cached input, output, and total tokens visible in their local history. They can also inspect local models/projects/sessions, API-equivalent cost estimates, read-only account limits, and an explicitly enabled account-wide profile view.
+People who use Codex or Claude Code on macOS and want to see the input, cached input, output, and total tokens visible in their local history. Both support local model/project/session analytics. Codex also supports API-equivalent cost estimates, read-only account limits, and an explicitly enabled account-wide profile view.
 
 ## Product Purpose
 
-CodexMeter turns local Codex session token events into a fast, durable usage snapshot. Success means the menu bar item appears immediately, values remain accurate across restarts and duplicate file events, and normal operation has negligible CPU, memory, disk, and network impact. Optional account totals stay isolated from local accounting and are labeled with the server snapshot date.
+CodexMeter turns local Codex and Claude Code session token events into independent, durable usage snapshots. Success means the menu bar item appears immediately, values remain accurate across restarts and duplicate file events, and normal operation has negligible CPU, memory, disk, and network impact. Optional Codex account totals stay isolated from local accounting and are labeled with the server snapshot date.
 
 ## Positioning
 
@@ -24,11 +24,12 @@ CodexMeter measures locally observable token consumption and can optionally disp
 
 ## Operating Context
 
-The app runs quietly on macOS 14 or later as a native menu bar utility. It discovers supported JSONL session history under the user's Codex data directory, imports existing records in the background, and incrementally follows later writes. The default reporting calendar uses the current system time zone and selected week start. Public builds are certificate-free unless stronger Apple signing and notarization credentials are available.
+The app runs quietly on macOS 14 or later as a native menu bar utility. It discovers supported JSONL session history under the user's Codex and Claude Code data directories, imports existing records in the background, and incrementally follows later writes. The default reporting calendar uses the current system time zone and selected week start. Public builds are certificate-free unless stronger Apple signing and notarization credentials are available.
 
 ## Capabilities and Constraints
 
 - Show input, cached input, output, and total tokens for Today, This Week, This Month, and locally observable history.
+- Switch the visible provider directly from the menu. Keep each provider's database, history cutoff, settings data target, and live totals separate. Claude Code is local-only; never expose Codex account data as Claude usage.
 - Preserve input, cached input, and output as separate auditable local components, and never add optional account totals to local values.
 - Persist normalized usage and parser checkpoints in owner-only SQLite.
 - Avoid prompts, responses, source code, and terminal output. Authentication data never enters usage storage or logs; explicitly saved account logins use a separate local Keychain vault.

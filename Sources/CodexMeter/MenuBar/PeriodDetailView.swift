@@ -146,7 +146,7 @@ struct PeriodDetailView: View {
     }
 
     private var usesProfileTotals: Bool {
-        profileStore.isEnabled && profileStore.snapshot != nil
+        store.provider.supportsAccountTotals && profileStore.isEnabled && profileStore.snapshot != nil
     }
 
     private var usesProfileTotalForPeriod: Bool {
