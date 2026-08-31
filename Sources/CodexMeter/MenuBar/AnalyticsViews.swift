@@ -1,23 +1,13 @@
 import Charts
 import SwiftUI
 
-enum MenuDestination: Hashable {
-    case limits
-    case usage
-    case projects
-    case sessions
-    case project(id: String, range: AnalyticsRange)
-    case session(id: String, range: AnalyticsRange)
-    case model(id: String, range: AnalyticsRange)
-}
-
 struct AccountLimitsView: View {
     @EnvironmentObject private var limitStore: AccountLimitStore
     @AppStorage("additionalLimitsEnabled") private var additionalLimitsEnabled = AppPreferences.defaultAdditionalLimitsEnabled
     @AppStorage("resetCreditsEnabled") private var resetCreditsEnabled = AppPreferences.defaultResetCreditsEnabled
 
     var body: some View {
-        ScrollView {
+        ContentFittingScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let snapshot = limitStore.snapshot {
                     let windows = visibleWindows(snapshot.windows)
@@ -35,12 +25,13 @@ struct AccountLimitsView: View {
                     if resetCreditsEnabled, let credits = snapshot.resetCredits {
                         resetCreditsCard(credits)
                     }
-                    Text("Read-only account limits reported by Codex. CodexMeter never consumes reset credits.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Pace compares reported use with an even-use schedule. Any run-out time is a current-window estimate, not a quota guarantee.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    DisclosureGroup("About these limits") {
+                        Text("Reported by Codex; read-only. Reset credits are never consumed here. Pace assumes even use; run-out times are estimates, not guarantees.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 4)
+                    }
+                    .font(.caption)
                     HStack(spacing: 5) {
                         Image(systemName: limitStore.status == .stale ? "wifi.slash" : "clock")
                         Text(limitStatusText(snapshot))
@@ -61,17 +52,6 @@ struct AccountLimitsView: View {
             .padding(16)
         }
         .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 300, maxHeight: 520)
-        .navigationTitle("Limits")
-        .toolbar {
-            Button {
-                Task { await limitStore.refresh() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .disabled(limitStore.isRefreshing)
-            .help("Refresh account limits")
-        }
         .task {
             if limitStore.snapshot == nil { await limitStore.refresh() }
         }
@@ -93,9 +73,10 @@ struct AccountLimitsView: View {
                 .accessibilityLabel("\(window.displayName), \(window.windowLabel), remaining")
                 .accessibilityValue("\(Int(window.remainingPercent.rounded())) percent")
             if let reset = window.resetsAt {
-                Text("Resets \(reset.formatted(.dateTime.month(.abbreviated).day().hour().minute())) · \(reset, style: .relative)")
+                Text("Resets \(reset, style: .relative)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .help("Resets \(reset.formatted(date: .complete, time: .shortened))")
             }
             if limitStore.status.allowsPaceEstimates,
                let pace = window.pace(at: Date()) {
@@ -140,7 +121,7 @@ struct AccountLimitsView: View {
     }
 
     private func visibleWindows(_ windows: [AccountLimitWindow]) -> [AccountLimitWindow] {
-        additionalLimitsEnabled ? windows : windows.filter { $0.limitID.lowercased() == "codex" }
+        AccountLimitPresentation.visibleWindows(windows, includesAdditional: additionalLimitsEnabled)
     }
 
     private func limitStatusText(_ snapshot: AccountLimitsSnapshot) -> String {
@@ -166,7 +147,7 @@ struct AccountLimitsView: View {
     }
 }
 
-private enum AnalyticsChartMetric: String, CaseIterable, Identifiable {
+enum AnalyticsChartMetric: String, CaseIterable, Identifiable {
     case tokens
     case cost
 
@@ -174,56 +155,96 @@ private enum AnalyticsChartMetric: String, CaseIterable, Identifiable {
     var title: String { self == .tokens ? "Tokens" : "Cost" }
 }
 
-struct UsageAnalyticsView: View {
+/// One compact header followed by a content-fitting, height-limited viewport.
+private struct AnalyticsDetailLayout<Controls: View, Content: View>: View {
     @EnvironmentObject private var store: UsageStore
-    @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
-    @State private var range = AnalyticsRange.sevenDays
-    @State private var chartMetric = AnalyticsChartMetric.tokens
-    @State private var selectedBucketDate: Date?
+    @ViewBuilder var controls: Controls
+    @ViewBuilder var content: Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                rangePicker
-                if costEstimatesEnabled {
-                    Picker("Chart metric", selection: $chartMetric) {
-                        ForEach(AnalyticsChartMetric.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
-                if let snapshot = store.analyticsSnapshots[range] {
-                    analyticsSnapshotStatus(store)
-                    totalCard(snapshot)
-                    usageChart(snapshot)
-                    modelBreakdown(snapshot)
-                } else {
-                    loading
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            controls
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .layoutPriority(1)
+            Divider()
+            analyticsSnapshotStatus(store)
+                .fixedSize(horizontal: false, vertical: true)
+            ContentFittingScrollView(maximumHeight: MenuPopoverMetrics.analyticsViewportMaximumHeight) {
+                content
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 360, maxHeight: 560)
-        .navigationTitle("Usage")
-        .task(id: range) { await store.refreshAnalytics(range: range) }
-        .onChange(of: range) { _, _ in selectedBucketDate = nil }
-        .onChange(of: chartMetric) { _, _ in selectedBucketDate = nil }
+        .frame(width: MenuPopoverMetrics.width, alignment: .topLeading)
     }
+}
 
-    private var rangePicker: some View {
+private struct AnalyticsRangePicker: View {
+    @Binding var range: AnalyticsRange
+
+    var body: some View {
         Picker("Range", selection: $range) {
             ForEach(AnalyticsRange.allCases) { Text($0.title).tag($0) }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct UsageAnalyticsView: View {
+    @EnvironmentObject private var store: UsageStore
+    @EnvironmentObject private var navigation: MenuNavigation
+    @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
+
+    private var range: AnalyticsRange { navigation.usageRange }
+    private var chartMetric: AnalyticsChartMetric { navigation.chartMetric }
+    private var selectedBucketDate: Date? { navigation.selectedBucketDate }
+
+    var body: some View {
+        AnalyticsDetailLayout {
+            VStack(alignment: .leading, spacing: 10) {
+                AnalyticsRangePicker(range: $navigation.usageRange)
+                if costEstimatesEnabled {
+                    Picker("Chart metric", selection: $navigation.chartMetric) {
+                        ForEach(AnalyticsChartMetric.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } content: {
+            if let snapshot = store.analyticsSnapshots[range] {
+                VStack(alignment: .leading, spacing: 16) {
+                    totalCard(snapshot)
+                    usageChart(snapshot)
+                    modelBreakdown(snapshot)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(16)
+            } else {
+                loading
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(16)
+            }
+        }
+        .task(id: range) { await store.refreshAnalytics(range: range) }
+        .onChange(of: range) { _, _ in navigation.selectedBucketDate = nil }
+        .onChange(of: chartMetric) { _, _ in navigation.selectedBucketDate = nil }
     }
 
     private func totalCard(_ snapshot: AnalyticsSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(snapshot.usage.totalTokens.formatted())
-                .font(.title2.weight(.semibold).monospacedDigit())
-            Text("tokens · \(range.title)")
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text("tokens")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if costEstimatesEnabled {
@@ -247,10 +268,11 @@ struct UsageAnalyticsView: View {
                         x: .value("Time", bucket.start),
                         y: .value(chartMetric.title, chartValue(bucket, quality: snapshot.quality))
                     )
-                    .foregroundStyle(.blue.gradient)
+                    .foregroundStyle(Color.accentColor)
+                    .cornerRadius(3)
                 }
                 .chartYAxis(.hidden)
-                .chartXSelection(value: $selectedBucketDate)
+                .chartXSelection(value: $navigation.selectedBucketDate)
                 .frame(height: 112)
                 .accessibilityLabel("\(chartMetric.title) chart for \(range.title)")
             }
@@ -284,28 +306,16 @@ struct UsageAnalyticsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 ForEach(snapshot.models) { model in
-                    NavigationLink(value: MenuDestination.model(id: model.id, range: range)) {
-                        HStack {
-                            Text(model.displayName).lineLimit(1)
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 1) {
-                                Text(model.usage.totalTokens.formatted())
-                                    .monospacedDigit().foregroundStyle(.secondary)
-                                if costEstimatesEnabled {
-                                    EstimatedCostText(
-                                        models: [model],
-                                        through: snapshot.through,
-                                        quality: snapshot.quality,
-                                        compact: true
-                                    )
-                                }
-                            }
-                            Image(systemName: "chevron.right")
-                                .font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
-                        }
+                    MenuLink(destination: .model(id: model.id, range: range)) {
+                        analyticsRow(
+                            model.displayName,
+                            tokens: model.usage.totalTokens,
+                            models: [model],
+                            through: snapshot.through,
+                            quality: snapshot.quality,
+                            horizontalPadding: 8
+                        )
                     }
-                    .font(.caption)
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -341,13 +351,14 @@ struct UsageAnalyticsView: View {
 
 struct ProjectsAnalyticsView: View {
     @EnvironmentObject private var store: UsageStore
-    @State private var range = AnalyticsRange.thirtyDays
+    @EnvironmentObject private var navigation: MenuNavigation
+    private var range: AnalyticsRange { navigation.projectsRange }
 
     var body: some View {
-        analyticsList(title: "Projects", emptyText: "No project-tagged usage in this range.") {
+        analyticsList {
             if let snapshot = store.analyticsSnapshots[range] {
                 ForEach(snapshot.projects) { project in
-                    NavigationLink(value: MenuDestination.project(id: project.id, range: range)) {
+                    MenuLink(destination: .project(id: project.id, range: range)) {
                         analyticsRow(
                             project.name,
                             detail: pluralized(project.sessionCount, singular: "session", plural: "sessions"),
@@ -357,80 +368,62 @@ struct ProjectsAnalyticsView: View {
                             quality: snapshot.quality
                         )
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
-        .navigationTitle("Projects")
         .task(id: range) { await store.refreshAnalytics(range: range) }
     }
 
-    private func analyticsList<Content: View>(title: String, emptyText: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 0) {
-            Picker("Range", selection: $range) {
-                ForEach(AnalyticsRange.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden().padding(16)
-            Divider()
-            analyticsSnapshotStatus(store)
-            ScrollView {
-                VStack(spacing: 0) {
-                    if store.analyticsSnapshots[range] == nil {
-                        analyticsPlaceholder(store: store, title: "Projects Unavailable", minimumHeight: 180)
-                    } else if store.analyticsSnapshots[range]?.projects.isEmpty == true {
-                        Text(emptyText).font(.caption).foregroundStyle(.secondary).padding(24)
-                    }
-                    content()
+    private func analyticsList<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        AnalyticsDetailLayout {
+            AnalyticsRangePicker(range: $navigation.projectsRange)
+        } content: {
+            VStack(spacing: 0) {
+                if store.analyticsSnapshots[range] == nil {
+                    analyticsPlaceholder(store: store, title: "Projects Unavailable", minimumHeight: 180)
+                } else if store.analyticsSnapshots[range]?.projects.isEmpty == true {
+                    Text("No project-tagged usage in this range.")
+                        .font(.caption).foregroundStyle(.secondary).padding(24)
                 }
+                content()
             }
         }
-        .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 340, maxHeight: 540)
     }
 }
 
 struct SessionsAnalyticsView: View {
     @EnvironmentObject private var store: UsageStore
-    @State private var range = AnalyticsRange.sevenDays
+    @EnvironmentObject private var navigation: MenuNavigation
+    private var range: AnalyticsRange { navigation.sessionsRange }
     @AppStorage("agentDetailsEnabled") private var agentDetailsEnabled = AppPreferences.defaultAgentDetailsEnabled
     @AppStorage("attachmentMetadataEnabled") private var attachmentMetadataEnabled = AppPreferences.defaultAttachmentMetadataEnabled
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("Range", selection: $range) {
-                ForEach(AnalyticsRange.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden().padding(16)
-            Divider()
-            analyticsSnapshotStatus(store)
-            ScrollView {
-                VStack(spacing: 0) {
-                    if store.analyticsSnapshots[range] == nil {
-                        analyticsPlaceholder(store: store, title: "Sessions Unavailable", minimumHeight: 180)
-                    } else if store.analyticsSnapshots[range]?.sessions.isEmpty == true {
-                        Text("No sessions in this range.").font(.caption).foregroundStyle(.secondary).padding(24)
-                    }
-                    if let snapshot = store.analyticsSnapshots[range] {
-                        ForEach(snapshot.sessions) { session in
-                            NavigationLink(value: MenuDestination.session(id: session.id, range: range)) {
-                                analyticsRow(
-                                    session.displayName,
-                                    detail: sessionDetail(session),
-                                    tokens: session.usage.totalTokens,
-                                    models: session.models,
-                                    through: snapshot.through,
-                                    quality: snapshot.quality
-                                )
-                            }
-                            .buttonStyle(.plain)
+        AnalyticsDetailLayout {
+            AnalyticsRangePicker(range: $navigation.sessionsRange)
+        } content: {
+            VStack(spacing: 0) {
+                if store.analyticsSnapshots[range] == nil {
+                    analyticsPlaceholder(store: store, title: "Sessions Unavailable", minimumHeight: 180)
+                } else if store.analyticsSnapshots[range]?.sessions.isEmpty == true {
+                    Text("No sessions in this range.").font(.caption).foregroundStyle(.secondary).padding(24)
+                }
+                if let snapshot = store.analyticsSnapshots[range] {
+                    ForEach(snapshot.sessions) { session in
+                        MenuLink(destination: .session(id: session.id, range: range)) {
+                            analyticsRow(
+                                session.displayName,
+                                detail: sessionDetail(session),
+                                tokens: session.usage.totalTokens,
+                                models: session.models,
+                                through: snapshot.through,
+                                quality: snapshot.quality
+                            )
                         }
                     }
                 }
             }
         }
-        .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 340, maxHeight: 540)
-        .navigationTitle("Sessions")
         .task(id: range) { await store.refreshAnalytics(range: range) }
     }
 
@@ -452,7 +445,7 @@ struct ProjectDetailView: View {
     let range: AnalyticsRange
 
     var body: some View {
-        ScrollView {
+        ContentFittingScrollView {
             if let snapshot = store.analyticsSnapshots[range],
                let project = snapshot.projects.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -471,8 +464,6 @@ struct ProjectDetailView: View {
             }
         }
         .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 300, maxHeight: 520)
-        .navigationTitle("Project")
     }
 }
 
@@ -484,7 +475,7 @@ struct SessionDetailView: View {
     @AppStorage("attachmentMetadataEnabled") private var attachmentMetadataEnabled = AppPreferences.defaultAttachmentMetadataEnabled
 
     var body: some View {
-        ScrollView {
+        ContentFittingScrollView {
             if let snapshot = store.analyticsSnapshots[range],
                let session = snapshot.sessions.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -505,20 +496,15 @@ struct SessionDetailView: View {
                     }
                     if attachmentMetadataEnabled {
                         LabeledContent("Whole-session images", value: session.imageAttachmentCount.formatted())
+                            .help("Counts cover the whole session after the local-history cutoff, not just this range. Local metadata may be incomplete; attachment contents are never stored.")
                     }
                     usageBreakdown(session.usage)
                     modelRows(session.models)
-                    if attachmentMetadataEnabled {
-                        Text("Image counts cover the whole session after the local-history cutoff, not only the selected chart range. They use reliable local metadata only and may be incomplete when a source record exceeds the parser safety limit. Attachment contents are never stored.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
                 }
                 .padding(16)
             }
         }
         .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 340, maxHeight: 540)
-        .navigationTitle("Session")
     }
 
     @ViewBuilder
@@ -528,7 +514,7 @@ struct SessionDetailView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Text("Sub-agents").font(.subheadline.weight(.semibold))
                 ForEach(children) { child in
-                    NavigationLink(value: MenuDestination.session(id: child.id, range: range)) {
+                    MenuLink(destination: .session(id: child.id, range: range)) {
                         HStack {
                             Text(child.displayName).lineLimit(1)
                             Spacer()
@@ -537,9 +523,8 @@ struct SessionDetailView: View {
                         }
                     }
                     .font(.caption)
-                    .buttonStyle(.plain)
                 }
-                Text("Sub-agent usage is shown separately and is not added to the parent session total again.")
+                Text("Sub-agent tokens are separate from this total.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }
@@ -552,7 +537,7 @@ struct ModelDetailView: View {
     let range: AnalyticsRange
 
     var body: some View {
-        ScrollView {
+        ContentFittingScrollView {
             if let snapshot = store.analyticsSnapshots[range],
                let model = snapshot.models.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -577,8 +562,6 @@ struct ModelDetailView: View {
             }
         }
         .frame(width: MenuPopoverMetrics.width)
-        .frame(minHeight: 300, maxHeight: 520)
-        .navigationTitle("Model")
     }
 }
 
@@ -627,7 +610,7 @@ struct EstimatedCostText: View {
     var body: some View {
         if costEstimatesEnabled {
             if let amount = estimatedCost(for: models, through: through, quality: quality) {
-                Text(compact ? "~\(currency(amount))" : "Current API pricing estimate · ~\(currency(amount))")
+                Text(compact ? "~\(currency(amount))" : "Estimated API cost · ~\(currency(amount))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .help("Current official API pricing estimate. This is not a bill or subscription charge.")
@@ -646,27 +629,49 @@ struct EstimatedCostText: View {
 }
 
 @ViewBuilder
-private func analyticsRow(
+func analyticsRow(
     _ title: String,
-    detail: String,
+    detail: String? = nil,
     tokens: Int64,
     models: [ModelUsageSummary],
     through: Date,
-    quality: DataQuality
+    quality: DataQuality,
+    horizontalPadding: CGFloat = 16
 ) -> some View {
     HStack(spacing: 10) {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).lineLimit(1)
-            Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                    .help(title)
+                Spacer(minLength: 8)
+                Text(tokens.formatted())
+                    .font(.subheadline.monospacedDigit())
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .help(detail)
+                }
+                Spacer(minLength: 0)
+                // Unknown costs belong in the item's detail, not on every list row.
+                EstimatedCostText(models: models, through: through, quality: quality, compact: true, showsUnavailable: false)
+                    .lineLimit(1)
+            }
         }
-        Spacer()
-        VStack(alignment: .trailing, spacing: 1) {
-            Text(tokens.formatted()).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            EstimatedCostText(models: models, through: through, quality: quality, compact: true)
-        }
-        Image(systemName: "chevron.right").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+        Image(systemName: "chevron.right")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
-    .padding(.horizontal, 16).padding(.vertical, 9)
+    .padding(.horizontal, horizontalPadding)
+    .padding(.vertical, 10)
     .contentShape(Rectangle())
 }
 
@@ -674,7 +679,11 @@ private func analyticsRow(
 private func analyticsHeader(_ title: String, tokens: Int64) -> some View {
     VStack(alignment: .leading, spacing: 3) {
         Text(title).font(.headline)
-        Text(tokens.formatted()).font(.title2.weight(.semibold).monospacedDigit())
+        Text(tokens.formatted())
+            .font(.system(size: 28, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
         Text("tokens").font(.caption).foregroundStyle(.secondary)
     }
 }

@@ -128,7 +128,8 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    init() {
+    init(analyticsSnapshots: [AnalyticsRange: AnalyticsSnapshot] = [:]) {
+        self.analyticsSnapshots = analyticsSnapshots
         previousWeekStartRawValue = storedWeekStartRawValue
         previousRefreshModeRawValue = currentRefreshMode.rawValue
         refreshSchedulerTask = Task { [weak self] in

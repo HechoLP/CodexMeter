@@ -82,6 +82,7 @@ The palette follows macOS semantic colors so it remains correct in light, dark, 
 - **Primary Metric** (semibold, 32px): Today's total and the strongest number on the overview.
 - **Headline** (semantic headline): Product title and primary empty-state messages.
 - **Section Label** (semibold subheadline): Limits and analytic section headings.
+- **Heading Tone:** Use the category's natural capitalization, not forced uppercase. The interface stays calm without weakening hierarchy.
 - **Body Row** (semantic subheadline): Token components and period totals.
 - **Supporting Label** (caption and caption2): Reset times, pace, data status, and explanatory text.
 
@@ -89,13 +90,13 @@ The palette follows macOS semantic colors so it remains correct in light, dark, 
 
 ## Layout
 
-The menu popover is a fixed compact column (372px). The header identifies the active provider, the footer keeps primary actions visible, and the middle region scrolls only beyond a practical 700px ceiling. The overview follows a provider-first vertical reading path: account limits, token usage, history, and detailed destinations. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
+The menu popover is a fixed compact column (372px) with content-driven height. The header provides two top-level modes and the footer keeps primary actions visible. Token Usage contains token totals, period history, and analytic destinations; Codex Limits contains quota windows and reset timing. The selected mode expands to its full intrinsic height without an embedded scroll region, so every item remains visible at once. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
 
-The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at overview edges. The overview prioritizes today's local usage, then account limits, nearby periods, and three compact analytic shortcuts.
+The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at popover edges. Token Usage prioritizes today's local usage, nearby periods, and analytic shortcuts; Codex Limits prioritizes quota remaining and reset timing.
 
 **The One-Question Rule.** Each destination answers one question: limits, usage, projects, or sessions.
 
-**The Real-Provider Rule.** A provider switcher appears only after a second provider has working data and status handling; empty provider tabs are not navigation.
+**The Real-Provider Rule.** Token Usage is the cross-source token summary. A named provider limits tab appears only when that provider has working data and status handling; empty provider tabs are not navigation.
 
 ## Elevation & Depth
 
@@ -114,8 +115,16 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 ### Overview Popover
 
 - **Character:** A compact status instrument, not a miniature dashboard.
-- **Shape:** Fixed 344px width with a stable header and footer.
-- **Behavior:** The center scrolls only when content exceeds the practical menu height.
+- **Shape:** Fixed 372px width with a stable header and footer.
+- **Behavior:** The selected mode uses its intrinsic height; the overview contains no nested scrolling surface.
+
+### Top-Level Modes
+
+- **Token Usage:** Local and optional account-wide token totals, period history, and analytic destinations.
+- **Codex Limits:** Read-only Codex quota windows, reset timing, pace, and reset-credit availability.
+- **Behavior:** Two equal-width native buttons switch content in place. The selected mode uses the system accent and both modes remain keyboard and VoiceOver accessible.
+- **Feedback:** Clickable rows and utility buttons use a subtle neutral hover/pressed fill and an accent keyboard-focus outline. Feedback never changes geometry, honors Increase Contrast, and skips its short fade under Reduce Motion.
+- **Separation:** The header contains no provider status card, connection badge, or generated explanatory subtitle.
 
 ### Primary Token Summary
 
@@ -126,7 +135,8 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 ### Account Limit Preview
 
 - **Character:** Actionable without pretending to be a billing dashboard.
-- **Content:** At most two limit windows, percent remaining, reset countdown, and even-use pace; additional windows move to Limits.
+- **Order:** Pin the primary Codex Weekly window first in both the preview and Limits detail. Keep the remaining windows ordered by duration and name; do not change reported values or synthesize a missing Weekly window.
+- **Content:** At most three limit windows, percent remaining, and reset countdown. Additional windows and even-use pace remain in Limits detail. Do not repeat the number of visible windows in the heading.
 - **State:** Healthy uses the system accent; low and critical states combine color with text.
 - **Disclosure:** Projected run-out appears only in the detailed Limits screen and is labeled as an estimate.
 
@@ -135,6 +145,17 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 - **Character:** Three equal one-click destinations for Usage, Projects, and Sessions.
 - **Shape:** Each target is at least 42px high with an SF Symbol and visible label.
 - **Behavior:** Hidden preferences remove their destination instead of leaving disabled placeholders.
+
+### Analytics Details
+
+- **Shape:** All destinations keep the 372pt popover width. Short content determines its own height; longer analytics scroll within a 440pt viewport, while other long details cap their viewport at 520pt.
+- **Structure:** A 44pt header owns the back button and title in the same vertical layout as the content. Do not embed `NavigationStack` or an automatic window toolbar in `MenuBarExtra`; a second navigation/safe-area owner can leave a large gap above the filters.
+- **Position:** Native range and metric controls keep intrinsic height directly below the title, with 12pt vertical padding. Only the chart or list scrolls, anchored at the top; filters never absorb surplus height.
+- **Navigation:** Back returns to the previous destination and preserves its range, metric, and selected chart day. Command-[ also goes back.
+- **Reading Order:** Align the name and token total on the first row; dates, session counts, and estimated costs are secondary below. Full truncated names remain available as help text. Detail totals use the same rounded, tabular type as the overview at a smaller 28pt size.
+- **Concise Copy:** State today's period and source once above its total. Omit generic headings above self-explanatory navigation rows. Unknown cost messages appear in the summary or item detail, not on every project, model, and session row; unavailable estimates must never become zero. Keep API estimates visibly labeled. Long limit explanations are collapsed under “About these limits”; reset timestamps and image-count methodology use contextual help. Source dates, stale/error messages, and low-limit warnings stay visible.
+- **Charts:** Rounded bar ends and the system accent match the rest of the app; do not hard-code a blue gradient.
+- **Verification:** Render the production `MenuPopoverView`, including its actual header and destination, with loading, empty, and populated content. Assert title-to-filter spacing and viewport bounds, and verify the viewport shrinks and grows with content instead of testing a substitute navigation host.
 
 ### Footer Actions
 
@@ -152,7 +173,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 ### Do:
 
-- **Do** keep the first screen focused on the active provider, actionable account limits, current local usage, nearby periods, and direct navigation.
+- **Do** keep Token Usage focused on token totals and history, and Codex Limits focused on account limits and reset timing.
 - **Do** use semantic system colors, SwiftUI text styles, SF Symbols, VoiceOver labels, keyboard shortcuts, and Reduce Motion.
 - **Do** show unknown or incomplete cost data as unavailable in detailed analytics instead of zero.
 - **Do** keep local token totals, account-wide profile totals, quota percentages, and API-equivalent estimates visibly distinct.
@@ -160,7 +181,7 @@ The diamond meter mark is the only recurring branded silhouette. Detail selectio
 
 ### Don't:
 
-- **Don't** copy CodexBar branding or assets; reuse only provider-first information-architecture ideas that improve scanning for CodexMeter's real features.
+- **Don't** copy CodexBar branding or assets; reuse only mode separation and information-architecture ideas that improve scanning for CodexMeter's real features.
 - **Don't** place charts, projects, sessions, credits, every provider, and every limit on the overview.
 - **Don't** show empty or speculative provider tabs.
 - **Don't** use purple/blue AI gradients, neon, decorative glass, giant cards, or custom dashboard chrome.

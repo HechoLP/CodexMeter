@@ -3,9 +3,37 @@ import SwiftUI
 
 enum MenuPopoverMetrics {
     static let width: CGFloat = 372
-    static let minimumBodyHeight: CGFloat = 420
-    static let idealBodyHeight: CGFloat = 620
-    static let maximumBodyHeight: CGFloat = 700
+    static let detailMaximumHeight: CGFloat = 520
+    static let analyticsViewportMaximumHeight: CGFloat = 440
+    static let detailHeaderHeight: CGFloat = 44
+}
+
+enum MenuPopoverSection: String, CaseIterable, Identifiable {
+    case overview
+    case codex
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .overview: "Token Usage"
+        case .codex: "Codex Limits"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .overview: "square.grid.2x2"
+        case .codex: "terminal"
+        }
+    }
+
+    var categories: [MenuPopoverCategory] {
+        switch self {
+        case .overview: [.localUsage, .tokenHistory, .explore]
+        case .codex: [.accountLimits]
+        }
+    }
 }
 
 enum MenuPopoverCategory: String, CaseIterable, Identifiable {
@@ -18,10 +46,10 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .accountLimits: "Account Limits"
-        case .localUsage: "Token Usage"
+        case .accountLimits: "Usage limits"
+        case .localUsage: "Today"
         case .tokenHistory: "History"
-        case .explore: "Explore"
+        case .explore: "Details"
         }
     }
 
@@ -36,6 +64,7 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
 }
 
 struct MenuPopoverView: View {
+    @StateObject private var navigation: MenuNavigation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
     @EnvironmentObject private var profileStore: ProfileUsageStore
@@ -51,77 +80,135 @@ struct MenuPopoverView: View {
     @AppStorage("resetCreditsEnabled") private var resetCreditsEnabled = AppPreferences.defaultResetCreditsEnabled
     @AppStorage("projectsEnabled") private var projectsEnabled = AppPreferences.defaultProjectsEnabled
     @AppStorage("sessionsEnabled") private var sessionsEnabled = AppPreferences.defaultSessionsEnabled
+    @State private var selectedSection = MenuPopoverSection.overview
     @State private var refreshTurns = 0
 
     private let formatter = TokenFormatter()
 
+    init(navigation: MenuNavigation = MenuNavigation()) {
+        _navigation = StateObject(wrappedValue: navigation)
+    }
+
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            if let destination = navigation.destination {
+                detailHeader(destination)
+                Divider()
+                destinationView(destination)
+                    .id(destination)
+            } else {
                 header
-                ScrollView {
-                    VStack(spacing: 0) {
-                        if accountLimitsEnabled {
-                            accountLimitsPreview
-                            Divider()
-                        }
-                        localUsageSection
-                        if analyticsEnabled {
-                            Divider()
-                            exploreSection
-                        }
+                Group {
+                    switch selectedSection {
+                    case .overview:
+                        overviewContent
+                    case .codex:
+                        codexContent
                     }
                 }
-                .scrollIndicators(.hidden)
-                // A ScrollView has no useful intrinsic height inside MenuBarExtra.
-                // Without a lower bound AppKit can reopen the popover at the
-                // header-and-footer minimum, collapsing the entire usage body.
-                .frame(
-                    minHeight: MenuPopoverMetrics.minimumBodyHeight,
-                    idealHeight: MenuPopoverMetrics.idealBodyHeight,
-                    maxHeight: MenuPopoverMetrics.maximumBodyHeight
-                )
+                .id(selectedSection)
+                .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity)
                 Divider()
                 footer
             }
-            .frame(width: MenuPopoverMetrics.width)
-            .background(.background)
-            .navigationDestination(for: UsagePeriod.self) { period in
-                PeriodDetailView(period: period)
-                    .environmentObject(store)
-                    .environmentObject(profileStore)
-            }
-            .navigationDestination(for: MenuDestination.self) { destination in
-                switch destination {
-                case .limits:
-                    AccountLimitsView()
-                case .usage:
-                    UsageAnalyticsView()
-                case .projects:
-                    ProjectsAnalyticsView()
-                case .sessions:
-                    SessionsAnalyticsView()
-                case let .project(id, range):
-                    ProjectDetailView(id: id, range: range)
-                case let .session(id, range):
-                    SessionDetailView(id: id, range: range)
-                case let .model(id, range):
-                    ModelDetailView(id: id, range: range)
-                }
-            }
         }
+        .frame(width: MenuPopoverMetrics.width, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(.background)
+        .environmentObject(navigation)
         .onChange(of: isRefreshing) { _, isRefreshing in
             guard isRefreshing, !reduceMotion else { return }
             refreshTurns += 1
         }
     }
 
+    private func detailHeader(_ destination: MenuDestination) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                navigation.back()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.subheadline.weight(.medium))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .keyboardShortcut("[", modifiers: .command)
+            .accessibilityLabel("Back")
+            .accessibilityIdentifier("menu.navigation.back")
+            .help("Back")
+            Text(destination.title(usesProfileTotals: usesProfileTotals))
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
+            if destination == .limits {
+                Button {
+                    Task { await limitStore.refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .frame(width: 28, height: 28)
+                }
+                .disabled(limitStore.isRefreshing)
+                .accessibilityLabel("Refresh account limits")
+                .help("Refresh account limits")
+            }
+        }
+        .buttonStyle(MenuInteractionStyle())
+        .padding(.horizontal, 12)
+        .frame(height: MenuPopoverMetrics.detailHeaderHeight)
+    }
+
+    @ViewBuilder
+    private func destinationView(_ destination: MenuDestination) -> some View {
+        switch destination {
+        case .limits: AccountLimitsView()
+        case .usage: UsageAnalyticsView()
+        case .projects: ProjectsAnalyticsView()
+        case .sessions: SessionsAnalyticsView()
+        case let .period(period): PeriodDetailView(period: period)
+        case let .project(id, range): ProjectDetailView(id: id, range: range)
+        case let .session(id, range): SessionDetailView(id: id, range: range)
+        case let .model(id, range): ModelDetailView(id: id, range: range)
+        }
+    }
+
+    private var overviewContent: some View {
+        VStack(spacing: 0) {
+            localUsageSection
+            if analyticsEnabled {
+                Divider()
+                exploreSection
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var codexContent: some View {
+        if accountLimitsEnabled {
+            accountLimitsPreview
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Codex Limits are turned off", systemImage: "gauge.with.dots.needle.0percent")
+                    .font(.headline)
+                Text("Enable Account Limits in Settings.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Open Settings") {
+                    SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
+                }
+                .buttonStyle(.link)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+        }
+    }
+
     private var accountLimitsPreview: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink(value: MenuDestination.limits) {
-                categoryHeader(.accountLimits, context: limitHeaderContext, showsDisclosure: true)
+            MenuLink(destination: .limits) {
+                categoryHeader(.accountLimits, showsDisclosure: true)
             }
-            .buttonStyle(.plain)
             .accessibilityIdentifier("menu.category.accountLimits")
             .accessibilityHint("Open all account limit details")
 
@@ -130,20 +217,19 @@ struct MenuPopoverView: View {
                     let windows = visibleAccountLimitWindows(snapshot.windows)
                     if windows.isEmpty {
                         compactLimitStatus(
-                            "No Codex limit window was reported.",
+                            "No Codex usage limits were reported.",
                             symbol: "gauge.with.dots.needle.0percent"
                         )
                     } else {
                         ForEach(Array(windows.prefix(3))) { window in
-                            compactLimitRow(
-                                window,
-                                showsPace: limitStore.status.allowsPaceEstimates
-                            )
+                            compactLimitRow(window)
                         }
                         if windows.count > 3 {
-                            Text("\(windows.count - 3) more in Account Limits")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            MenuLink(destination: .limits) {
+                                Text("View \(windows.count - 3) more")
+                                    .font(.caption)
+                                    .padding(.vertical, 6)
+                            }
                         }
                         if limitStore.status == .stale {
                             compactLimitStatus(
@@ -186,33 +272,47 @@ struct MenuPopoverView: View {
             .padding(.top, 15)
             .padding(.bottom, 12)
 
-            Divider()
-
-            HStack(spacing: 12) {
-                Image(systemName: "terminal")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Codex")
-                        .font(.headline)
-                    Text(providerScopeText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                ForEach(MenuPopoverSection.allCases) { section in
+                    sectionTab(section)
                 }
-                Spacer(minLength: 12)
-                Label(store.sourceStatusText, systemImage: providerStatusSymbol)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 13)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Codex, \(providerScopeText), \(store.sourceStatusText)")
+            .padding(.horizontal, 12)
+            .padding(.bottom, 10)
+
+            Divider()
         }
+    }
+
+    private func sectionTab(_ section: MenuPopoverSection) -> some View {
+        let isSelected = selectedSection == section
+        return Button {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                selectedSection = section
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: section.symbol)
+                    .font(.system(size: 14, weight: .medium))
+                Text(section.title)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.86)
+            }
+            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(
+                Color.accentColor.opacity(isSelected ? 0.16 : 0),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MenuInteractionStyle())
+        .keyboardShortcut(section == .overview ? "1" : "2", modifiers: .command)
+        .accessibilityLabel(section.title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Show \(section.title.lowercased())")
+        .accessibilityIdentifier("menu.section.\(section.rawValue)")
     }
 
     private var localUsageSection: some View {
@@ -252,7 +352,7 @@ struct MenuPopoverView: View {
                 .frame(minHeight: 96)
                 .accessibilityElement(children: .combine)
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(formatted(store.snapshot.today.totalTokens))
                             .font(.system(size: 32, weight: .semibold, design: .rounded))
@@ -262,9 +362,6 @@ struct MenuPopoverView: View {
                                 reduceMotion ? nil : .easeOut(duration: 0.24),
                                 value: store.snapshot.today.totalTokens
                             )
-                        Text("Total tokens today")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("This Mac total tokens today, \(formatted(store.snapshot.today.totalTokens))")
@@ -317,15 +414,13 @@ struct MenuPopoverView: View {
     }
 
     private var exploreSection: some View {
-        VStack(spacing: 0) {
-            categoryHeader(.explore)
-            exploreLinks
-        }
+        exploreLinks
+            .padding(.top, 8)
     }
 
     private var exploreLinks: some View {
         VStack(spacing: 0) {
-            exploreRowLink("Usage dashboard", symbol: "chart.xyaxis.line", destination: .usage)
+            exploreRowLink("Usage", symbol: "chart.xyaxis.line", destination: .usage)
             if projectsEnabled {
                 exploreRowLink("Projects", symbol: "folder", destination: .projects)
             }
@@ -342,7 +437,9 @@ struct MenuPopoverView: View {
             if shouldShowStatus {
                 HStack {
                     Label {
-                        if profileStore.isEnabled, let profileSnapshot = profileStore.snapshot {
+                        if selectedSection == .codex {
+                            Text(limitStore.statusMessage)
+                        } else if profileStore.isEnabled, let profileSnapshot = profileStore.snapshot {
                             if profileStore.status == .ready {
                                 Text("Account totals through \(profileDate(profileSnapshot.statsAsOf))")
                             } else {
@@ -399,6 +496,8 @@ struct MenuPopoverView: View {
                                 value: refreshTurns
                             )
                     }
+                    .padding(.horizontal, 6)
+                    .frame(minHeight: 28)
                 }
                 .disabled(isRefreshing || store.isMaintainingData || store.isImportingHistory)
                 .keyboardShortcut("r", modifiers: .command)
@@ -408,6 +507,8 @@ struct MenuPopoverView: View {
                     SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
                 } label: {
                     Label("Settings", systemImage: "gearshape")
+                        .padding(.horizontal, 6)
+                        .frame(minHeight: 28)
                 }
                 .keyboardShortcut(",", modifiers: .command)
                 .help("Open Settings")
@@ -432,12 +533,15 @@ struct MenuPopoverView: View {
                     .keyboardShortcut("q", modifiers: .command)
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
+                        .font(.caption.weight(.medium))
+                        .frame(minHeight: 28)
                 }
                 .menuStyle(.borderlessButton)
+                .controlSize(.small)
                 .menuIndicator(.hidden)
                 .help("More actions")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MenuInteractionStyle())
             .font(.caption.weight(.medium))
             .frame(minHeight: 28)
         }
@@ -446,6 +550,9 @@ struct MenuPopoverView: View {
     }
 
     private var shouldShowStatus: Bool {
+        if selectedSection == .codex {
+            return accountLimitsEnabled
+        }
         let qualityNeedsStatus = switch store.snapshot.quality {
         case .stale, .unavailable, .error: true
         case .exact, .partial: false
@@ -455,6 +562,15 @@ struct MenuPopoverView: View {
 
     private var statusSymbol: String {
         if isRefreshing { return "arrow.triangle.2.circlepath" }
+        if selectedSection == .codex {
+            return switch limitStore.status {
+            case .ready: "checkmark.circle"
+            case .stale: "clock.badge.exclamationmark"
+            case .disabled: "gauge.with.dots.needle.0percent"
+            case .loading: "arrow.triangle.2.circlepath"
+            case .unavailable: "exclamationmark.triangle"
+            }
+        }
         if profileStore.isEnabled {
             return profileStore.status == .ready ? "checkmark.circle" : "exclamationmark.triangle"
         }
@@ -463,23 +579,6 @@ struct MenuPopoverView: View {
 
     private var usesProfileTotals: Bool {
         profileStore.isEnabled && profileStore.snapshot != nil
-    }
-
-    private var providerScopeText: String {
-        profileStore.isEnabled ? "This Mac + ChatGPT account totals" : "This Mac activity"
-    }
-
-    private var providerStatusSymbol: String {
-        if store.isRefreshing || store.isImportingHistory { return "arrow.triangle.2.circlepath" }
-        return store.sourceCount > 0 ? "checkmark.circle" : "exclamationmark.triangle"
-    }
-
-    private var limitHeaderContext: String {
-        guard let windows = limitStore.snapshot?.windows else {
-            return limitStore.status == .loading ? "Updating" : "Unavailable"
-        }
-        let count = visibleAccountLimitWindows(windows).count
-        return "\(count) \(count == 1 ? "window" : "windows")"
     }
 
     private var historyContext: String {
@@ -516,8 +615,7 @@ struct MenuPopoverView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(category.title)
-                .font(.caption.weight(.semibold))
-                .textCase(.uppercase)
+                .font(.subheadline.weight(.semibold))
             Spacer(minLength: 8)
             if let context {
                 Text(context)
@@ -553,7 +651,7 @@ struct MenuPopoverView: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
             Text(formatted(value))
-                .font(.caption.weight(.semibold))
+                .font(.subheadline.weight(.medium))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
@@ -567,7 +665,7 @@ struct MenuPopoverView: View {
     }
 
     private func periodRowLink(_ title: String, period: UsagePeriod, value: Int64) -> some View {
-        NavigationLink(value: period) {
+        MenuLink(destination: .period(period)) {
             HStack(spacing: 10) {
                 Text(title)
                     .font(.subheadline)
@@ -589,7 +687,6 @@ struct MenuPopoverView: View {
             .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .disabled(!usesProfileTotals && store.snapshot.updatedAt == nil)
         .accessibilityLabel("\(title), \(formatted(value)) tokens")
         .accessibilityHint("Open \(title.lowercased()) details")
@@ -603,23 +700,11 @@ struct MenuPopoverView: View {
     }
 
     private func visibleAccountLimitWindows(_ windows: [AccountLimitWindow]) -> [AccountLimitWindow] {
-        let visible = additionalLimitsEnabled
-            ? windows
-            : windows.filter { $0.limitID.lowercased() == "codex" }
-        return visible.sorted {
-            if $0.windowDurationMinutes == $1.windowDurationMinutes {
-                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
-            }
-            return $0.windowDurationMinutes < $1.windowDurationMinutes
-        }
+        AccountLimitPresentation.visibleWindows(windows, includesAdditional: additionalLimitsEnabled)
     }
 
     @ViewBuilder
-    private func compactLimitRow(
-        _ window: AccountLimitWindow,
-        now: Date = Date(),
-        showsPace: Bool
-    ) -> some View {
+    private func compactLimitRow(_ window: AccountLimitWindow) -> some View {
         let remaining = window.remainingPercent
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
@@ -645,18 +730,11 @@ struct MenuPopoverView: View {
                     Text("Resets")
                     Text(reset, style: .relative)
                 }
-                if showsPace, let pace = window.pace(at: now) {
-                    if window.resetsAt != nil {
-                        Text("·")
-                    }
-                    Text(pace.compactSummary)
-                }
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .minimumScaleFactor(0.82)
-            .help("Pace compares current use with even use across the reported limit window.")
         }
         .accessibilityElement(children: .combine)
     }
@@ -705,7 +783,7 @@ struct MenuPopoverView: View {
         symbol: String,
         destination: MenuDestination
     ) -> some View {
-        NavigationLink(value: destination) {
+        MenuLink(destination: destination) {
             HStack(spacing: 10) {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .medium))
@@ -724,7 +802,6 @@ struct MenuPopoverView: View {
             .frame(maxWidth: .infinity, minHeight: 38)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel("Open \(title)")
         .accessibilityHint("Shows detailed local Codex \(title.lowercased())")
     }
