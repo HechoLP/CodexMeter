@@ -82,6 +82,8 @@ Local totals require no account connection. On macOS, **Settings → Usage & Pri
 
 ## Features
 
+- User-selected Codex account switching: save logins in this Mac’s Keychain, add another account through Codex’s browser sign-in, and explicitly quit/switch/reopen Codex. No automatic quota-based rotation. See [account setup and supported configurations](Documentation/ACCOUNTS.md).
+
 - Live Today total from local Codex records always stays in the primary summary
 - Current week/month through the server snapshot date and lifetime totals when explicitly enabled
 - Week, month, and **Local History** totals from local Codex records when account totals are off
@@ -131,7 +133,7 @@ CodexMeter reads JSONL files only inside:
 
 Optional profile sync also reads only `tokens.access_token` and `tokens.account_id` from `~/.codex/auth.json` for a fixed read-only request to `https://chatgpt.com/backend-api/wham/profiles/me`. Credentials and the response are held only in memory and are not written to CodexMeter's database or logs. This is a non-public ChatGPT endpoint and may change.
 
-The macOS **Limits** view uses the signed Codex app-server's read-only `account/rateLimits/read` RPC. The last successful limit response is held in memory only. CodexMeter never invokes reset-credit consumption, purchase, or account-changing methods.
+The macOS **Limits** view uses the signed Codex app-server's read-only `account/rateLimits/read` RPC. The last successful limit response is held in memory only. This provider never changes accounts, consumes reset credits, or makes purchases. The separate **Accounts** feature changes the local Codex login only after the user confirms a switch.
 
 For local analytics, CodexMeter stores canonical model IDs, a keyed HMAC of each normalized working directory, the final project-folder name, hashed session relationships, and numeric image counts. Image counts describe the whole retained session after the local-history cutoff, rather than only the selected chart range. It does not store full working-directory paths, session text, image bytes, MIME payloads, or attachment contents.
 
@@ -155,7 +157,7 @@ CodexBar's current feature families have been reviewed as a product reference, b
 
 ## Privacy
 
-Local accounting and analytics remain on-device. The app can check a signed Sparkle update feed. Optional profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, full project paths, authentication tokens, `.codex/auth.json`, remote profile responses, or attachment contents.
+Local accounting and analytics remain on-device. The app can check a signed Sparkle update feed. Optional profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, full project paths, remote profile responses, or attachment contents. Credentials never enter the usage database or logs. Only explicitly saved accounts are retained in the local Keychain; registration and the selected active login use private Codex authentication files as described in [Accounts](Documentation/ACCOUNTS.md).
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 
@@ -166,10 +168,13 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 | Full Disk Access | No | Reads only supported files under `.codex`. |
 | Accessibility | No | Does not control other apps. |
 | Screen Recording | No | Does not inspect the screen. |
-| Codex credential access | Optional | Reads only the access token and account ID after the user enables account totals. |
+| Profile credential access | Optional | Reads only the access token and account ID after the user enables account totals. |
+| Saved Codex accounts | Optional | Explicit registration stores a login in this Mac’s Keychain; a confirmed switch replaces the local Codex login and restarts Codex. |
 | Launch at Login | Optional | Enabled only by the user in Settings. |
 
 ## Settings
+
+Switch Codex accounts directly from the account menu at the top of the menu-bar popover. Choose a saved account, or **Add Account…** / **Manage Accounts…** without opening Settings. Switching still asks before restarting Codex. See [Accounts](Documentation/ACCOUNTS.md).
 
 | Pane | Controls |
 | --- | --- |

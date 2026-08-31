@@ -31,12 +31,13 @@ The app runs quietly on macOS 14 or later as a native menu bar utility. It disco
 - Show input, cached input, output, and total tokens for Today, This Week, This Month, and locally observable history.
 - Preserve input, cached input, and output as separate auditable local components, and never add optional account totals to local values.
 - Persist normalized usage and parser checkpoints in owner-only SQLite.
-- Avoid prompts, responses, source code, terminal output, and stored authentication data.
+- Avoid prompts, responses, source code, and terminal output. Authentication data never enters usage storage or logs; explicitly saved account logins use a separate local Keychain vault.
 - Keep optional account retrieval opt-in, fixed-destination, aggregate-only, and memory-only.
-- Read account limits only through a verified signed Codex app-server and never expose reset, purchase, or account mutation actions.
+- Read account limits only through a verified signed Codex app-server; keep the provider read-only and never expose reset-credit consumption or purchase actions.
+- Let users save their own Codex logins and explicitly switch via normal desktop quit, private login replacement, and reopen. Never rotate accounts automatically based on quota; keep account state separate from local history.
 - Derive current API-equivalent estimates from model token usage; unknown or incomplete pricing data remains unavailable rather than becoming zero.
 - Persist only canonical model IDs, keyed project identifiers, folder basenames, session relationships, and numeric attachment metadata needed for local analytics.
-- Operate without telemetry, analytics, notifications, a local web server, or a separately installed runtime.
+- Keep normal accounting free of telemetry, analytics, notifications, a local web server, and a separately installed runtime. Explicit account registration delegates the temporary browser sign-in flow to the bundled Codex CLI.
 - Remain responsive during large historical imports and tolerate unknown, malformed, partial, truncated, rotated, and duplicated input.
 - Keep launch-at-login optional and use the platform-supported current-user mechanism.
 

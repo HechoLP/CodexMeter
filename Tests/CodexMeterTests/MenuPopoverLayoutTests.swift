@@ -28,7 +28,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
             provider: CollapsedPopoverTestLimitProvider(),
             pollingInterval: nil
         )
-        let view = MenuPopoverView()
+        let view = MenuPopoverView(accounts: AccountLayoutFixture.emptyStore())
             .environmentObject(store)
             .environmentObject(profileStore)
             .environmentObject(limitStore)
@@ -258,7 +258,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
             await store.refresh()
             XCTAssertEqual(store.status, stale ? .stale : .ready)
             let hostingView = NSHostingView(rootView:
-                MenuPopoverView(navigation: MenuNavigation(path: [.limits]))
+                MenuPopoverView(accounts: AccountLayoutFixture.emptyStore(), navigation: MenuNavigation(path: [.limits]))
                     .environmentObject(UsageStore())
                     .environmentObject(ProfileUsageStore())
                     .environmentObject(store)
@@ -286,7 +286,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
     private var analyticsDestinations: [MenuDestination] { [.usage, .projects, .sessions] }
 
     private func popover(destination: MenuDestination?, snapshots: [AnalyticsRange: AnalyticsSnapshot]) -> some View {
-        MenuPopoverView(navigation: MenuNavigation(path: destination.map { [$0] } ?? []))
+        MenuPopoverView(accounts: AccountLayoutFixture.emptyStore(), navigation: MenuNavigation(path: destination.map { [$0] } ?? []))
             .environmentObject(UsageStore(analyticsSnapshots: snapshots))
             .environmentObject(ProfileUsageStore())
             .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))

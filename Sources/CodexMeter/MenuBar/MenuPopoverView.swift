@@ -65,6 +65,7 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
 
 struct MenuPopoverView: View {
     @StateObject private var navigation: MenuNavigation
+    private let accounts: CodexAccountStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var store: UsageStore
     @EnvironmentObject private var profileStore: ProfileUsageStore
@@ -85,8 +86,11 @@ struct MenuPopoverView: View {
 
     private let formatter = TokenFormatter()
 
-    init(navigation: MenuNavigation = MenuNavigation()) {
+    init(accounts: CodexAccountStore, navigation: MenuNavigation = MenuNavigation(),
+         section: MenuPopoverSection = .overview) {
+        self.accounts = accounts
         _navigation = StateObject(wrappedValue: navigation)
+        _selectedSection = State(initialValue: section)
     }
 
     var body: some View {
@@ -271,6 +275,8 @@ struct MenuPopoverView: View {
             .padding(.horizontal, 18)
             .padding(.top, 15)
             .padding(.bottom, 12)
+
+            CodexAccountSwitcher(accounts: accounts)
 
             HStack(spacing: 8) {
                 ForEach(MenuPopoverSection.allCases) { section in

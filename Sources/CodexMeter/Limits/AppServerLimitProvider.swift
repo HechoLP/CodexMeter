@@ -45,6 +45,8 @@ protocol AppServerProcessRunning: Sendable {
 }
 
 struct AppServerProcessRunner: AppServerProcessRunning {
+    var workingDirectory: URL? = nil
+
     func run(
         executable: URL,
         arguments: [String],
@@ -52,7 +54,7 @@ struct AppServerProcessRunner: AppServerProcessRunning {
         timeout: Duration,
         maximumOutputBytes: Int
     ) async throws -> Data {
-        let box = RunningProcessBox(executable: executable, arguments: arguments)
+        let box = RunningProcessBox(executable: executable, arguments: arguments, workingDirectory: workingDirectory)
         do {
             try box.process.run()
         } catch {
@@ -173,7 +175,7 @@ private final class RunningProcessBox: @unchecked Sendable {
     let output = Pipe()
     let error = Pipe()
 
-    init(executable: URL, arguments: [String]) {
+    init(executable: URL, arguments: [String], workingDirectory: URL? = nil) {
         process.executableURL = executable
         process.arguments = arguments
         let inherited = ProcessInfo.processInfo.environment
@@ -185,6 +187,7 @@ private final class RunningProcessBox: @unchecked Sendable {
         process.environment = allowedEnvironmentKeys.reduce(into: [:]) { environment, key in
             environment[key] = inherited[key]
         }
+        process.currentDirectoryURL = workingDirectory
         process.standardInput = input
         process.standardOutput = output
         process.standardError = error
@@ -206,7 +209,7 @@ private final class RunningProcessBox: @unchecked Sendable {
     }
 }
 
-private enum TrustedCodexExecutable {
+enum TrustedCodexExecutable {
     static func resolve() throws -> URL {
         let candidates = [
             URL(fileURLWithPath: "/Applications/ChatGPT.app/Contents/Resources/codex"),
