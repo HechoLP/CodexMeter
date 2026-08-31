@@ -164,6 +164,10 @@ final class ProfileUsageStore: ObservableObject {
         scheduleAutomaticRefresh()
     }
 
+    func clearForAccountSwitch() {
+        invalidateSnapshotForCalendarContextChange()
+    }
+
     private func invalidateSnapshotForCalendarContextChange() {
         enabledGeneration &+= 1
         automaticRefreshTask?.cancel()
@@ -218,7 +222,7 @@ final class ProfileUsageStore: ObservableObject {
             status = .disabled
             return
         }
-        guard !isRefreshing else { return }
+        guard !isRefreshing, !AccountSwitchActivity.isSwitching else { return }
 
         isRefreshing = true
         status = .refreshing

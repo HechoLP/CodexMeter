@@ -28,6 +28,21 @@ struct CodexMeterApp: App {
         _store = StateObject(wrappedValue: store)
         _profileStore = StateObject(wrappedValue: profileStore)
         _accountLimitStore = StateObject(wrappedValue: accountLimitStore)
+        CodexAccountStore.shared.onAccountWillChange = { [weak profileStore, weak accountLimitStore] in
+            profileStore?.clearForAccountSwitch()
+            accountLimitStore?.clearForAccountSwitch()
+        }
+        CodexAccountStore.shared.onAccountOperationFinished = { [weak profileStore, weak accountLimitStore] in
+            Task {
+                // An old read-only app-server may still be winding down; its result is
+                // discarded by the generation guard before requesting the new account.
+                while accountLimitStore?.isRefreshing == true || profileStore?.isRefreshing == true {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                await accountLimitStore?.refresh()
+                await profileStore?.refresh(weekStart: Self.selectedWeekStart)
+            }
+        }
         Task { @MainActor [weak store] in
             await store?.refresh()
         }

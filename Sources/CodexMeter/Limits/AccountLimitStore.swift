@@ -12,6 +12,7 @@ final class AccountLimitStore: ObservableObject {
     private let pollingInterval: Duration?
     private var pollingTask: Task<Void, Never>?
     private var defaultsTask: Task<Void, Never>?
+    private var inFlightReadTask: Task<AccountLimitsSnapshot, Error>?
 
     init(
         provider: AccountLimitProviding = AppServerLimitProvider(),
@@ -37,6 +38,7 @@ final class AccountLimitStore: ObservableObject {
     deinit {
         pollingTask?.cancel()
         defaultsTask?.cancel()
+        inFlightReadTask?.cancel()
     }
 
     var isEnabled: Bool {
@@ -48,6 +50,7 @@ final class AccountLimitStore: ObservableObject {
         pollingTask?.cancel()
         pollingTask = nil
         guard isEnabled else {
+            inFlightReadTask?.cancel()
             status = .disabled
             statusMessage = "Account limits are disabled"
             snapshot = nil
@@ -69,15 +72,23 @@ final class AccountLimitStore: ObservableObject {
     }
 
     func refresh() async {
-        guard isEnabled, !isRefreshing else { return }
+        guard isEnabled, !isRefreshing, !AccountSwitchActivity.isSwitching else { return }
+        let accountGeneration = AccountSwitchActivity.generation
         isRefreshing = true
         if snapshot == nil { status = .loading }
-        defer { isRefreshing = false }
+        let readTask = Task { try await provider.readLimits() }
+        inFlightReadTask = readTask
+        defer { isRefreshing = false; inFlightReadTask = nil }
         do {
-            snapshot = try await provider.readLimits()
+            let refreshed = try await withTaskCancellationHandler {
+                try await readTask.value
+            } onCancel: { readTask.cancel() }
+            guard isEnabled, accountGeneration == AccountSwitchActivity.generation, !AccountSwitchActivity.isSwitching else { return }
+            snapshot = refreshed
             status = .ready
             statusMessage = "Updated just now"
         } catch {
+            guard isEnabled, accountGeneration == AccountSwitchActivity.generation, !AccountSwitchActivity.isSwitching else { return }
             if snapshot != nil {
                 status = .stale
                 statusMessage = "Showing last known limits"
@@ -86,5 +97,12 @@ final class AccountLimitStore: ObservableObject {
                 statusMessage = "Account limits unavailable"
             }
         }
+    }
+
+    func clearForAccountSwitch() {
+        inFlightReadTask?.cancel()
+        snapshot = nil
+        status = .loading
+        statusMessage = "Switching account…"
     }
 }

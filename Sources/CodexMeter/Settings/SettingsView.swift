@@ -45,6 +45,8 @@ struct SettingsView: View {
             AppearanceSettingsView()
         case .usage:
             UsageSettingsView()
+        case .accounts:
+            CodexAccountsView(accounts: .shared, showsHeading: false)
         case .data:
             DataSettingsView()
         case .advanced:
@@ -59,6 +61,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     case general
     case appearance
     case usage
+    case accounts
     case data
     case advanced
     case about
@@ -70,6 +73,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: "General"
         case .appearance: "Menu Bar"
         case .usage: "Usage & Privacy"
+        case .accounts: "Accounts"
         case .data: "Local Data"
         case .advanced: "Diagnostics"
         case .about: "Information"
@@ -81,6 +85,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: "Startup, refresh, updates, and calendar"
         case .appearance: "Icon, token text, and popover display"
         case .usage: "What is counted and what stays local"
+        case .accounts: "Saved Codex logins and account switching"
         case .data: "Source status and history management"
         case .advanced: "Optional logging and log files"
         case .about: "Version, updates, and project links"
@@ -92,6 +97,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
         case .general: "gearshape"
         case .appearance: "menubar.rectangle"
         case .usage: "chart.bar.xaxis"
+        case .accounts: "person.crop.circle"
         case .data: "externaldrive"
         case .advanced: "stethoscope"
         case .about: "info.circle"

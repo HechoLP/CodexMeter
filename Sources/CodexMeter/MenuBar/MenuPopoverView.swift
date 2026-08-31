@@ -185,6 +185,21 @@ struct MenuPopoverView: View {
 
     @ViewBuilder
     private var codexContent: some View {
+        Button {
+            CodexAccountsWindowController.shared.show()
+        } label: {
+            HStack {
+                Label("Accounts", systemImage: "person.crop.circle")
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(.secondary)
+            }
+            .font(.subheadline.weight(.medium))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+        }
+        .buttonStyle(MenuInteractionStyle())
+        .accessibilityIdentifier("menu.accounts")
+        Divider()
         if accountLimitsEnabled {
             accountLimitsPreview
         } else {
@@ -516,6 +531,10 @@ struct MenuPopoverView: View {
                 Spacer()
 
                 Menu {
+                    Button("Codex Accounts…") {
+                        CodexAccountsWindowController.shared.show()
+                    }
+                    Divider()
                     Button("Open OpenAI Status") {
                         open("https://status.openai.com")
                     }
