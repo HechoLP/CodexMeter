@@ -8,9 +8,9 @@
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
-<img src="Assets/README/codexmeter-hero.png" alt="CodexMeter hero featuring the actual app popover and local token totals" width="100%" />
+<img src="Assets/README/codexmeter-hero.png" alt="CodexMeter Token Usage popover with an example account and illustrative token totals" width="100%" />
 
-<p align="center"><sub>The app popover shown above is an actual CodexMeter screen.</sub></p>
+<p align="center"><sub>Composited from a CodexMeter screenshot. Email and token values are illustrative.</sub></p>
 
 Tiny native macOS menu bar app that turns **local Codex session history** into clear token totals. Local totals stay one click away without an account login, API key, browser cookie, telemetry, or cloud sync. You can also opt in to a separate, memory-only ChatGPT account-total view.
 
