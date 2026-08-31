@@ -31,6 +31,8 @@ Browser registration is delegated to the verified, bundled Codex CLI. Its tempor
 
 Before replacement, CodexMeter preserves the departing account’s latest login in Keychain, rechecks that clients are stopped, and compares the active file with the bytes it read. The replacement is staged privately (`0600`) and published atomically. A missing login uses no-clobber publication, so a concurrently created login wins. Account operations from multiple CodexMeter instances are serialized with an owner-only lock.
 
+Privacy checks include macOS extended ACLs, not just `0600`/`0700` mode bits. Login files, lock files, and their containing directories may have deny-only ACLs or grants to the current user, but grants to other users or groups stop the operation. Directory inheritance is checked before any staging file or temporary login home is created. CodexMeter never removes or rewrites an existing ACL automatically; review the reported file or folder’s permissions if the operation is blocked. Private owner-read-only login files remain readable.
+
 CodexMeter does not refresh a copied saved credential in a disposable process. After reopening, the official Codex process owns token renewal in the canonical login file. This avoids losing a rotated refresh token when a preflight network request fails. CodexMeter checks saved credential shape and identity, but does not claim remote authentication succeeded before Codex uses the login.
 
 The local token database is unchanged by account switching. Its totals are still this Mac’s observed history, not a per-account ledger. Account-limit and optional profile snapshots are cleared on switching, and results from an older account request are discarded.

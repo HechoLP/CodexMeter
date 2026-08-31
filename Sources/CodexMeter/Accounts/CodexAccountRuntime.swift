@@ -54,7 +54,7 @@ final class LocalCodexAccountRuntime: CodexAccountRuntime {
     }
 
     func signIn() async throws -> SavedCodexAccount {
-        let directory = try temporaryHome()
+        let directory = try CredentialFileSecurity.makeTemporaryHome()
         defer { try? FileManager.default.removeItem(at: directory) }
         let process = Process()
         process.executableURL = try executable()
@@ -136,12 +136,6 @@ final class LocalCodexAccountRuntime: CodexAccountRuntime {
         if let desktop { return desktop.executable }
         do { return try TrustedCodexExecutable.resolve() }
         catch { throw AccountSwitchError.unavailable }
-    }
-
-    private func temporaryHome() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("codexmeter-account-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
-        return directory
     }
 
     private func request(_ method: String, params: [String: Any]) async throws -> [String: Any] {

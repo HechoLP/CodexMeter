@@ -13,13 +13,15 @@ final class CodexAccountOperationLock {
         guard dir >= 0 else { throw AccountSwitchError.unsafeFile }
         defer { close(dir) }
         var info = stat()
-        guard fstat(dir, &info) == 0, info.st_uid == getuid(), info.st_mode & 0o022 == 0 else {
+        guard fstat(dir, &info) == 0, info.st_uid == getuid(), info.st_mode & 0o022 == 0,
+              CredentialFileSecurity.hasOwnerOnlyACL(dir) else {
             throw AccountSwitchError.unsafeFile
         }
         let fd = openat(dir, ".codexmeter-accounts.lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0o600)
         guard fd >= 0 else { throw AccountSwitchError.unsafeFile }
         guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_uid == getuid(),
-              info.st_mode & 0o077 == 0, info.st_nlink == 1 else {
+              info.st_mode & 0o077 == 0, info.st_nlink == 1,
+              CredentialFileSecurity.hasOwnerOnlyACL(fd) else {
             close(fd); throw AccountSwitchError.unsafeFile
         }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { close(fd); throw AccountSwitchError.busy }
@@ -56,6 +58,11 @@ struct CodexLoginFile: CodexLoginStoring {
         let fd = openat(dir, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard fd >= 0 else { throw AccountSwitchError.unsafeFile }
         defer { close(fd); unlinkat(dir, name, 0) }
+        var stagedInfo = stat()
+        guard fstat(fd, &stagedInfo) == 0, stagedInfo.st_mode & S_IFMT == S_IFREG,
+              stagedInfo.st_uid == geteuid(), stagedInfo.st_nlink == 1,
+              stagedInfo.st_mode & 0o077 == 0, CredentialFileSecurity.hasOwnerOnlyACL(fd)
+        else { throw AccountSwitchError.unsafeFile }
         try data.withUnsafeBytes { bytes in
             var offset = 0
             while offset < bytes.count {
@@ -86,7 +93,10 @@ struct CodexLoginFile: CodexLoginStoring {
         let fd = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else { throw AccountSwitchError.unsafeFile }
         var info = stat()
-        guard fstat(fd, &info) == 0, info.st_uid == getuid(), info.st_mode & 0o022 == 0 else {
+        // Reject unsafe inheritance before any lock/staging inode can be opened
+        // by another user. Post-creation chmod/ACL removal is too late.
+        guard fstat(fd, &info) == 0, info.st_uid == getuid(), info.st_mode & 0o022 == 0,
+              CredentialFileSecurity.hasOwnerOnlyACL(fd) else {
             close(fd)
             throw AccountSwitchError.unsafeFile
         }
@@ -101,7 +111,8 @@ struct CodexLoginFile: CodexLoginStoring {
         var info = stat()
         guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
               info.st_uid == getuid(), info.st_nlink == 1, info.st_mode & 0o077 == 0,
-              info.st_size > 0, info.st_size <= 262_144
+              info.st_size > 0, info.st_size <= 262_144,
+              CredentialFileSecurity.hasOwnerOnlyACL(fd)
         else { throw AccountSwitchError.unsafeFile }
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 8_192)
