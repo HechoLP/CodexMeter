@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 import Sparkle
 
@@ -54,9 +55,16 @@ final class UpdateService {
               feedURL.scheme == "https",
               feedURL.host != nil,
               let publicKey = infoDictionary["SUPublicEDKey"] as? String,
-              !publicKey.isEmpty else {
+              !publicKey.isEmpty,
+              infoDictionary["SURequireSignedFeed"] as? Bool == true,
+              infoDictionary["SUVerifyUpdateBeforeExtraction"] as? Bool == true,
+              let expiration = infoDictionary["SUSignedFeedFailureExpirationInterval"] as? NSNumber,
+              CFGetTypeID(expiration) != CFBooleanGetTypeID(),
+              expiration.doubleValue == 0 else {
             return false
         }
+        // Sparkle otherwise allows failed-signature feed metadata after 20 days.
+        // Zero keeps authentication mandatory indefinitely, including key rotation.
         return true
     }
 }

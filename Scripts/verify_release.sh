@@ -47,6 +47,7 @@ verify_app() {
   local sparkle_binary="${sparkle_framework}/Versions/Current/Sparkle"
 
   plutil -lint "${info_plist}"
+  zsh "${script_dir}/verify_update_policy.sh" "${info_plist}"
   codesign --verify --deep --strict --verbose=2 "${candidate}"
 
   local actual_bundle_id actual_version actual_build actual_minimum_system ui_element
