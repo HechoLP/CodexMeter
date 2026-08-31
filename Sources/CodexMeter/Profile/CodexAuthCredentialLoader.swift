@@ -33,7 +33,8 @@ struct CodexAuthCredentialLoader: Sendable {
             throw ProfileUsageError.credentialsUnavailable
         }
         guard (fileStatus.st_mode & S_IFMT) == S_IFREG,
-              fileStatus.st_uid == geteuid()
+              fileStatus.st_uid == geteuid(),
+              CredentialFileSecurity.hasOwnerOnlyACL(descriptor)
         else {
             throw ProfileUsageError.unsafeCredentialFile
         }
