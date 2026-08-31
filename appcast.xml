@@ -4,62 +4,73 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.1.5</title>
-            <pubDate>Sat, 29 Aug 2026 20:53:14 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.1.5</link>
-            <sparkle:version>115</sparkle:version>
-            <sparkle:shortVersionString>1.1.5</sparkle:shortVersionString>
+            <title>1.2.0</title>
+            <pubDate>Mon, 31 Aug 2026 13:54:55 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.2.0</link>
+            <sparkle:version>120</sparkle:version>
+            <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.1.5
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.2.0
 
-CodexMeter 1.1.5 reorganizes the menu popover into a provider-first vertical layout inspired by the scanability of mature multi-provider menu bar tools while preserving CodexMeter's own identity and data boundaries.
+CodexMeter 1.2.0 separates token history from Codex limits and puts account switching directly in the menu bar.
 
-## Easier reading order
+## What changed
 
-- The top of the popover now identifies Codex, its active data scope, and local connection status.
-- Account limits appear before token history, with up to three visible windows, reset countdowns, pace, and optional reset-credit context.
-- Today's total and its Input, Cached input, and Output breakdown remain together under Token Usage.
-- This Week, This Month, and Local History or Lifetime use full-width rows with stable right-aligned values.
-- Usage, Projects, and Sessions use larger navigation rows with consistent icons and disclosure indicators.
-- Refresh, Settings, and More are visible text actions instead of icon-only controls.
+- **Token Usage / Codex Limits:** separate tabs, Weekly limits first, concise labels, and native hover and focus feedback.
+- **Better-fitting detail views:** filters stay directly below the back header; charts and longer lists use the available content area without oversized blank space above them.
+- **Account menu:** save the current login, add another account, manage saved logins, or choose an account without entering Settings.
+- **Explicit switching:** CodexMeter asks before quitting and reopening Codex. It never rotates accounts based on quota or force-quits other clients.
+- **Process detection:** unrelated terminal, browser-helper, and widget processes no longer incorrectly block a switch.
 
-No unsupported Claude, Gemini, or other provider tab is shown. Future providers can join the same structure only after their data and status handling are implemented.
+Existing local token history and counting rules are unchanged. Saved accounts use this Mac's non-synchronizing Keychain; credentials never enter the usage database or logs. Supported login locations and safeguards are described in [Accounts](https://github.com/HechoLP/CodexMeter/blob/v1.2.0/Documentation/ACCOUNTS.md).
 
-## Verification
+## Verification and limitations
 
-- Complete Swift unit and integration suite: 143 tests passed, with two optional tests skipped
-- Native AppKit hosting-size and category-order regression tests
-- Impeccable layout detector completed without findings
-- Universal 2 application build and certificate-free release-script verification
+- Automated tests cover token accounting, account-switch ordering and failures, login-file protection, process detection, and synthetic native layouts.
+- The package is Universal 2 for Apple silicon and Intel Macs running macOS 14 or later.
+- **Not yet verified end to end:** a real two-account browser sign-in, Keychain permission prompt, and desktop restart/switch. Automated tests use synthetic credentials and do not change a running Codex login. Finish active work before switching; expired saved logins can require sign-in again.
+- The app remains ad-hoc signed, without Apple Developer ID signing or notarization. SHA-256 protects the first download; Sparkle authenticates later update feeds and archives with Ed25519 signatures.
 
 ## Install or update with Homebrew
 
 ```bash
 brew update
-brew upgrade --cask HechoLP/tap/codexmeter
+brew upgrade --cask --greedy HechoLP/tap/codexmeter
+```
+
+For a new installation:
+
+```bash
+brew install --cask HechoLP/tap/codexmeter
+```
+
+Homebrew verifies the published ZIP checksum. If macOS blocks this certificate-free app after installation, confirm that it came from `HechoLP/tap/codexmeter`, then remove quarantine from this app only:
+
+```bash
 xattr -dr com.apple.quarantine /Applications/CodexMeter.app
 open /Applications/CodexMeter.app
 ```
-
-Fresh installations can use `brew install --cask HechoLP/tap/codexmeter`.
 
 ## First direct-download launch
 
-The app is ad-hoc signed and not Apple-notarized. Download the DMG and `SHA256SUMS.txt` from the official release, verify the checksum, copy `CodexMeter.app` to Applications, and remove quarantine from this app only:
+Download `CodexMeter-1.2.0.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.1.5.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-xattr -dr com.apple.quarantine /Applications/CodexMeter.app
-open /Applications/CodexMeter.app
+grep ' CodexMeter-1.2.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.2.0.dmg
 ```
 
-Do not remove quarantine when the checksum does not match the official manifest.
+Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above. Do not run an unverified download or disable Gatekeeper globally.
+
+## Recovery
+
+This release does not migrate the usage database. Earlier signed release artifacts remain available if a manual rollback is needed. Do not delete the local usage database or saved Keychain entries when troubleshooting. Published version tags are immutable; corrections ship as a new patch release.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.1.5/CodexMeter-1.1.5.zip" length="2965292" type="application/octet-stream" sparkle:edSignature="TNVkgy3aFffGaGXS9rTi+mo5zn875aHfO63eTEyDqE8p77+VMO0knNCzFl2Ar1OGcInr3P2lzpNicW3x+Li4Bw=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.2.0/CodexMeter-1.2.0.zip" length="3313149" type="application/octet-stream" sparkle:edSignature="TKETEGBjYg+hEgSeUyf5E7o69xUXwph71ryDQwnopwQQCIIrZYoF84flUewq/6lie4OOHZfU1OgJrZUCwx14BA=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 77qd+Pju1C+z6TABvDuDU9CEW6wJIUx7S18Ws2pr0aMdmF1MmRK8Q0e3QhD4tZLKaoKllQXdb23fsix9EGP1Dw==
-length: 3390
+edSignature: SoqqPKnYh2w4TccjLrHC+oK+om3T8tGeKzLVCXspXp6z5iG/cLs4wP2LsXdAdt7te636cowHOQklfFHF/SitCw==
+length: 4462
 -->
