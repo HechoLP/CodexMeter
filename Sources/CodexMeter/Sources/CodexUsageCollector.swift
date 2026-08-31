@@ -271,7 +271,9 @@ actor CodexUsageCollector {
     }
 
     func clearLocalHistory(at cutoff: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
-        let compactionStatus = try await database.clearLocalHistory(at: cutoff)
+        let compactionStatus = try await database.clearLocalHistory(
+            at: cutoff, preservesMessageExclusions: provider == .claude
+        )
         let result = try await refresh(now: cutoff, calendar: calendar, weekStart: weekStart)
         return CollectorRefreshResult(
             snapshot: result.snapshot,
@@ -486,6 +488,7 @@ actor CodexUsageCollector {
         var persistedNormalizationState = normalizationState
         var loadedStateSessionID = checkpoint.sessionID
         var pendingEvents: [UsageEvent] = []
+        var excludedEventKeys: Set<String> = []
         pendingEvents.reserveCapacity(256)
         var completedLineCount = 0
         let startingOffset = checkpoint.committedOffset
@@ -554,6 +557,7 @@ actor CodexUsageCollector {
                     persistedNormalizationState: &persistedNormalizationState,
                     loadedStateSessionID: &loadedStateSessionID,
                     pendingEvents: &pendingEvents,
+                    excludedEventKeys: &excludedEventKeys,
                     importCutoff: importCutoff
                 )
                 completedLineCount += 1
@@ -573,7 +577,8 @@ actor CodexUsageCollector {
                         normalizationState: checkpoint.sessionID == nil ? nil : normalizationState,
                         expectedEpoch: expectedEpoch,
                         expectedNormalizationState: checkpoint.sessionID == nil ? nil : persistedNormalizationState,
-                        mergesMessageUsage: provider == .claude
+                        mergesMessageUsage: provider == .claude,
+                        excludedEventKeys: excludedEventKeys
                     )
                     if let committedNormalizationState {
                         persistedNormalizationState = committedNormalizationState
@@ -582,6 +587,7 @@ actor CodexUsageCollector {
                         }
                     }
                     pendingEvents.removeAll(keepingCapacity: true)
+                    excludedEventKeys.removeAll(keepingCapacity: true)
                     completedLineCount = 0
                 }
             }
@@ -619,7 +625,8 @@ actor CodexUsageCollector {
                 normalizationState: checkpoint.sessionID == nil ? nil : normalizationState,
                 expectedEpoch: expectedEpoch,
                 expectedNormalizationState: checkpoint.sessionID == nil ? nil : persistedNormalizationState,
-                mergesMessageUsage: provider == .claude
+                mergesMessageUsage: provider == .claude,
+                excludedEventKeys: excludedEventKeys
             )
             if let committedNormalizationState,
                normalizationState.cumulativeHighWaterMark != nil {
@@ -745,11 +752,13 @@ actor CodexUsageCollector {
         persistedNormalizationState: inout UsageNormalizationState,
         loadedStateSessionID: inout String?,
         pendingEvents: inout [UsageEvent],
+        excludedEventKeys: inout Set<String>,
         importCutoff: Date?
     ) async throws {
         if provider == .claude {
             try await processClaudeLine(line, position: position, source: source,
                                         checkpoint: &checkpoint, pendingEvents: &pendingEvents,
+                                        excludedEventKeys: &excludedEventKeys,
                                         importCutoff: importCutoff)
             return
         }
@@ -902,10 +911,15 @@ actor CodexUsageCollector {
         source: CodexSessionSource,
         checkpoint: inout SourceCheckpoint,
         pendingEvents: inout [UsageEvent],
+        excludedEventKeys: inout Set<String>,
         importCutoff: Date?
     ) async throws {
         guard let observation = ClaudeJSONLParser().parse(line) else { return }
-        if let importCutoff, observation.occurredAt <= importCutoff { return }
+        let eventKey = storageIdentifier("claude-message|\(observation.messageID)")
+        if let importCutoff, observation.occurredAt <= importCutoff {
+            excludedEventKeys.insert(eventKey)
+            return
+        }
         let parentID = storageIdentifier("claude-session|\(observation.sessionID)")
         // Subagent transcripts share the parent sessionId but own their messages.
         let filename = source.url.deletingPathExtension().lastPathComponent
@@ -925,7 +939,7 @@ actor CodexUsageCollector {
         pendingEvents.append(UsageEvent(
             // A response may be repeated for text/tool blocks and in copied history.
             // Its message ID, not a line UUID, file path or timestamp, is the identity.
-            eventKey: storageIdentifier("claude-message|\(observation.messageID)"),
+            eventKey: eventKey,
             occurredAt: observation.occurredAt,
             sessionID: sessionID,
             model: observation.model,

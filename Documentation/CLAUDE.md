@@ -35,6 +35,8 @@ One API response can appear in multiple text/tool blocks or copied history. Its 
 
 Claude data lives in `Claude.sqlite`, alongside but separate from the existing `CodexMeter.sqlite`. It is not mixed with local Codex usage or ChatGPT profile totals. Clear/rebuild applies only to the service named in Settings; original transcripts remain untouched.
 
+Clearing Claude history retains only the hashed identities of excluded responses in `claude_message_exclusions`, alongside the cutoff. This prevents later streaming blocks or copied transcripts from restoring a cleared response, including after a restart or rebuild. No cleared token counts, message contents, or raw identifiers are retained in that exclusion table. The additive table is created only for Claude imports; the Codex database schema is unchanged.
+
 Claude account limits, web/mobile account-wide totals, account switching, attachment counts, and API-equivalent cost estimates are **not supported in this version**. An unknown price is unavailable, never a zero-cost claim. No Claude credential or settings file is read or changed.
 
 ## Verification

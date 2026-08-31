@@ -281,7 +281,8 @@ actor SQLiteDatabase {
         normalizationState: UsageNormalizationState?,
         expectedEpoch: Int64? = nil,
         expectedNormalizationState: UsageNormalizationState? = nil,
-        mergesMessageUsage: Bool = false
+        mergesMessageUsage: Bool = false,
+        excludedEventKeys: Set<String> = []
     ) throws -> UsageNormalizationState? {
         try execute("BEGIN IMMEDIATE")
         do {
@@ -292,11 +293,15 @@ actor SQLiteDatabase {
                try normalizationStateWithinTransaction(for: sessionID) != expectedNormalizationState {
                 throw SQLiteDatabaseError.staleScan
             }
-            if !events.isEmpty,
+            if (!events.isEmpty || !excludedEventKeys.isEmpty),
                try allocatedDatabaseBytesWithinTransaction() >= databaseByteLimit {
                 throw SQLiteDatabaseError.resourceLimit(
                     "The local CodexMeter database reached its 1 GB safety limit"
                 )
+            }
+            if mergesMessageUsage {
+                try prepareMessageExclusions()
+                try excludeMessages(excludedEventKeys)
             }
             var insertedEventCount = 0
             // Claude streaming blocks describe one response repeatedly. Preserve
@@ -321,13 +326,17 @@ actor SQLiteDatabase {
             let projectMerge = mergesMessageUsage
                 ? "CASE WHEN excluded.occurred_at < usage_events.occurred_at THEN COALESCE(excluded.project_path, usage_events.project_path) ELSE COALESCE(usage_events.project_path, excluded.project_path) END"
                 : "COALESCE(excluded.project_path, usage_events.project_path)"
+            let values = "?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13"
+            let insertValues = mergesMessageUsage
+                ? "SELECT \(values) WHERE NOT EXISTS (SELECT 1 FROM claude_message_exclusions WHERE event_key = ?1)"
+                : "VALUES (\(values))"
             let insert = try prepare(
                 """
                 INSERT INTO usage_events (
                     event_key, occurred_at, session_id, model, project_path,
                     input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens,
                     high_context_pricing, source_path, source_generation, source_position
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                ) \(insertValues)
                 ON CONFLICT DO UPDATE SET
                     \(messageMerge)
                     session_id = \(sessionMerge),
@@ -1077,10 +1086,22 @@ actor SQLiteDatabase {
         try Self.protectDatabaseFiles(at: databaseURL)
     }
 
-    func clearLocalHistory(at cutoff: Date) throws -> ClearHistoryCompactionStatus {
+    func clearLocalHistory(at cutoff: Date, preservesMessageExclusions: Bool = false) throws -> ClearHistoryCompactionStatus {
         try execute("BEGIN IMMEDIATE")
         do {
             try incrementDataEpoch()
+            if preservesMessageExclusions {
+                try prepareMessageExclusions()
+                let statement = try prepare("""
+                    INSERT OR IGNORE INTO claude_message_exclusions(event_key)
+                    SELECT event_key FROM usage_events WHERE occurred_at <= ?1
+                    """)
+                defer { sqlite3_finalize(statement) }
+                sqlite3_bind_double(statement, 1, cutoff.timeIntervalSince1970)
+                guard sqlite3_step(statement) == SQLITE_DONE else {
+                    throw SQLiteDatabaseError.step(errorMessage)
+                }
+            }
             try execute("DELETE FROM usage_events")
             try execute("DELETE FROM parsing_state")
             try execute("DELETE FROM session_counters")
@@ -1129,6 +1150,35 @@ actor SQLiteDatabase {
             try? Self.protectDatabaseFiles(at: databaseURL)
         }
         return compactionStatus
+    }
+
+    /// Claude-only additive metadata, created only by the message-ID importer.
+    /// Keep hashes (not counts or content) across clear/rebuild so a later block
+    /// of an excluded response cannot resurrect that response's old usage.
+    private func prepareMessageExclusions() throws {
+        try execute("""
+            CREATE TABLE IF NOT EXISTS claude_message_exclusions (
+                event_key TEXT PRIMARY KEY NOT NULL
+            ) WITHOUT ROWID
+            """)
+    }
+
+    private func excludeMessages(_ eventKeys: Set<String>) throws {
+        guard !eventKeys.isEmpty else { return }
+        let insert = try prepare("INSERT OR IGNORE INTO claude_message_exclusions(event_key) VALUES (?1)")
+        defer { sqlite3_finalize(insert) }
+        let delete = try prepare("DELETE FROM usage_events WHERE event_key = ?1")
+        defer { sqlite3_finalize(delete) }
+        for eventKey in eventKeys {
+            for statement in [insert, delete] {
+                sqlite3_reset(statement)
+                sqlite3_clear_bindings(statement)
+                try bind(eventKey, at: 1, to: statement)
+                guard sqlite3_step(statement) == SQLITE_DONE else {
+                    throw SQLiteDatabaseError.step(errorMessage)
+                }
+            }
+        }
     }
 
     private func dataEpochWithinTransaction() throws -> Int64 {

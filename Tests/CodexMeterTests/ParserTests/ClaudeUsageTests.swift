@@ -160,6 +160,41 @@ final class ClaudeUsageTests: XCTestCase {
         XCTAssertEqual(sources.count, 1)
     }
 
+    func testClearedResponseCannotReturnFromLaterStreamingBlocksOrCopiedHistory() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.write([row("msg-cleared")])
+        let cutoff = try date("2026-08-31T12:00:00Z")
+        _ = try await drain(fixture.collector, now: cutoff)
+        _ = try await fixture.collector.clearLocalHistory(at: cutoff, calendar: utc, weekStart: .monday)
+
+        // Streaming blocks may have later timestamps but still describe the old response.
+        try fixture.append(row("msg-cleared", time: "2026-08-31T12:01:00Z", output: 50) + "\n")
+        try fixture.append(row("msg-new", time: "2026-08-31T12:02:00Z") + "\n")
+        let after = try await drain(fixture.collector, now: date("2026-08-31T12:03:00Z"))
+        XCTAssertEqual(after.allTime.totalTokens, 135)
+
+        // The pre-cutoff block may disappear from disk; exclusion must survive restart/rebuild.
+        try fixture.write([row("msg-cleared", time: "2026-08-31T12:01:00Z", output: 50),
+                           row("msg-new", time: "2026-08-31T12:02:00Z")])
+        let reopenedDB = try SQLiteDatabase(url: fixture.root.appendingPathComponent("Claude.sqlite"))
+        let restarted = CodexUsageCollector(database: reopenedDB, roots: [fixture.sources], provider: .claude)
+        _ = try await restarted.rebuild(now: date("2026-08-31T12:03:00Z"), calendar: utc, weekStart: .monday)
+        let rebuilt = try await drain(restarted, now: date("2026-08-31T12:03:00Z"))
+        XCTAssertEqual(rebuilt.allTime.totalTokens, 135)
+    }
+
+    func testCutoffRejectsCopiedResponseEvenWhenLaterBlockIsDiscoveredFirst() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let cutoff = try date("2026-08-31T12:00:00Z")
+        _ = try await fixture.collector.clearLocalHistory(at: cutoff, calendar: utc, weekStart: .monday)
+        try fixture.write([row("msg-old", time: "2026-08-31T12:01:00Z")], name: "a-copy.jsonl")
+        try fixture.write([row("msg-old")], name: "z-original.jsonl")
+        let result = try await drain(fixture.collector, now: date("2026-08-31T12:03:00Z"))
+        XCTAssertEqual(result.allTime.totalTokens, 0)
+    }
+
     func testDatabaseRetainsOnlyAccountingProjectionAndPrivatePermissions() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
