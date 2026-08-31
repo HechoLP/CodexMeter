@@ -17,6 +17,7 @@ Removing an entry removes its saved Keychain copy; it does not sign out of Codex
 - The default `~/.codex` login location and Codex’s `file` credential storage. CodexMeter checks the running desktop app-server’s effective home, including a shell-provided `CODEX_HOME` and its `HOME` fallback. A custom home, keyring/auto credential backend, uninspectable desktop, or conflicting managed login policy stops the operation without editing the active login.
 - Complete ChatGPT logins. API keys and externally managed access-token sessions are not imported.
 - Other CLI, IDE, or desktop Codex processes must be closed. Standard `codex` and platform-named `codex-*-apple-darwin` executables are detected. Arbitrarily renamed clients and remote clients are outside this switcher’s supported configuration.
+- Process checks use kernel owner and command metadata when macOS cannot expose an executable path. Unrelated terminal login processes, browser helpers, and widgets do not block switching. Live Codex candidates with an unavailable path still block; an unidentified live process produces a separate verification error. Nothing is force-quit by these checks.
 
 If the selected login has expired or been revoked, Codex may ask you to sign in again. **Switch** also works when the desktop is signed out and its login file is absent, so an existing saved account can be restored. A malformed or unsafe file is never treated as an absent file.
 

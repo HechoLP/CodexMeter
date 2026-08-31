@@ -117,33 +117,7 @@ final class LocalCodexAccountRuntime: CodexAccountRuntime {
     }
 
     func requireStopped() throws {
-        let count = proc_listallpids(nil, 0)
-        guard count > 0 else { throw AccountSwitchError.codexRunning }
-        var pids = [pid_t](repeating: 0, count: Int(count) + 1024)
-        let capacity = Int32(pids.count * MemoryLayout<pid_t>.size)
-        let actual = proc_listallpids(&pids, capacity)
-        guard actual > 0, actual < pids.count else { throw AccountSwitchError.codexRunning }
-        for pid in pids.prefix(Int(actual)) where pid > 0 {
-            var info = proc_bsdinfo()
-            guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size)) == MemoryLayout<proc_bsdinfo>.size else {
-                // Exited processes need no inspection; an existing process that
-                // we cannot identify must not silently bypass the stopped gate.
-                if kill(pid, 0) == 0 { throw AccountSwitchError.codexRunning }
-                continue
-            }
-            guard info.pbi_uid == getuid() else { continue }
-            // proc_info.h defines PROC_PIDPATHINFO_MAXSIZE as (4 * MAXPATHLEN),
-            // a C macro expression Swift does not import.
-            var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
-            guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else {
-                if kill(pid, 0) == 0 { throw AccountSwitchError.codexRunning }
-                continue
-            }
-            let bytes = path.prefix(while: { $0 != 0 }).map { UInt8(bitPattern: $0) }
-            if CodexProcessIdentity.isCodexExecutable(path: String(decoding: bytes, as: UTF8.self)) {
-                throw AccountSwitchError.codexRunning
-            }
-        }
+        try CodexProcessGate.requireStopped()
     }
 
     func openCodex() async throws {

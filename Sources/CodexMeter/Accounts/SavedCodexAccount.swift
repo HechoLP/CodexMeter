@@ -4,6 +4,7 @@ import Security
 enum AccountSwitchError: Error, LocalizedError, Equatable {
     case invalidLogin, unsafeFile, changedLogin, keychain, unsupportedStorage, managedAccount
     case codexRunning, quitCancelled, loginFailed, loginCancelled, tooManyAccounts, vaultFull, unavailable, busy, openCodexFirst
+    case processInspectionFailed
 
     var errorDescription: String? {
         switch self {
@@ -14,6 +15,7 @@ enum AccountSwitchError: Error, LocalizedError, Equatable {
         case .unsupportedStorage: "Switching currently requires Codex’s default home and file-based login storage. Your configuration was not changed."
         case .managedAccount: "Your managed Codex login policy does not allow this account."
         case .codexRunning: "Another Codex process is still running. Finish its work and close it before switching."
+        case .processInspectionFailed: "Could not verify whether Codex processes are closed. Your login was not changed. Try again."
         case .quitCancelled: "Codex did not quit. Finish or save your work, then try again."
         case .loginFailed: "Sign-in did not finish. Try Add Account again."
         case .loginCancelled: "Sign-in cancelled. Your current Codex login was not changed."

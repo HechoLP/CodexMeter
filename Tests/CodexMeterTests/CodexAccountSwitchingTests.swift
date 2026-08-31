@@ -497,6 +497,17 @@ final class CodexAccountSwitchingTests: XCTestCase {
             XCTAssertTrue(session.executable == session.bundle.appendingPathComponent("Contents/Resources/codex"),
                           "The detected executable must be the pinned desktop app-server.")
             try await LocalCodexAccountRuntime().checkPolicy(for: nil)
+            let inspector = SystemCodexProcessInspector()
+            let blockers = try CodexProcessGate.runningCodexPIDs(using: inspector)
+            XCTAssertFalse(blockers.isEmpty, "The running desktop's Codex process must still block replacement.")
+            for pid in blockers {
+                if let path = inspector.executablePath(for: pid) {
+                    XCTAssertTrue(CodexProcessIdentity.isCodexExecutable(path: path))
+                } else if let info = inspector.metadata(for: pid) {
+                    XCTAssertTrue(info.command == "codex" || info.command.hasPrefix("codex-"))
+                }
+            }
+            print("Read-only process verification: \(blockers.count) Codex blockers; no application or login changed.")
         } catch let error as AccountSwitchError {
             XCTFail("Read-only desktop policy probe failed: \(error.errorDescription ?? "Unavailable")")
         } catch {
@@ -702,6 +713,19 @@ final class CodexAccountSwitchingTests: XCTestCase {
         XCTAssertEqual(harness.store.currentID, harness.departing.id)
         XCTAssertFalse(harness.store.isBusy)
         XCTAssertFalse(AccountSwitchActivity.isSwitching)
+    }
+
+    func testUnidentifiedProcessReopensOriginalLoginWithoutClaimingCodexIsRunning() async throws {
+        let harness = try makeHarness()
+        harness.runtime.stoppedError = .processInspectionFailed
+
+        await harness.store.switchAccount(to: harness.target.id)
+
+        XCTAssertEqual(harness.store.message, AccountSwitchError.processInspectionFailed.errorDescription)
+        XCTAssertEqual(harness.login.data, harness.departing.loginData)
+        XCTAssertEqual(harness.login.replaceCount, 0)
+        XCTAssertEqual(harness.runtime.openCount, 1)
+        XCTAssertEqual(harness.store.currentID, harness.departing.id)
     }
 
     func testKeychainReadFailureDoesNotMutateAnything() async throws {
