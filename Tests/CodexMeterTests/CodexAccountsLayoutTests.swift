@@ -8,6 +8,87 @@ import XCTest
 final class CodexAccountsLayoutTests: XCTestCase {
     private static let renderScale: CGFloat = 2
 
+    func testAccountsAreOutsideSettings() {
+        XCTAssertEqual(SettingsCategory.allCases.map(\.title),
+                       ["General", "Menu Bar", "Usage & Privacy", "Local Data", "Diagnostics", "Information"])
+    }
+
+    func testMenuTitlesDisambiguateWorkspacesAndDoNotContainCredentials() throws {
+        let fixture = try AccountLayoutFixture(state: .populated)
+        let saved = fixture.store.accounts
+        let titles = saved.map { $0.menuTitle(in: saved) }
+        XCTAssertEqual(Set(titles).count, saved.count)
+        XCTAssertEqual(titles[0], "alex@example.com · personal")
+        XCTAssertEqual(titles[1], "alex@example.com · research")
+        XCTAssertEqual(titles[2], "jamie@example.com")
+        for title in titles {
+            XCTAssertFalse(title.contains("synthetic-layout-access"))
+            XCTAssertFalse(title.contains("synthetic-layout-refresh"))
+        }
+    }
+
+    func testAccountSwitcherFitsBothPopoverTabsAndAppearancesWithoutChangingLogin() async throws {
+        _ = NSApplication.shared
+        for state: AccountLayoutState in [.empty, .populated, .longEmail, .error, .busy, .maximum] {
+            for section in MenuPopoverSection.allCases {
+                for dark in [false, true] {
+                    let fixture = try AccountLayoutFixture(state: state)
+                    defer { fixture.finishPendingOperations() }
+                    if state == .error {
+                        fixture.runtime.policyError = .unsupportedStorage
+                        await fixture.store.saveCurrent()
+                    } else if state == .busy {
+                        fixture.store.addAccount()
+                    }
+                    let name = "switcher-\(section.rawValue)-\(state.rawValue)-\(dark ? "dark" : "light")"
+                    let host = NSHostingView(rootView:
+                        MenuPopoverView(accounts: fixture.store, section: section)
+                            .environmentObject(UsageStore())
+                            .environmentObject(ProfileUsageStore())
+                            .environmentObject(AccountLimitStore(pollingInterval: nil))
+                            .environment(\.colorScheme, dark ? .dark : .light)
+                            .environment(\.displayScale, Self.renderScale)
+                    )
+                    host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 372, height: 600),
+                                          styleMask: [.borderless], backing: .buffered, defer: false)
+                    window.isReleasedWhenClosed = false
+                    window.contentView = host
+                    defer { window.contentView = nil }
+                    for _ in 0..<8 {
+                        window.setContentSize(host.fittingSize)
+                        host.setFrameSize(host.fittingSize)
+                        host.layoutSubtreeIfNeeded()
+                        await Task.yield()
+                    }
+                    XCTAssertEqual(host.bounds.width, MenuPopoverMetrics.width, name)
+                    XCTAssertLessThanOrEqual(host.bounds.height, 740, name)
+                    XCTAssertTrue(descendants(of: NSScrollView.self, in: host).isEmpty, name)
+                    let bitmap = try renderBitmap(of: host)
+                    try captureIfRequested(bitmap, name: name)
+                    let text = try recognizedText(in: bitmap)
+                    assertAction("Switch",
+                                 identifier: "menu.accountSwitcher", enabled: true,
+                                 in: host, text: text, context: name)
+                    let lines = text.compactMap { $0.topCandidates(1).first?.string }
+                    if state == .empty {
+                        XCTAssertTrue(normalized(lines.joined(separator: " ")).contains("codexaccount"), name)
+                    } else if state != .longEmail {
+                        XCTAssertTrue(lines.contains { $0.contains("@example.com") }, name)
+                    }
+                    if state == .error, let message = fixture.store.message {
+                        XCTAssertTrue(normalized(lines.joined(separator: " ")).contains(normalized(message)),
+                                      "\(name): complete error must stay visible: \(lines)")
+                    }
+                    assertNoHorizontalControlOverflow(in: host, context: name)
+                    XCTAssertEqual(fixture.login.replaceCount, 0, name)
+                    XCTAssertEqual(fixture.vault.saveCount, 0, name)
+                    XCTAssertEqual(fixture.runtime.applicationActionCount, 0, name)
+                }
+            }
+        }
+    }
+
     func testEmptyAccountsFitNativeWindowSizesAndAppearances() async throws {
         try await assertLayouts(for: .empty)
     }
@@ -266,16 +347,21 @@ final class CodexAccountsLayoutTests: XCTestCase {
     }
 }
 
-private enum AccountLayoutState: String {
-    case empty, populated, longEmail = "long-email", error, busy
+enum AccountLayoutState: String {
+    case empty, populated, longEmail = "long-email", error, busy, maximum
 }
 
 @MainActor
-private struct AccountLayoutFixture {
+struct AccountLayoutFixture {
     let store: CodexAccountStore
     let vault: AccountLayoutVault
     let login: AccountLayoutLogin
     let runtime: AccountLayoutRuntime
+
+    static func emptyStore() -> CodexAccountStore {
+        CodexAccountStore(vault: AccountLayoutVault(accounts: []), login: AccountLayoutLogin(data: nil),
+                          runtime: AccountLayoutRuntime(), acquireLock: { nil })
+    }
 
     init(state: AccountLayoutState) throws {
         let saved: [SavedCodexAccount]
@@ -294,6 +380,8 @@ private struct AccountLayoutFixture {
         case .error, .busy:
             saved = try [Self.account(email: "alex@example.com", workspace: "workspace-personal"),
                          Self.account(email: "jamie@example.com", workspace: "workspace-research")]
+        case .maximum:
+            saved = try (1...12).map { try Self.account(email: "account\($0)@example.com", workspace: "workspace-\($0)") }
         }
         vault = AccountLayoutVault(accounts: saved)
         login = AccountLayoutLogin(data: saved.first?.loginData)
@@ -323,7 +411,7 @@ private struct AccountLayoutFixture {
     }
 }
 
-private final class AccountLayoutVault: AccountVault {
+final class AccountLayoutVault: AccountVault {
     private var accounts: [SavedCodexAccount]
     private(set) var saveCount = 0
     init(accounts: [SavedCodexAccount]) { self.accounts = accounts }
@@ -331,7 +419,7 @@ private final class AccountLayoutVault: AccountVault {
     func save(_ accounts: [SavedCodexAccount]) throws { saveCount += 1; self.accounts = accounts }
 }
 
-private final class AccountLayoutLogin: CodexLoginStoring {
+final class AccountLayoutLogin: CodexLoginStoring {
     private var data: Data?
     private(set) var replaceCount = 0
     init(data: Data?) { self.data = data }
@@ -344,7 +432,7 @@ private final class AccountLayoutLogin: CodexLoginStoring {
 }
 
 @MainActor
-private final class AccountLayoutRuntime: CodexAccountRuntime {
+final class AccountLayoutRuntime: CodexAccountRuntime {
     var policyError: AccountSwitchError?
     private(set) var applicationActionCount = 0
     private var signInContinuation: CheckedContinuation<SavedCodexAccount, Error>?

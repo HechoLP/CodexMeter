@@ -174,12 +174,13 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 
 ## Settings
 
+Switch Codex accounts directly from the account menu at the top of the menu-bar popover. Choose a saved account, or **Add Account…** / **Manage Accounts…** without opening Settings. Switching still asks before restarting Codex. See [Accounts](Documentation/ACCOUNTS.md).
+
 | Pane | Controls |
 | --- | --- |
 | General | Launch at Login, refresh mode, week start, and macOS automatic updates |
 | Appearance | Period, metric, number style, icon/text visibility, popover details |
 | Usage | Account totals, read-only limits, cost/projects/sessions/agent/attachment visibility, privacy boundary, and accounting semantics |
-| Accounts | Save current login, add another account, switch after confirmation, and remove saved logins |
 | Data | Local/limit/pricing source status, database statistics, rebuild, clear history |
 | Advanced | Privacy-safe diagnostics, log folder, and account-limit provider status |
 

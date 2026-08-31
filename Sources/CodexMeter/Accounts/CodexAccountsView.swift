@@ -5,14 +5,13 @@ import SwiftUI
 // and a protected restart confirmation. No quota-driven rotation or decorative cards.
 struct CodexAccountsView: View {
     @ObservedObject var accounts: CodexAccountStore
-    var showsHeading = true
     @State private var pendingSwitch: SavedCodexAccount?
     @State private var pendingRemoval: SavedCodexAccount?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                if showsHeading { Text("Codex Accounts").font(.title2.weight(.semibold)) }
+                Text("Codex Accounts").font(.title2.weight(.semibold))
                 Spacer()
                 if accounts.isBusy {
                     ProgressView().controlSize(.small).accessibilityLabel("Account operation in progress")
@@ -90,17 +89,7 @@ struct CodexAccountsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             accounts.load()
         }
-        .alert("Switch Codex account?", isPresented: Binding(
-            get: { pendingSwitch != nil }, set: { if !$0 { pendingSwitch = nil } }
-        ), presenting: pendingSwitch) { account in
-            Button("Cancel", role: .cancel) { pendingSwitch = nil }
-            Button("Quit Codex & Switch") {
-                pendingSwitch = nil
-                Task { await accounts.switchAccount(to: account.id) }
-            }
-        } message: { account in
-            Text("Codex will quit and reopen as \(account.email). Finish any running tasks and save your work first. Other Codex processes must also be closed.")
-        }
+        .modifier(CodexAccountSwitchConfirmation(accounts: accounts, selection: $pendingSwitch))
         .alert("Remove saved account?", isPresented: Binding(
             get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }
         ), presenting: pendingRemoval) { account in

@@ -57,7 +57,7 @@ struct CodexMeterApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuPopoverView()
+            MenuPopoverView(accounts: .shared)
                 .environmentObject(store)
                 .environmentObject(profileStore)
                 .environmentObject(accountLimitStore)
