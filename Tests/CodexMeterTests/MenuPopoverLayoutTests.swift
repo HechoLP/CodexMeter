@@ -5,6 +5,29 @@ import XCTest
 
 @MainActor
 final class MenuPopoverLayoutTests: XCTestCase {
+    func testNativeProviderPickerWritesTheSelectedServicePreference() throws {
+        _ = NSApplication.shared
+        let suite = "CodexMeter.ProviderInteractionTests.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(UsageProvider.codex.rawValue, forKey: "usageProvider")
+        let host = NSHostingView(rootView:
+            MenuPopoverView(accounts: AccountLayoutFixture.emptyStore())
+                .environmentObject(UsageStore(automaticallyRefresh: false, defaults: defaults))
+                .environmentObject(ProfileUsageStore())
+                .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                .defaultAppStorage(defaults)
+        )
+        host.setFrameSize(host.fittingSize)
+        host.layoutSubtreeIfNeeded()
+        let selector = try XCTUnwrap(descendants(of: NSSegmentedControl.self, in: host).first)
+        for (segment, provider) in [(1, UsageProvider.claude), (0, UsageProvider.codex)] {
+            selector.selectedSegment = segment
+            XCTAssertTrue(selector.sendAction(selector.action, to: selector.target))
+            XCTAssertEqual(defaults.string(forKey: "usageProvider"), provider.rawValue)
+        }
+    }
+
     func testClaudeAndCodexProviderScreensFitBothAppearances() throws {
         _ = NSApplication.shared
         let defaults = UserDefaults.standard
@@ -180,6 +203,15 @@ final class MenuPopoverLayoutTests: XCTestCase {
         XCTAssertNil(navigation.destination)
         navigation.back()
         XCTAssertTrue(navigation.path.isEmpty)
+    }
+
+    func testDisablingCostEstimatesRestoresTokenChartWithoutLosingSelection() {
+        let navigation = MenuNavigation(path: [.usage])
+        navigation.chartMetric = .cost
+        XCTAssertEqual(navigation.chartMetric.resolved(costEstimatesEnabled: false), .tokens)
+        XCTAssertEqual(navigation.chartMetric, .cost)
+        XCTAssertEqual(navigation.chartMetric.resolved(costEstimatesEnabled: true), .cost)
+        XCTAssertEqual(AnalyticsChartMetric.tokens.resolved(costEstimatesEnabled: true), .tokens)
     }
 
     func testEveryDestinationKeepsThePopoverWidthAndBoundedHeight() {

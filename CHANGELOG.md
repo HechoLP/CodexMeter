@@ -4,6 +4,12 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Refresh previously opened 7D/30D analysis after imports, calendar changes, rebuilds, and history clearing; discard superseded in-flight analytics results.
+- Keep cleared Claude responses excluded when later streaming blocks or copied transcripts appear, including across restarts and rebuilds.
+- Show the token chart when cost estimates are turned off, even if Cost was previously selected.
+
 ### Added
 
 - Claude Code local token usage with Today/week/month/history totals, model/project/session analytics, and sub-agent relationships.

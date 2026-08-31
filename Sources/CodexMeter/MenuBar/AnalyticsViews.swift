@@ -153,6 +153,10 @@ enum AnalyticsChartMetric: String, CaseIterable, Identifiable {
 
     var id: Self { self }
     var title: String { self == .tokens ? "Tokens" : "Cost" }
+
+    func resolved(costEstimatesEnabled: Bool) -> Self {
+        costEstimatesEnabled ? self : .tokens
+    }
 }
 
 /// One compact header followed by a content-fitting, height-limited viewport.
@@ -201,7 +205,9 @@ struct UsageAnalyticsView: View {
     @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
 
     private var range: AnalyticsRange { navigation.usageRange }
-    private var chartMetric: AnalyticsChartMetric { navigation.chartMetric }
+    private var chartMetric: AnalyticsChartMetric {
+        navigation.chartMetric.resolved(costEstimatesEnabled: costEstimatesEnabled)
+    }
     private var selectedBucketDate: Date? { navigation.selectedBucketDate }
 
     var body: some View {
