@@ -22,6 +22,8 @@ The command verifies the matching tag, clean worktree, release notes, and public
 
 The verifier requires an ad-hoc signature, rejects an Apple certificate authority, checks that Hardened Runtime is absent, and validates the app metadata, empty entitlement allowlist, embedded Sparkle framework, Universal 2 architectures, archive contents, and checksums. `Scripts/generate_appcast.sh` separately verifies the feed signature, archive signature, byte length, and download URL.
 
+Signed-feed validation never falls back to unauthenticated update offers: `SUSignedFeedFailureExpirationInterval` is explicitly `0`. The app startup gate and `Scripts/verify_update_policy.sh` require this policy; release verification applies it to the original app and the apps extracted from both ZIP and DMG. Keep the existing signing key available when rotating keys—do not temporarily disable feed authentication to recover from a signature failure. Certificate-free releases still require authenticated update metadata and pre-extraction archive verification.
+
 ## macOS release
 
 The macOS app uses one immutable `vVERSION` tag and one public release in `HechoLP/CodexMeter`.
