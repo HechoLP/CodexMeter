@@ -3,7 +3,7 @@ import Security
 
 enum AccountSwitchError: Error, LocalizedError, Equatable {
     case invalidLogin, unsafeFile, changedLogin, keychain, unsupportedStorage, managedAccount
-    case codexRunning, quitCancelled, loginFailed, loginCancelled, tooManyAccounts, unavailable, busy, openCodexFirst
+    case codexRunning, quitCancelled, loginFailed, loginCancelled, tooManyAccounts, vaultFull, unavailable, busy, openCodexFirst
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +18,7 @@ enum AccountSwitchError: Error, LocalizedError, Equatable {
         case .loginFailed: "Sign-in did not finish. Try Add Account again."
         case .loginCancelled: "Sign-in cancelled. Your current Codex login was not changed."
         case .tooManyAccounts: "You can save up to 12 accounts. Remove an unused account first."
+        case .vaultFull: "Saved logins exceed the storage limit. Remove an unused account and try again."
         case .unavailable: "A verified Codex installation could not be used. Update Codex and try again."
         case .busy: "Another account operation is in progress. Wait for it to finish, then try again."
         case .openCodexFirst: "Open one Codex desktop app first so its login location can be verified, then try again."
@@ -87,6 +88,7 @@ protocol AccountVault {
 }
 
 struct KeychainAccountVault: AccountVault {
+    private static let maximumEncodedBytes = 4_194_304
     let service: String
 
     init(service: String = "com.hecholp.codexmeter.saved-codex-accounts.v1") {
@@ -107,7 +109,7 @@ struct KeychainAccountVault: AccountVault {
         var result: CFTypeRef?
         let status = SecItemCopyMatching(request as CFDictionary, &result)
         if status == errSecItemNotFound { return [] }
-        guard status == errSecSuccess, let data = result as? Data, data.count <= 4_194_304,
+        guard status == errSecSuccess, let data = result as? Data, data.count <= Self.maximumEncodedBytes,
               let accounts = try? JSONDecoder().decode([SavedCodexAccount].self, from: data),
               accounts.count <= 12
         else { throw AccountSwitchError.keychain }
@@ -125,7 +127,7 @@ struct KeychainAccountVault: AccountVault {
             guard status == errSecSuccess || status == errSecItemNotFound else { throw AccountSwitchError.keychain }
             return
         }
-        let data = try JSONEncoder().encode(accounts)
+        let data = try Self.encodedForStorage(accounts)
         let changes = [kSecValueData as String: data]
         let status = SecItemUpdate(query as CFDictionary, changes as CFDictionary)
         if status == errSecItemNotFound {
@@ -136,5 +138,14 @@ struct KeychainAccountVault: AccountVault {
         } else if status != errSecSuccess {
             throw AccountSwitchError.keychain
         }
+    }
+
+    static func encodedForStorage(_ accounts: [SavedCodexAccount]) throws -> Data {
+        guard accounts.count <= 12 else { throw AccountSwitchError.tooManyAccounts }
+        let data = try JSONEncoder().encode(accounts)
+        // Base64 plus account metadata can exceed the reader's bound even when
+        // every individual login fits. Reject before updating the existing item.
+        guard data.count <= maximumEncodedBytes else { throw AccountSwitchError.vaultFull }
+        return data
     }
 }

@@ -71,6 +71,23 @@ final class CodexAccountSwitchingTests: XCTestCase {
         XCTAssertEqual(try SavedCodexAccount(loginData: data).loginData, data)
     }
 
+    func testVaultRejectsOversizedEncodedPayloadBeforeKeychainMutation() throws {
+        let accounts = try (0..<12).map { index -> SavedCodexAccount in
+            let base = try changing(account(workspace: "workspace-\(index)").loginData) { $0["padding"] = "" }
+            let data = try changing(base) { $0["padding"] = String(repeating: "x", count: 262_144 - base.count) }
+            XCTAssertEqual(data.count, 262_144)
+            return try SavedCodexAccount(loginData: data)
+        }
+        XCTAssertGreaterThan(try JSONEncoder().encode(accounts).count, 4_194_304)
+        // Pure encoding boundary: never instantiate or access the real Keychain.
+        XCTAssertThrowsError(try KeychainAccountVault.encodedForStorage(accounts)) {
+            XCTAssertEqual($0 as? AccountSwitchError, .vaultFull)
+        }
+        let smaller = Array(accounts.prefix(11))
+        let encoded = try KeychainAccountVault.encodedForStorage(smaller)
+        XCTAssertEqual(try JSONDecoder().decode([SavedCodexAccount].self, from: encoded), smaller)
+    }
+
     func testLoginReadAcceptsPrivateAndReadOnlyOwnerFiles() throws {
         let original = try account().loginData
         for permissions in [mode_t(0o600), mode_t(0o400)] {
