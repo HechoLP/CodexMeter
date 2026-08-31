@@ -21,7 +21,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var analyticsStatusMessage = "Analytics are ready to load"
 
     private let formatter = TokenFormatter()
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private var collector: CodexUsageCollector?
     private var sourceRoots: [URL] = []
     private var watcher: CodexSessionWatcher?
@@ -34,6 +34,9 @@ final class UsageStore: ObservableObject {
     private var timeZoneChangeTask: Task<Void, Never>?
     private var calendarBoundaryTask: Task<Void, Never>?
     private var refreshPending = false
+    private var requestedAnalyticsRanges: Set<AnalyticsRange> = [.today]
+    private var analyticsRevision: UInt64 = 0
+    private var analyticsRequests: [AnalyticsRange: UUID] = [:]
     private var previousWeekStartRawValue = WeekStart.monday.rawValue
     private var previousRefreshModeRawValue = RefreshMode.automatic.rawValue
 
@@ -133,11 +136,16 @@ final class UsageStore: ObservableObject {
         provider: UsageProvider = .codex,
         analyticsSnapshots: [AnalyticsRange: AnalyticsSnapshot] = [:],
         initialSnapshot: UsageSnapshot? = nil,
-        automaticallyRefresh: Bool = true
+        automaticallyRefresh: Bool = true,
+        collector: CodexUsageCollector? = nil,
+        defaults: UserDefaults = .standard
     ) {
         self.provider = provider
+        self.collector = collector
+        self.defaults = defaults
         statusMessage = "Looking for \(provider.title) usage…"
         self.analyticsSnapshots = analyticsSnapshots
+        requestedAnalyticsRanges.formUnion(analyticsSnapshots.keys)
         if let initialSnapshot {
             self.snapshot = initialSnapshot
             hasLoadedSnapshot = true
@@ -248,7 +256,8 @@ final class UsageStore: ObservableObject {
             sourceCount = result.sourceCount
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
-            await refreshAnalytics(range: .today, using: collector)
+            invalidateAnalytics(clearSnapshots: false)
+            await refreshRequestedAnalytics(using: collector)
             updateWatcherForRefreshMode()
             await DiagnosticsLogger.shared.record(
                 .refreshCompleted(
@@ -309,6 +318,7 @@ final class UsageStore: ObservableObject {
         statusMessage = "Rebuilding local statistics…"
         dataOperationMessage = statusMessage
         dataOperationFailed = false
+        invalidateAnalytics(clearSnapshots: true)
         defer { isMaintainingData = false }
 
         do {
@@ -322,7 +332,7 @@ final class UsageStore: ObservableObject {
             refreshPending = false
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
-            await refreshAnalytics(range: .today, using: collector)
+            await refreshRequestedAnalytics(using: collector)
             await DiagnosticsLogger.shared.record(.rebuildCompleted(quality: result.snapshot.quality))
             statusMessage = result.hasMoreWork
                 ? "Importing local history…"
@@ -344,6 +354,7 @@ final class UsageStore: ObservableObject {
         statusMessage = "Clearing local history…"
         dataOperationMessage = statusMessage
         dataOperationFailed = false
+        invalidateAnalytics(clearSnapshots: true)
         defer { isMaintainingData = false }
 
         do {
@@ -357,7 +368,7 @@ final class UsageStore: ObservableObject {
             refreshPending = false
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
-            await refreshAnalytics(range: .today, using: collector)
+            await refreshRequestedAnalytics(using: collector)
             await DiagnosticsLogger.shared.record(.clearCompleted)
             statusMessage = result.hasMoreWork
                 ? "Importing local history…"
@@ -396,10 +407,15 @@ final class UsageStore: ObservableObject {
     }
 
     func refreshAnalytics(range: AnalyticsRange) async {
+        requestedAnalyticsRanges.insert(range)
+        guard !isMaintainingData else { return }
+        let revision = analyticsRevision
         do {
             let collector = try await collector()
+            guard revision == analyticsRevision, !isMaintainingData, !Task.isCancelled else { return }
             await refreshAnalytics(range: range, using: collector)
         } catch {
+            guard revision == analyticsRevision, !Task.isCancelled else { return }
             analyticsStatusMessage = analyticsSnapshots[range] == nil
                 ? "Analytics are unavailable"
                 : "Showing the last analytics snapshot"
@@ -407,16 +423,43 @@ final class UsageStore: ObservableObject {
     }
 
     private func refreshAnalytics(range: AnalyticsRange, using collector: CodexUsageCollector) async {
+        let request = UUID()
+        let revision = analyticsRevision
+        analyticsRequests[range] = request
         isAnalyticsRefreshing = true
-        defer { isAnalyticsRefreshing = false }
+        defer {
+            if analyticsRequests[range] == request { analyticsRequests.removeValue(forKey: range) }
+            isAnalyticsRefreshing = !analyticsRequests.isEmpty
+        }
         do {
             let snapshot = try await collector.analyticsSnapshot(range: range)
+            guard revision == analyticsRevision, analyticsRequests[range] == request,
+                  !Task.isCancelled else { return }
             analyticsSnapshots[range] = snapshot
             analyticsStatusMessage = "Analytics updated"
         } catch {
+            guard revision == analyticsRevision, analyticsRequests[range] == request,
+                  !Task.isCancelled else { return }
             analyticsStatusMessage = analyticsSnapshots[range] == nil
                 ? "Analytics are unavailable"
                 : "Showing the last analytics snapshot"
+        }
+    }
+
+    private func invalidateAnalytics(clearSnapshots: Bool) {
+        // Results already in flight must not restore data from before maintenance
+        // or supersede a newer import, even if their task finishes later.
+        analyticsRevision &+= 1
+        analyticsRequests.removeAll()
+        isAnalyticsRefreshing = false
+        if clearSnapshots { analyticsSnapshots.removeAll() }
+    }
+
+    private func refreshRequestedAnalytics(using collector: CodexUsageCollector) async {
+        let revision = analyticsRevision
+        for range in AnalyticsRange.allCases where requestedAnalyticsRanges.contains(range) {
+            guard revision == analyticsRevision, !Task.isCancelled else { return }
+            await refreshAnalytics(range: range, using: collector)
         }
     }
 
@@ -504,8 +547,8 @@ final class UsageStore: ObservableObject {
         Task { await refresh() }
     }
 
-    private func recalculateVisiblePeriods() async {
-        guard !isMaintainingData else {
+    func recalculateVisiblePeriods() async {
+        guard !isMaintainingData, !isRefreshing else {
             refreshPending = true
             return
         }
@@ -516,6 +559,8 @@ final class UsageStore: ObservableObject {
             if cached != snapshot {
                 snapshot = cached
             }
+            invalidateAnalytics(clearSnapshots: false)
+            await refreshRequestedAnalytics(using: collector)
             if cached.quality != .exact {
                 statusMessage = switch cached.quality {
                 case .partial: cached.updatedAt == nil ? "No \(provider.title) usage found" : "Updated"
