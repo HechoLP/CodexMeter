@@ -77,8 +77,16 @@ final class CodexAccountsLayoutTests: XCTestCase {
                         XCTAssertTrue(lines.contains { $0.contains("@example.com") }, name)
                     }
                     if state == .error, let message = fixture.store.message {
-                        XCTAssertTrue(normalized(lines.joined(separator: " ")).contains(normalized(message)),
-                                      "\(name): complete error must stay visible: \(lines)")
+                        // The compact caption is visibly complete, but CI's
+                        // uncorrected Vision pass can read `file` as `flle`.
+                        // Pair it with a corrected pass over the same pixels;
+                        // the clipped-message negative control below still
+                        // prevents dictionary completion from hiding truncation.
+                        let corrected = try recognizedText(in: bitmap, regionOfInterest:
+                            CGRect(x: 0, y: 0, width: 1, height: 1))
+                        let statusLines = lines + corrected.compactMap { $0.topCandidates(1).first?.string }
+                        XCTAssertTrue(normalized(statusLines.joined(separator: " ")).contains(normalized(message)),
+                                      "\(name): complete error must stay visible: \(statusLines)")
                     }
                     assertNoHorizontalControlOverflow(in: host, context: name)
                     XCTAssertEqual(fixture.login.replaceCount, 0, name)
