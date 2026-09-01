@@ -38,6 +38,7 @@ enum ClaudeIntegrationStatus: Equatable, Sendable {
     case needsAccount
     case connecting
     case ready
+    case stale
     case waitingForLimits
     case unavailable
 }
@@ -86,14 +87,26 @@ struct ClaudeCLIService: ClaudeAuthenticating {
             maximumOutputBytes: Self.maximumStatusBytes,
             acceptsNonzeroExit: true
         )
+        return try Self.account(from: data)
+    }
+
+    static func account(from data: Data) throws -> ClaudeAccount? {
+        guard !data.isEmpty else { return nil }
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object["loggedIn"] as? Bool == true
-        else { return nil }
+              let loggedIn = object["loggedIn"] as? Bool
+        else { throw ClaudeIntegrationError.malformedResponse }
+        guard loggedIn else { return nil }
+        let email = Self.safeText(object["email"])
+        let organizationID = Self.safeText(object["orgId"])
+        let stableIdentity = [organizationID, email]
+            .compactMap { $0 }
+            .joined(separator: "\u{1F}")
+        guard !stableIdentity.isEmpty else { throw ClaudeIntegrationError.malformedResponse }
         return ClaudeAccount(
-            email: Self.safeText(object["email"]),
+            email: email,
             subscriptionType: Self.safeText(object["subscriptionType"]),
             authenticationMethod: Self.safeText(object["authMethod"]),
-            stableIdentity: Self.safeText(object["orgId"]) ?? Self.safeText(object["email"])
+            stableIdentity: stableIdentity
         )
     }
 
@@ -161,15 +174,14 @@ struct ClaudeStatusLineInstaller: ClaudeStatusLineInstalling, @unchecked Sendabl
 
         var settings = try readJSONObject(at: settingsURL) ?? [:]
         let stateURL = managedDirectory.appendingPathComponent("StatusLineState.json")
-        if statusLineCommand(settings["statusLine"]) != command {
-            let state: [String: Any] = [
-                "version": 1,
-                "installedCommand": command,
-                "hadOriginal": settings["statusLine"] != nil,
-                "originalStatusLine": settings["statusLine"] ?? NSNull()
-            ]
-            try writeJSONObject(state, to: stateURL, permissions: 0o600)
-        }
+        guard statusLineCommand(settings["statusLine"]) != command else { return }
+        let state: [String: Any] = [
+            "version": 1,
+            "installedCommand": command,
+            "hadOriginal": settings["statusLine"] != nil,
+            "originalStatusLine": settings["statusLine"] ?? NSNull()
+        ]
+        try writeJSONObject(state, to: stateURL, permissions: 0o600)
         settings["statusLine"] = ["type": "command", "command": command]
         try writeJSONObject(settings, to: settingsURL, permissions: 0o600)
     }
@@ -222,11 +234,31 @@ struct ClaudeStatusLineInstaller: ClaudeStatusLineInstalling, @unchecked Sendabl
         guard fileManager.isExecutableFile(atPath: source.path) else {
             throw ClaudeIntegrationError.bridgeNotFound
         }
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
+        if bridgeMatches(source: source, destination: destination) {
+            try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: destination.path)
+            return
         }
-        try fileManager.copyItem(at: source, to: destination)
-        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: destination.path)
+        let temporary = destination.deletingLastPathComponent()
+            .appendingPathComponent(".CodexMeterClaudeBridge-\(UUID().uuidString)")
+        defer { try? fileManager.removeItem(at: temporary) }
+        try fileManager.copyItem(at: source, to: temporary)
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: temporary.path)
+        if fileManager.fileExists(atPath: destination.path) {
+            _ = try fileManager.replaceItemAt(destination, withItemAt: temporary)
+        } else {
+            try fileManager.moveItem(at: temporary, to: destination)
+        }
+    }
+
+    private func bridgeMatches(source: URL, destination: URL) -> Bool {
+        guard fileManager.fileExists(atPath: destination.path),
+              let sourceSize = try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              let destinationSize = try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              sourceSize == destinationSize,
+              let sourceData = try? Data(contentsOf: source, options: .mappedIfSafe),
+              let destinationData = try? Data(contentsOf: destination, options: .mappedIfSafe)
+        else { return false }
+        return sourceData == destinationData
     }
 
     private func readJSONObject(at url: URL) throws -> [String: Any]? {
@@ -261,6 +293,8 @@ struct ClaudeStatusLineInstaller: ClaudeStatusLineInstalling, @unchecked Sendabl
 
 @MainActor
 final class ClaudeIntegrationStore: ObservableObject {
+    private static let maximumFreshLimitAge: TimeInterval = 15 * 60
+
     @Published private(set) var isEnabled: Bool
     @Published private(set) var isConnected = false
     @Published private(set) var detectedAccount: ClaudeAccount?
@@ -276,8 +310,10 @@ final class ClaudeIntegrationStore: ObservableObject {
     private let installer: ClaudeStatusLineInstalling
     private let defaults: UserDefaults
     private let limitsURL: URL
+    private let now: @Sendable () -> Date
     private var pollingTask: Task<Void, Never>?
     private var lastAvailability = false
+    private var operationGeneration = 0
 
     init(
         authenticator: ClaudeAuthenticating = ClaudeCLIService(),
@@ -285,12 +321,14 @@ final class ClaudeIntegrationStore: ObservableObject {
         defaults: UserDefaults = .standard,
         limitsURL: URL = AppPaths.applicationSupportDirectory
             .appendingPathComponent("Claude/ClaudeLimits.json"),
+        now: @escaping @Sendable () -> Date = Date.init,
         automaticallyRefresh: Bool = true
     ) {
         self.authenticator = authenticator
         self.installer = installer
         self.defaults = defaults
         self.limitsURL = limitsURL
+        self.now = now
         let enabled = defaults.bool(forKey: "claudeEnabled")
         isEnabled = enabled
         status = enabled ? .checking : .disabled
@@ -317,14 +355,23 @@ final class ClaudeIntegrationStore: ObservableObject {
 
     func setEnabled(_ enabled: Bool) async {
         guard isEnabled != enabled else { return }
-        isEnabled = enabled
-        defaults.set(enabled, forKey: "claudeEnabled")
         if enabled {
+            isEnabled = true
+            defaults.set(true, forKey: "claudeEnabled")
             status = .checking
             statusMessage = "Checking Claude account…"
             await refresh()
         } else {
-            try? installer.uninstall()
+            cancelCurrentOperation()
+            do {
+                try installer.uninstall()
+            } catch {
+                status = .unavailable
+                statusMessage = "Claude could not be turned off safely. Try again."
+                return
+            }
+            isEnabled = false
+            defaults.set(false, forKey: "claudeEnabled")
             isConnected = false
             detectedAccount = nil
             account = nil
@@ -338,12 +385,14 @@ final class ClaudeIntegrationStore: ObservableObject {
 
     func addCurrentAccount() async {
         guard isEnabled, !isRefreshing else { return }
-        isRefreshing = true
+        let operation = beginOperation()
         status = .checking
         statusMessage = "Checking Claude account…"
-        defer { isRefreshing = false }
+        defer { finishOperation(operation) }
         do {
-            guard let found = try await authenticator.accountStatus() else {
+            let detected = try await authenticator.accountStatus()
+            guard isCurrent(operation), isEnabled else { return }
+            guard let found = detected else {
                 detectedAccount = nil
                 account = nil
                 isConnected = false
@@ -362,21 +411,23 @@ final class ClaudeIntegrationStore: ObservableObject {
             loadLimits()
             notifyAvailabilityIfNeeded()
         } catch {
-            fail(error)
+            if isCurrent(operation) { fail(error) }
         }
     }
 
     func signInAndAddAccount() async {
         guard isEnabled, !isRefreshing else { return }
-        isRefreshing = true
+        let operation = beginOperation()
         status = .connecting
         statusMessage = "Continue sign-in in your browser…"
-        defer { isRefreshing = false }
+        defer { finishOperation(operation) }
         do {
             try await authenticator.beginLogin()
             for _ in 0..<90 {
                 try await Task.sleep(for: .seconds(2))
+                guard isCurrent(operation), isEnabled else { return }
                 if let found = try await authenticator.accountStatus() {
+                    guard isCurrent(operation), isEnabled else { return }
                     clearLimitsCache()
                     try installer.install()
                     defaults.set(true, forKey: "claudeAccountLinked")
@@ -391,12 +442,19 @@ final class ClaudeIntegrationStore: ObservableObject {
             }
             throw ClaudeIntegrationError.timedOut
         } catch {
-            fail(error)
+            if isCurrent(operation) { fail(error) }
         }
     }
 
     func disconnect() async {
-        try? installer.uninstall()
+        cancelCurrentOperation()
+        do {
+            try installer.uninstall()
+        } catch {
+            status = .unavailable
+            statusMessage = "Claude could not be disconnected safely. Try again."
+            return
+        }
         defaults.set(false, forKey: "claudeAccountLinked")
         defaults.removeObject(forKey: "claudeLinkedAccountID")
         clearLimitsCache()
@@ -412,11 +470,12 @@ final class ClaudeIntegrationStore: ObservableObject {
 
     func refresh() async {
         guard isEnabled, !isRefreshing else { return }
-        isRefreshing = true
+        let operation = beginOperation()
         status = .checking
-        defer { isRefreshing = false }
+        defer { finishOperation(operation) }
         do {
             let found = try await authenticator.accountStatus()
+            guard isCurrent(operation), isEnabled else { return }
             detectedAccount = found
             let linkedIdentifier = defaults.string(forKey: "claudeLinkedAccountID")
             guard defaults.bool(forKey: "claudeAccountLinked"),
@@ -439,7 +498,7 @@ final class ClaudeIntegrationStore: ObservableObject {
             loadLimits()
             notifyAvailabilityIfNeeded()
         } catch {
-            fail(error)
+            if isCurrent(operation) { fail(error) }
         }
     }
 
@@ -461,8 +520,23 @@ final class ClaudeIntegrationStore: ObservableObject {
             windows.append(limitWindow(id: "claude-five-hour", duration: 300, source: session))
         }
         snapshot = AccountLimitsSnapshot(windows: windows, resetCredits: nil, fetchedAt: bridgeSnapshot.fetchedAt)
-        status = windows.isEmpty ? .waitingForLimits : .ready
-        statusMessage = windows.isEmpty ? "Use Claude Code once, then refresh" : "Claude limits updated"
+        guard !windows.isEmpty else {
+            status = .waitingForLimits
+            statusMessage = "Use Claude Code once, then refresh"
+            return
+        }
+        let currentDate = now()
+        let age = currentDate.timeIntervalSince(bridgeSnapshot.fetchedAt)
+        let resetHasPassed = windows.contains { window in
+            window.resetsAt.map { $0 <= currentDate } ?? false
+        }
+        if age > Self.maximumFreshLimitAge || age < -300 || resetHasPassed {
+            status = .stale
+            statusMessage = "Use Claude Code to update limits"
+        } else {
+            status = .ready
+            statusMessage = "Claude limits updated"
+        }
     }
 
     private func clearLimitsCache() {
@@ -486,6 +560,13 @@ final class ClaudeIntegrationStore: ObservableObject {
     }
 
     private func fail(_ error: Error) {
+        if isConnected, account != nil {
+            status = .stale
+            statusMessage = snapshot == nil
+                ? "Claude account check failed. Try again."
+                : "Showing last known Claude limits"
+            return
+        }
         isConnected = false
         account = nil
         snapshot = nil
@@ -498,6 +579,26 @@ final class ClaudeIntegrationStore: ObservableObject {
         guard isAvailable != lastAvailability else { return }
         lastAvailability = isAvailable
         onAvailabilityChanged?(isAvailable)
+    }
+
+    private func beginOperation() -> Int {
+        operationGeneration += 1
+        isRefreshing = true
+        return operationGeneration
+    }
+
+    private func finishOperation(_ operation: Int) {
+        guard operationGeneration == operation else { return }
+        isRefreshing = false
+    }
+
+    private func cancelCurrentOperation() {
+        operationGeneration += 1
+        isRefreshing = false
+    }
+
+    private func isCurrent(_ operation: Int) -> Bool {
+        operationGeneration == operation
     }
 }
 
@@ -518,16 +619,13 @@ private enum ClaudeCommandRunner {
         )
         defer { try? FileManager.default.removeItem(at: directory) }
         let outputURL = directory.appendingPathComponent("stdout")
-        let errorURL = directory.appendingPathComponent("stderr")
         FileManager.default.createFile(atPath: outputURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
-        FileManager.default.createFile(atPath: errorURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
         let output = try FileHandle(forWritingTo: outputURL)
-        let error = try FileHandle(forWritingTo: errorURL)
-        defer { try? output.close(); try? error.close() }
+        defer { try? output.close() }
 
         let box = ClaudeRunningProcessBox(executable: executable, arguments: arguments)
         box.process.standardOutput = output
-        box.process.standardError = error
+        box.process.standardError = FileHandle.nullDevice
         do { try box.process.run() } catch { throw ClaudeIntegrationError.processFailed }
 
         let status = try await withThrowingTaskGroup(of: Int32.self) { group in

@@ -122,25 +122,45 @@ private struct ServiceSettingsView: View {
                     get: { claude.isEnabled },
                     set: { enabled in Task { await claude.setEnabled(enabled) } }
                 ))
+                .accessibilityHint("Claude appears in the menu only after an account is added.")
 
                 if claude.isEnabled {
                     if claude.isConnected, let account = claude.account {
-                        LabeledContent("Account", value: account.displayName)
+                        LabeledContent("Account") {
+                            Text(account.displayName)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(account.displayName)
+                        }
                         if let plan = account.planName {
                             LabeledContent("Plan", value: plan)
                         }
-                        LabeledContent("Limits", value: claude.statusMessage)
+                        LabeledContent("Limits") {
+                            Text(claude.statusMessage)
+                                .multilineTextAlignment(.trailing)
+                                .lineLimit(2)
+                        }
                         HStack {
                             Button("Refresh") { Task { await claude.refresh() } }
                                 .disabled(claude.isRefreshing)
-                            Button("Disconnect from CodexMeter", role: .destructive) {
+                            Button("Disconnect", role: .destructive) {
                                 Task { await claude.disconnect() }
                             }
                         }
                     } else {
-                        LabeledContent("Status", value: claude.statusMessage)
+                        LabeledContent("Status") {
+                            Text(claude.statusMessage)
+                                .multilineTextAlignment(.trailing)
+                                .lineLimit(2)
+                        }
                         if let account = claude.detectedAccount {
-                            Button("Add \(account.displayName)") {
+                            LabeledContent("Detected account") {
+                                Text(account.displayName)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help(account.displayName)
+                            }
+                            Button("Add Account") {
                                 Task { await claude.addCurrentAccount() }
                             }
                             .disabled(claude.isRefreshing)
@@ -151,7 +171,7 @@ private struct ServiceSettingsView: View {
                             .disabled(claude.isRefreshing)
                         }
                         if claude.isRefreshing {
-                            ProgressView()
+                            ProgressView("Checking Claude…")
                                 .controlSize(.small)
                         }
                     }

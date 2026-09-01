@@ -150,7 +150,9 @@ struct AccountLimitsView: View {
             ageText = "\(days) \(days == 1 ? "day" : "days") ago"
         }
         if status == .stale {
-            return "Offline · last updated \(ageText)"
+            return provider == .codex
+                ? "Offline · last updated \(ageText)"
+                : "Last known · updated \(ageText)"
         }
         return "Updated \(ageText)"
     }

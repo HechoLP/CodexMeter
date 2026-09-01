@@ -267,8 +267,12 @@ struct MenuPopoverView: View {
                         }
                         if currentLimitStatus == .stale {
                             compactLimitStatus(
-                                "Offline · showing last known limits",
-                                symbol: "wifi.slash"
+                                store.provider == .codex
+                                    ? "Offline · showing last known limits"
+                                    : "Last known limits · use Claude Code to update",
+                                symbol: store.provider == .codex
+                                    ? "wifi.slash"
+                                    : "clock.badge.exclamationmark"
                             )
                         }
                     }
@@ -813,6 +817,7 @@ struct MenuPopoverView: View {
         case .disabled: .disabled
         case .checking, .connecting: .loading
         case .ready: .ready
+        case .stale: .stale
         case .waitingForLimits, .needsAccount, .unavailable: .unavailable
         }
     }

@@ -4,6 +4,23 @@ import XCTest
 @testable import CodexMeter
 
 final class ClaudeRateLimitCodecTests: XCTestCase {
+    func testAccountIdentityDistinguishesEmailsWithinTheSameOrganization() throws {
+        let first = try XCTUnwrap(try ClaudeCLIService.account(from: Data(#"{"loggedIn":true,"orgId":"shared-org","email":"first@example.com"}"#.utf8)))
+        let second = try XCTUnwrap(try ClaudeCLIService.account(from: Data(#"{"loggedIn":true,"orgId":"shared-org","email":"second@example.com"}"#.utf8)))
+
+        XCTAssertNotEqual(first.linkIdentifier, second.linkIdentifier)
+        XCTAssertEqual(first.email, "first@example.com")
+        XCTAssertEqual(second.email, "second@example.com")
+    }
+
+    func testLoggedInAccountWithoutAStableIdentityIsRejected() {
+        XCTAssertThrowsError(
+            try ClaudeCLIService.account(from: Data(#"{"loggedIn":true,"subscriptionType":"pro"}"#.utf8))
+        ) { error in
+            XCTAssertEqual(error as? ClaudeIntegrationError, .malformedResponse)
+        }
+    }
+
     func testParsesOnlyDocumentedFiveHourAndSevenDayFields() throws {
         let data = Data(#"{"rate_limits":{"five_hour":{"used_percentage":42.5,"resets_at":1800000000},"seven_day":{"used_percentage":75,"resets_at":1800100000}},"session_id":"private","transcript_path":"/private/path"}"#.utf8)
         let fetchedAt = Date(timeIntervalSince1970: 1_700_000_000)
@@ -89,10 +106,12 @@ final class ClaudeIntegrationStoreTests: XCTestCase {
             installer: installer,
             defaults: fixture.defaults,
             limitsURL: fixture.limitsURL,
+            now: { Date(timeIntervalSince1970: 1_700_000_060) },
             automaticallyRefresh: false
         )
 
         await store.refresh()
+        XCTAssertEqual(store.status, .ready)
         XCTAssertEqual(store.snapshot?.windows.map(\.windowDurationMinutes), [10_080, 300])
         XCTAssertEqual(store.snapshot?.windows.map(\.remainingPercent), [70, 80])
         await store.setEnabled(false)
@@ -128,6 +147,121 @@ final class ClaudeIntegrationStoreTests: XCTestCase {
         XCTAssertEqual(store.status, .needsAccount)
         XCTAssertEqual(store.statusMessage, "Add this Claude account to CodexMeter")
     }
+
+    func testOldLimitSnapshotIsKeptButMarkedStale() async throws {
+        let fixture = try ClaudeIntegrationFixture()
+        defer { fixture.cleanup() }
+        let fetchedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let currentDate = fetchedAt.addingTimeInterval(16 * 60)
+        fixture.defaults.set(true, forKey: "claudeEnabled")
+        try FileManager.default.createDirectory(at: fixture.limitsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let limits = ClaudeRateLimitSnapshot(
+            fiveHour: ClaudeRateLimitWindow(usedPercentage: 45, resetsAt: currentDate.addingTimeInterval(3_600)),
+            sevenDay: ClaudeRateLimitWindow(usedPercentage: 65, resetsAt: currentDate.addingTimeInterval(86_400)),
+            fetchedAt: fetchedAt
+        )
+        try ClaudeRateLimitCodec.encode(limits).write(to: fixture.limitsURL)
+        let account = ClaudeAccount(email: "person@example.com", subscriptionType: "pro", authenticationMethod: "claude.ai")
+        fixture.defaults.set(true, forKey: "claudeAccountLinked")
+        fixture.defaults.set(account.linkIdentifier, forKey: "claudeLinkedAccountID")
+        let store = ClaudeIntegrationStore(
+            authenticator: StaticClaudeAuthenticator(account: account),
+            installer: RecordingClaudeInstaller(),
+            defaults: fixture.defaults,
+            limitsURL: fixture.limitsURL,
+            now: { currentDate },
+            automaticallyRefresh: false
+        )
+
+        await store.refresh()
+
+        XCTAssertTrue(store.isAvailable)
+        XCTAssertNotNil(store.snapshot)
+        XCTAssertEqual(store.status, .stale)
+        XCTAssertEqual(store.statusMessage, "Use Claude Code to update limits")
+    }
+
+    func testTransientAccountCheckFailureKeepsLastKnownConnectionAndLimits() async throws {
+        let fixture = try ClaudeIntegrationFixture()
+        defer { fixture.cleanup() }
+        let currentDate = Date(timeIntervalSince1970: 1_700_000_000)
+        fixture.defaults.set(true, forKey: "claudeEnabled")
+        try FileManager.default.createDirectory(at: fixture.limitsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let limits = ClaudeRateLimitSnapshot(
+            fiveHour: ClaudeRateLimitWindow(usedPercentage: 20, resetsAt: currentDate.addingTimeInterval(3_600)),
+            sevenDay: nil,
+            fetchedAt: currentDate
+        )
+        try ClaudeRateLimitCodec.encode(limits).write(to: fixture.limitsURL)
+        let account = ClaudeAccount(email: "person@example.com", subscriptionType: "pro", authenticationMethod: "claude.ai")
+        fixture.defaults.set(true, forKey: "claudeAccountLinked")
+        fixture.defaults.set(account.linkIdentifier, forKey: "claudeLinkedAccountID")
+        let authenticator = SwitchableClaudeAuthenticator(account: account)
+        let store = ClaudeIntegrationStore(
+            authenticator: authenticator,
+            installer: RecordingClaudeInstaller(),
+            defaults: fixture.defaults,
+            limitsURL: fixture.limitsURL,
+            now: { currentDate },
+            automaticallyRefresh: false
+        )
+        await store.refresh()
+        let lastKnown = store.snapshot
+
+        await authenticator.setShouldFail(true)
+        await store.refresh()
+
+        XCTAssertTrue(store.isAvailable)
+        XCTAssertEqual(store.account, account)
+        XCTAssertEqual(store.snapshot, lastKnown)
+        XCTAssertEqual(store.status, .stale)
+        XCTAssertEqual(store.statusMessage, "Showing last known Claude limits")
+    }
+
+    func testDisableFailureKeepsClaudeEnabledAndReportsTheProblem() async throws {
+        let fixture = try ClaudeIntegrationFixture()
+        defer { fixture.cleanup() }
+        fixture.defaults.set(true, forKey: "claudeEnabled")
+        let store = ClaudeIntegrationStore(
+            authenticator: StaticClaudeAuthenticator(account: nil),
+            installer: ThrowingUninstallClaudeInstaller(),
+            defaults: fixture.defaults,
+            limitsURL: fixture.limitsURL,
+            automaticallyRefresh: false
+        )
+
+        await store.setEnabled(false)
+
+        XCTAssertTrue(store.isEnabled)
+        XCTAssertTrue(fixture.defaults.bool(forKey: "claudeEnabled"))
+        XCTAssertEqual(store.status, .unavailable)
+        XCTAssertEqual(store.statusMessage, "Claude could not be turned off safely. Try again.")
+    }
+
+    func testDisablingCancelsAnAccountAddInProgress() async throws {
+        let fixture = try ClaudeIntegrationFixture()
+        defer { fixture.cleanup() }
+        fixture.defaults.set(true, forKey: "claudeEnabled")
+        let account = ClaudeAccount(email: "person@example.com", subscriptionType: "pro", authenticationMethod: "claude.ai")
+        let installer = RecordingClaudeInstaller()
+        let store = ClaudeIntegrationStore(
+            authenticator: DelayedClaudeAuthenticator(account: account),
+            installer: installer,
+            defaults: fixture.defaults,
+            limitsURL: fixture.limitsURL,
+            automaticallyRefresh: false
+        )
+
+        let addTask = Task { await store.addCurrentAccount() }
+        try await Task.sleep(for: .milliseconds(10))
+        await store.setEnabled(false)
+        await addTask.value
+
+        XCTAssertFalse(store.isEnabled)
+        XCTAssertFalse(store.isConnected)
+        XCTAssertFalse(store.isRefreshing)
+        XCTAssertEqual(installer.installCount, 0)
+    }
 }
 
 final class ClaudeStatusLineInstallerTests: XCTestCase {
@@ -156,6 +290,17 @@ final class ClaudeStatusLineInstallerTests: XCTestCase {
         XCTAssertTrue(command.contains("CodexMeterClaudeBridge"))
         XCTAssertTrue(command.contains("ClaudeLimits.json"))
 
+        try installer.install()
+        try Data("updated-helper".utf8).write(to: helper, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+        try installer.install()
+        let installedHelper = managed.appendingPathComponent("CodexMeterClaudeBridge")
+        XCTAssertEqual(try Data(contentsOf: installedHelper), Data("updated-helper".utf8))
+        let permissions = try XCTUnwrap(
+            FileManager.default.attributesOfItem(atPath: installedHelper.path)[.posixPermissions] as? NSNumber
+        )
+        XCTAssertEqual(permissions.intValue & 0o777, 0o700)
+
         try installer.uninstall()
         let restored = try XCTUnwrap(
             try JSONSerialization.jsonObject(with: Data(contentsOf: settings)) as? [String: Any]
@@ -171,11 +316,43 @@ private struct StaticClaudeAuthenticator: ClaudeAuthenticating {
     func beginLogin() async throws {}
 }
 
+private actor SwitchableClaudeAuthenticator: ClaudeAuthenticating {
+    let account: ClaudeAccount
+    private var shouldFail = false
+
+    init(account: ClaudeAccount) { self.account = account }
+
+    func setShouldFail(_ shouldFail: Bool) { self.shouldFail = shouldFail }
+
+    func accountStatus() async throws -> ClaudeAccount? {
+        if shouldFail { throw ClaudeIntegrationError.processFailed }
+        return account
+    }
+
+    func beginLogin() async throws {}
+}
+
+private struct DelayedClaudeAuthenticator: ClaudeAuthenticating {
+    let account: ClaudeAccount
+
+    func accountStatus() async throws -> ClaudeAccount? {
+        try await Task.sleep(for: .milliseconds(75))
+        return account
+    }
+
+    func beginLogin() async throws {}
+}
+
 private final class RecordingClaudeInstaller: ClaudeStatusLineInstalling, @unchecked Sendable {
     private(set) var installCount = 0
     private(set) var uninstallCount = 0
     func install() throws { installCount += 1 }
     func uninstall() throws { uninstallCount += 1 }
+}
+
+private struct ThrowingUninstallClaudeInstaller: ClaudeStatusLineInstalling {
+    func install() throws {}
+    func uninstall() throws { throw ClaudeIntegrationError.invalidSettings }
 }
 
 private struct ClaudeIntegrationFixture {

@@ -11,6 +11,8 @@ All notable changes to CodexMeter will be documented in this file.
 
 ### Fixed
 
+- Keep the last known Claude account and limits visible during temporary CLI failures, while clearly marking expired or old limit snapshots instead of presenting them as current.
+- Distinguish Claude accounts in the same organization, cancel in-flight account setup when Claude is turned off, and fail safely if the existing status-line configuration cannot be restored.
 - Refresh previously opened 7D/30D analysis after imports, calendar changes, rebuilds, and history clearing; discard superseded in-flight analytics results.
 - Keep cleared Claude responses excluded when later streaming blocks or copied transcripts appear, including across restarts and rebuilds.
 - Show the token chart when cost estimates are turned off, even if Cost was previously selected.

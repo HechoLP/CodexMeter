@@ -10,6 +10,8 @@ Open **Settings → Services**, enable Claude Code, and add the account already 
 - Automatic file-event refresh with the existing polling fallback, manual refresh, restart-safe imports, and separate history maintenance.
 - Read-only five-hour and weekly limit percentages and reset times after Claude Code completes a response.
 
+Claude Code supplies these limits only while producing status-line updates. CodexMeter labels a snapshot as last known after 15 minutes, after its reset time, or when the CLI cannot be checked temporarily. Run Claude Code once and refresh to update it; CodexMeter never presents an old percentage as current.
+
 The default source is `~/.claude/projects/**/*.jsonl`. `CLAUDE_CONFIG_DIR` is honored when present as an absolute path in **CodexMeter's process environment**, with `/projects` appended. A shell-only environment setting does not automatically reach apps launched from Finder. Logs outside this root, deleted transcripts, Claude web/mobile chats, remote devices, and sessions with persistence disabled are not observable here.
 
 ## Menu presentation
@@ -40,7 +42,7 @@ Clearing Claude history retains only the hashed identities of excluded responses
 
 Claude web/mobile account-wide token totals, account switching, attachment counts, and API-equivalent cost estimates are **not supported in this version**. An unknown price is unavailable, never a zero-cost claim.
 
-CodexMeter invokes only the official `claude auth status` and `claude auth login --claudeai` commands for account setup. It never reads or copies Claude credentials. For limits, it installs an owner-only helper as Claude Code's documented status-line command. The helper accepts status-line JSON on standard input, discards all prompt/session/path fields, and saves only five-hour/weekly percentages, reset times, and a fetch timestamp. Existing status-line configuration is restored on disable or disconnect; disconnecting CodexMeter does not sign the user out of Claude Code.
+CodexMeter invokes only the official `claude auth status` and `claude auth login --claudeai` commands for account setup. It never reads or copies Claude credentials. If the active Claude CLI account changes, that account must be added explicitly before its data appears. For limits, CodexMeter installs an owner-only helper as Claude Code's documented status-line command. The helper accepts status-line JSON on standard input, discards all prompt/session/path fields, and saves only five-hour/weekly percentages, reset times, and a fetch timestamp. Existing status-line configuration is restored on disable or disconnect; disconnecting CodexMeter does not sign the user out of Claude Code.
 
 ## Verification
 
