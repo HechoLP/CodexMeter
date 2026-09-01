@@ -84,6 +84,13 @@ verify_app() {
     print -u2 "Sparkle.framework is missing from the app bundle: ${candidate}"
     exit 1
   fi
+  local provider_logo
+  for provider_logo in OpenAI Claude; do
+    if [[ ! -s "${candidate}/Contents/Resources/ProviderLogos/${provider_logo}.svg" ]]; then
+      print -u2 "Provider logo is missing from the app bundle: ${provider_logo}"
+      exit 1
+    fi
+  done
   codesign --verify --deep --strict --verbose=2 "${sparkle_framework}"
 
   local sparkle_architectures

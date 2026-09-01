@@ -320,8 +320,7 @@ struct MenuPopoverView: View {
             }
         } label: {
             VStack(spacing: 2) {
-                Image(systemName: provider.symbol)
-                    .font(.system(size: 16, weight: .medium))
+                ProviderLogo(provider: provider)
                     .accessibilityHidden(true)
                 Text(provider.tabTitle)
                     .font(.subheadline.weight(isSelected ? .semibold : .medium))

@@ -68,6 +68,13 @@ mkdir -p "${app_path}/Contents/MacOS" "${app_path}/Contents/Resources" \
 install -m 755 "${binary_path}" "${app_path}/Contents/MacOS/${PRODUCT_NAME}"
 install -m 644 "${project_root}/Assets/AppIcon.icns" "${app_path}/Contents/Resources/AppIcon.icns"
 install -m 644 "${project_root}/Config/Info.plist" "${app_path}/Contents/Info.plist"
+provider_logo_source="${project_root}/Sources/CodexMeter/Resources/ProviderLogos"
+provider_logo_destination="${app_path}/Contents/Resources/ProviderLogos"
+mkdir -p "${provider_logo_destination}"
+for provider_logo in OpenAI Claude; do
+  install -m 644 "${provider_logo_source}/${provider_logo}.svg" \
+    "${provider_logo_destination}/${provider_logo}.svg"
+done
 ditto --norsrc --noextattr "${sparkle_framework}" \
   "${app_path}/Contents/Frameworks/Sparkle.framework"
 

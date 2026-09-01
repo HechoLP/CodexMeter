@@ -19,6 +19,16 @@ final class MenuPopoverLayoutTests: XCTestCase {
         XCTAssertTrue(UsageProvider.allCases.allSatisfy { !$0.symbol.isEmpty })
     }
 
+    func testProviderLogoAssetsAreBundledAsTemplateImages() throws {
+        _ = NSApplication.shared
+        for provider in UsageProvider.allCases {
+            let image = try XCTUnwrap(ProviderLogoAsset.image(for: provider), provider.title)
+            XCTAssertTrue(image.isTemplate, provider.title)
+            XCTAssertGreaterThan(image.size.width, 0, provider.title)
+            XCTAssertGreaterThan(image.size.height, 0, provider.title)
+        }
+    }
+
     func testClaudeAndCodexProviderScreensFitBothAppearances() throws {
         _ = NSApplication.shared
         let defaults = UserDefaults.standard
