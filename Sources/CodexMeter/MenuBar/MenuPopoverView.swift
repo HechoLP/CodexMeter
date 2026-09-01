@@ -319,7 +319,7 @@ struct MenuPopoverView: View {
                 MenuProviderSelection.apply(provider, selection: &usageProvider, section: &selectedSection)
             }
         } label: {
-            VStack(spacing: 2) {
+            VStack(spacing: 1) {
                 ProviderLogo(provider: provider)
                     .accessibilityHidden(true)
                 Text(provider.tabTitle)
@@ -329,7 +329,7 @@ struct MenuPopoverView: View {
             .foregroundStyle(
                 isSelected ? Color(nsColor: .alternateSelectedControlTextColor) : Color.secondary
             )
-            .frame(maxWidth: .infinity, minHeight: 40)
+            .frame(maxWidth: .infinity, minHeight: 36)
             .background(
                 isSelected ? Color(nsColor: .controlAccentColor) : Color.clear,
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)

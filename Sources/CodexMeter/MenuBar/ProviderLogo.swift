@@ -48,6 +48,6 @@ struct ProviderLogo: View {
                     .font(.system(size: 16, weight: .medium))
             }
         }
-        .frame(width: 18, height: 18)
+        .frame(width: 15, height: 15)
     }
 }
