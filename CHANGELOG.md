@@ -7,6 +7,7 @@ All notable changes to CodexMeter will be documented in this file.
 ### Changed
 
 - Replaced the provider segmented control with compact, logo-first Codex and Claude Code tabs, and removed redundant popover branding so usage information appears first.
+- Made Claude Code an explicit Services integration: enable it, add the official CLI account, then access its token and limit views.
 
 ### Fixed
 
@@ -19,10 +20,12 @@ All notable changes to CodexMeter will be documented in this file.
 - Claude Code local token usage with Today/week/month/history totals, model/project/session analytics, and sub-agent relationships.
 - A persistent Codex / Claude Code selector in the menu. Each provider has a separate database and history cutoff; Codex account data never appears as Claude usage.
 - Claude response-ID deduplication and streaming-counter reconciliation, including cache-read and cache-creation input accounting.
+- Read-only Claude five-hour and weekly limits through the documented status-line fields, with existing user status-line configuration preserved and restored.
+- A bundled owner-only Claude limits helper that stores no prompts, paths, session identifiers, or credentials.
 
 ### Scope
 
-- Claude web/mobile totals, account limits, account switching, attachment counts, and cost estimates are not included. No Claude credentials or settings are accessed.
+- Claude web/mobile totals, account switching, attachment counts, and cost estimates are not included. Claude credentials are never read or copied.
 
 ## [1.2.0] - 2026-08-31
 

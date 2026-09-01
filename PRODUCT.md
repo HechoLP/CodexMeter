@@ -29,12 +29,12 @@ The app runs quietly on macOS 14 or later as a native menu bar utility. It disco
 ## Capabilities and Constraints
 
 - Show input, cached input, output, and total tokens for Today, This Week, This Month, and locally observable history.
-- Switch the visible provider directly from the menu. Keep each provider's database, history cutoff, settings data target, and live totals separate. Claude Code is local-only; never expose Codex account data as Claude usage.
+- Switch the visible provider directly from the menu. Keep each provider's database, history cutoff, settings data target, and live totals separate. Claude Code is opt-in and requires explicit official CLI account setup; never expose Codex account data as Claude usage.
 - Preserve input, cached input, and output as separate auditable local components, and never add optional account totals to local values.
 - Persist normalized usage and parser checkpoints in owner-only SQLite.
 - Avoid prompts, responses, source code, and terminal output. Authentication data never enters usage storage or logs; explicitly saved account logins use a separate local Keychain vault.
 - Keep optional account retrieval opt-in, fixed-destination, aggregate-only, and memory-only.
-- Read account limits only through a verified signed Codex app-server; keep the provider read-only and never expose reset-credit consumption or purchase actions.
+- Read Codex account limits only through a verified signed Codex app-server. Read Claude five-hour and weekly limits only from its documented local status-line fields. Keep both paths read-only and never expose reset-credit consumption or purchase actions.
 - Let users save their own Codex logins and explicitly switch via normal desktop quit, private login replacement, and reopen. Never rotate accounts automatically based on quota; keep account state separate from local history.
 - Derive current API-equivalent estimates from model token usage; unknown or incomplete pricing data remains unavailable rather than becoming zero.
 - Persist only canonical model IDs, keyed project identifiers, folder basenames, session relationships, and numeric attachment metadata needed for local analytics.

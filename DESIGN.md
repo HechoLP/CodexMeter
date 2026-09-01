@@ -90,7 +90,7 @@ The palette follows macOS semantic colors so it remains correct in light, dark, 
 
 ## Layout
 
-The menu popover is a fixed compact column (372px) with content-driven height. It opens directly with provider selection rather than repeating the app name and mark, and the footer keeps primary actions visible. Token Usage contains token totals, period history, and analytic destinations; Codex Limits contains quota windows and reset timing. The selected mode expands to its full intrinsic height without an embedded scroll region, so every item remains visible at once. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
+The menu popover is a fixed compact column (372px) with content-driven height. It opens directly with enabled provider selection rather than repeating the app name and mark, and the footer keeps primary actions visible. Token Usage contains token totals, period history, and analytic destinations; the selected provider's Limits mode contains quota windows and reset timing. The selected mode expands to its full intrinsic height without an embedded scroll region, so every item remains visible at once. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
 
 The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at popover edges. Token Usage prioritizes today's local usage, nearby periods, and analytic shortcuts; Codex Limits prioritizes quota remaining and reset timing.
 
@@ -121,7 +121,7 @@ The diamond meter mark remains the menu bar and app identity rather than being r
 ### Top-Level Modes
 
 - **Token Usage:** Local and optional account-wide token totals, period history, and analytic destinations.
-- **Codex Limits:** Read-only Codex quota windows, reset timing, pace, and reset-credit availability.
+- **Provider Limits:** Read-only Codex or Claude quota windows, reset timing, and pace. Reset-credit availability remains Codex-only.
 - **Behavior:** Two equal-width native buttons switch content in place. The selected mode uses the system accent and both modes remain keyboard and VoiceOver accessible.
 - **Feedback:** Clickable rows and utility buttons use a subtle neutral hover/pressed fill and an accent keyboard-focus outline. Feedback never changes geometry, honors Increase Contrast, and skips its short fade under Reduce Motion.
 - **Separation:** The header contains no provider status card, connection badge, or generated explanatory subtitle.
