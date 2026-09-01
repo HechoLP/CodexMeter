@@ -277,23 +277,12 @@ struct MenuPopoverView: View {
     private var header: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "diamond")
-                    .font(.system(size: 13, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text("CodexMeter")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 15)
-            .padding(.bottom, 8)
-
-            HStack(spacing: 8) {
                 ForEach(UsageProvider.allCases) { provider in
                     providerTab(provider)
                 }
             }
             .padding(.horizontal, 12)
+            .padding(.top, 12)
             .padding(.bottom, 8)
 
             if store.provider == .codex {

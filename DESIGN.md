@@ -90,7 +90,7 @@ The palette follows macOS semantic colors so it remains correct in light, dark, 
 
 ## Layout
 
-The menu popover is a fixed compact column (372px) with content-driven height. The header provides two top-level modes and the footer keeps primary actions visible. Token Usage contains token totals, period history, and analytic destinations; Codex Limits contains quota windows and reset timing. The selected mode expands to its full intrinsic height without an embedded scroll region, so every item remains visible at once. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
+The menu popover is a fixed compact column (372px) with content-driven height. It opens directly with provider selection rather than repeating the app name and mark, and the footer keeps primary actions visible. Token Usage contains token totals, period history, and analytic destinations; Codex Limits contains quota windows and reset timing. The selected mode expands to its full intrinsic height without an embedded scroll region, so every item remains visible at once. Major sections use dividers; details use the same width so navigation never causes a horizontal jump.
 
 The spacing rhythm is 4px for tightly related icon-label pairs, 8px for rows, 12px between components inside a section, 16px for detailed-screen content, and 18px at popover edges. Token Usage prioritizes today's local usage, nearby periods, and analytic shortcuts; Codex Limits prioritizes quota remaining and reset timing.
 
@@ -106,7 +106,7 @@ CodexMeter is flat by default. Depth comes from the native menu-bar window, sema
 
 ## Shapes
 
-The diamond meter mark is the only recurring branded silhouette. Detail selections use gently rounded 8px containers, while information cards use 10px corners. Standard buttons, progress views, menus, and navigation controls retain native macOS shapes.
+The diamond meter mark remains the menu bar and app identity rather than being repeated inside the compact popover. Detail selections use gently rounded 8px containers, while information cards use 10px corners. Standard buttons, progress views, menus, and navigation controls retain native macOS shapes.
 
 **The Native Control Rule.** Do not redraw a platform control solely to mimic another menu-bar app.
 
