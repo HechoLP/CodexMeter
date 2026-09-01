@@ -4,6 +4,10 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced the provider segmented control with compact, logo-first Codex and Claude Code tabs, and removed redundant popover branding so usage information appears first.
+
 ### Fixed
 
 - Refresh previously opened 7D/30D analysis after imports, calendar changes, rebuilds, and history clearing; discard superseded in-flight analytics results.
