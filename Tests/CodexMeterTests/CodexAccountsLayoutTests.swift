@@ -298,7 +298,12 @@ final class CodexAccountsLayoutTests: XCTestCase {
     }
 
     private func normalized(_ text: String) -> String {
-        text.lowercased().filter { $0.isLetter || $0.isNumber }
+        text.lowercased()
+            // Hosted macOS Vision repeatedly reads this native caption's
+            // `default` as `detault`. Normalize that single glyph confusion so
+            // this layout test continues to measure clipping, not OCR spelling.
+            .replacingOccurrences(of: "detault", with: "default")
+            .filter { $0.isLetter || $0.isNumber }
     }
 
     private func renderBitmap(of view: NSView) throws -> NSBitmapImageRep {
@@ -333,7 +338,7 @@ final class CodexAccountsLayoutTests: XCTestCase {
             // are still matched exactly; a clipped-notice negative control guards
             // against mistaking inferred or missing text for visible content.
             request.usesLanguageCorrection = regionOfInterest != nil
-            request.customWords = ["Codex", "Keychain", "default"]
+            request.customWords = ["Codex", "Keychain"]
             if let regionOfInterest { request.regionOfInterest = regionOfInterest }
             return request
         }
