@@ -333,7 +333,7 @@ final class CodexAccountsLayoutTests: XCTestCase {
             // are still matched exactly; a clipped-notice negative control guards
             // against mistaking inferred or missing text for visible content.
             request.usesLanguageCorrection = regionOfInterest != nil
-            request.customWords = ["Codex", "Keychain"]
+            request.customWords = ["Codex", "Keychain", "default"]
             if let regionOfInterest { request.regionOfInterest = regionOfInterest }
             return request
         }
