@@ -16,7 +16,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         settingsWindow?.isVisible == true
     }
 
-    func showSettings(for store: UsageStore, limitStore: AccountLimitStore) {
+    func showSettings(
+        for store: UsageStore,
+        limitStore: AccountLimitStore,
+        claude: ClaudeIntegrationStore = ClaudeIntegrationStore(automaticallyRefresh: false)
+    ) {
         let window: NSWindow
 
         if let settingsWindow {
@@ -26,6 +30,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                     rootView: SettingsView()
                         .environmentObject(store)
                         .environmentObject(limitStore)
+                        .environmentObject(claude)
                 )
             }
         } else {
@@ -42,6 +47,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 rootView: SettingsView()
                     .environmentObject(store)
                     .environmentObject(limitStore)
+                    .environmentObject(claude)
             )
             created.delegate = self
             if !created.setFrameUsingName(Self.frameAutosaveName) {

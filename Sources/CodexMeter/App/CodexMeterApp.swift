@@ -17,6 +17,7 @@ struct CodexMeterApp: App {
     @AppStorage("usageProvider") private var usageProvider = UsageProvider.codex.rawValue
     @StateObject private var profileStore: ProfileUsageStore
     @StateObject private var accountLimitStore: AccountLimitStore
+    @StateObject private var claudeIntegrationStore: ClaudeIntegrationStore
     @AppStorage("menuBarDisplay") private var menuBarDisplay = AppPreferences.defaultMenuBarDisplay
     @AppStorage("menuBarPeriod") private var menuBarPeriod = UsagePeriod.today.rawValue
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = AppPreferences.defaultShowMenuBarIcon
@@ -25,13 +26,25 @@ struct CodexMeterApp: App {
     init() {
         AppPreferences.registerDefaults()
         let store = UsageStore()
-        let claudeStore = UsageStore(provider: .claude)
+        let claudeStore = UsageStore(provider: .claude, automaticallyRefresh: false)
         let profileStore = ProfileUsageStore()
         let accountLimitStore = AccountLimitStore()
+        let claudeIntegrationStore = ClaudeIntegrationStore(automaticallyRefresh: false)
         _store = StateObject(wrappedValue: store)
         _claudeStore = StateObject(wrappedValue: claudeStore)
         _profileStore = StateObject(wrappedValue: profileStore)
         _accountLimitStore = StateObject(wrappedValue: accountLimitStore)
+        _claudeIntegrationStore = StateObject(wrappedValue: claudeIntegrationStore)
+        claudeIntegrationStore.onAvailabilityChanged = { [weak claudeStore] available in
+            guard let claudeStore else { return }
+            if available {
+                claudeStore.startAutomaticRefresh()
+                Task { @MainActor in await claudeStore.refresh() }
+            } else {
+                claudeStore.stopAutomaticRefresh()
+            }
+        }
+        claudeIntegrationStore.startAutomaticRefresh()
         CodexAccountStore.shared.onAccountWillChange = { [weak profileStore, weak accountLimitStore] in
             profileStore?.clearForAccountSwitch()
             accountLimitStore?.clearForAccountSwitch()
@@ -50,9 +63,6 @@ struct CodexMeterApp: App {
         Task { @MainActor [weak store] in
             await store?.refresh()
         }
-        Task { @MainActor [weak claudeStore] in
-            await claudeStore?.refresh()
-        }
         Task { @MainActor [weak profileStore] in
             profileStore?.synchronizeEnabledPreference()
             await profileStore?.refresh(weekStart: Self.selectedWeekStart)
@@ -69,6 +79,7 @@ struct CodexMeterApp: App {
                 .environmentObject(selectedStore)
                 .environmentObject(profileStore)
                 .environmentObject(accountLimitStore)
+                .environmentObject(claudeIntegrationStore)
         } label: {
             HStack(spacing: 4) {
                 if resolvedShowIcon {
@@ -92,6 +103,7 @@ struct CodexMeterApp: App {
                 .environmentObject(selectedStore)
                 .environmentObject(profileStore)
                 .environmentObject(accountLimitStore)
+                .environmentObject(claudeIntegrationStore)
         }
     }
 
@@ -144,7 +156,9 @@ struct CodexMeterApp: App {
     }
 
     private var selectedStore: UsageStore {
-        UsageProvider(rawValue: usageProvider) == .claude ? claudeStore : store
+        UsageProvider(rawValue: usageProvider) == .claude && claudeIntegrationStore.isAvailable
+            ? claudeStore
+            : store
     }
 
     private static var selectedWeekStart: WeekStart {

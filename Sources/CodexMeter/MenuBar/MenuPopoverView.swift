@@ -21,6 +21,10 @@ enum MenuPopoverSection: String, CaseIterable, Identifiable {
         }
     }
 
+    func title(for provider: UsageProvider) -> String {
+        self == .codex ? "\(provider.tabTitle) Limits" : title
+    }
+
     var symbol: String {
         switch self {
         case .overview: "square.grid.2x2"
@@ -65,9 +69,8 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
 
 enum MenuProviderSelection {
     static func apply(_ provider: UsageProvider, selection: inout String,
-                      section: inout MenuPopoverSection) {
+                      section _: inout MenuPopoverSection) {
         selection = provider.rawValue
-        if provider == .claude { section = .overview }
     }
 }
 
@@ -78,6 +81,7 @@ struct MenuPopoverView: View {
     @EnvironmentObject private var store: UsageStore
     @EnvironmentObject private var profileStore: ProfileUsageStore
     @EnvironmentObject private var limitStore: AccountLimitStore
+    @EnvironmentObject private var claude: ClaudeIntegrationStore
     @AppStorage("numberStyle") private var numberStyleRawValue = TokenNumberStyle.compact.rawValue
     @AppStorage("showCachedInput") private var showCachedInput = true
     @AppStorage("showLastUpdated") private var showLastUpdated = true
@@ -112,7 +116,7 @@ struct MenuPopoverView: View {
             } else {
                 header
                 Group {
-                    switch store.provider == .claude ? .overview : selectedSection {
+                    switch selectedSection {
                     case .overview:
                         overviewContent
                     case .codex:
@@ -160,12 +164,12 @@ struct MenuPopoverView: View {
                 .foregroundStyle(.secondary)
             if destination == .limits {
                 Button {
-                    Task { await limitStore.refresh() }
+                    Task { await refreshCurrentLimits() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .frame(width: 28, height: 28)
                 }
-                .disabled(limitStore.isRefreshing)
+                .disabled(currentLimitsRefreshing)
                 .accessibilityLabel("Refresh account limits")
                 .help("Refresh account limits")
             }
@@ -178,7 +182,15 @@ struct MenuPopoverView: View {
     @ViewBuilder
     private func destinationView(_ destination: MenuDestination) -> some View {
         switch destination {
-        case .limits: AccountLimitsView()
+        case .limits:
+            AccountLimitsView(
+                snapshot: currentLimitSnapshot,
+                status: currentLimitStatus,
+                statusMessage: currentLimitStatusMessage,
+                isRefreshing: currentLimitsRefreshing,
+                provider: store.provider,
+                refresh: refreshCurrentLimits
+            )
         case .usage: UsageAnalyticsView()
         case .projects: ProjectsAnalyticsView()
         case .sessions: SessionsAnalyticsView()
@@ -201,17 +213,23 @@ struct MenuPopoverView: View {
 
     @ViewBuilder
     private var codexContent: some View {
-        if accountLimitsEnabled {
+        if currentLimitsEnabled {
             accountLimitsPreview
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Codex Limits are turned off", systemImage: "gauge.with.dots.needle.0percent")
+                Label("\(store.provider.tabTitle) Limits are turned off", systemImage: "gauge.with.dots.needle.0percent")
                     .font(.headline)
-                Text("Enable Account Limits in Settings.")
+                Text(store.provider == .codex
+                     ? "Enable Account Limits in Settings."
+                     : "Enable Claude and add an account in Settings.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Open Settings") {
-                    SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
+                    SettingsWindowController.shared.showSettings(
+                        for: store,
+                        limitStore: limitStore,
+                        claude: claude
+                    )
                 }
                 .buttonStyle(.link)
             }
@@ -229,11 +247,11 @@ struct MenuPopoverView: View {
             .accessibilityHint("Open all account limit details")
 
             VStack(alignment: .leading, spacing: 12) {
-                if let snapshot = limitStore.snapshot {
+                if let snapshot = currentLimitSnapshot {
                     let windows = visibleAccountLimitWindows(snapshot.windows)
                     if windows.isEmpty {
                         compactLimitStatus(
-                            "No Codex usage limits were reported.",
+                            "No \(store.provider.tabTitle) usage limits were reported.",
                             symbol: "gauge.with.dots.needle.0percent"
                         )
                     } else {
@@ -247,17 +265,17 @@ struct MenuPopoverView: View {
                                     .padding(.vertical, 6)
                             }
                         }
-                        if limitStore.status == .stale {
+                        if currentLimitStatus == .stale {
                             compactLimitStatus(
                                 "Offline · showing last known limits",
                                 symbol: "wifi.slash"
                             )
                         }
                     }
-                    if resetCreditsEnabled, let credits = snapshot.resetCredits {
+                    if store.provider == .codex, resetCreditsEnabled, let credits = snapshot.resetCredits {
                         resetCreditsSummary(credits)
                     }
-                } else if limitStore.isRefreshing || limitStore.status == .loading {
+                } else if currentLimitsRefreshing || currentLimitStatus == .loading {
                     HStack(spacing: 9) {
                         ProgressView().controlSize(.small)
                         Text("Reading account limits…")
@@ -266,7 +284,7 @@ struct MenuPopoverView: View {
                     .font(.caption)
                     .frame(minHeight: 36)
                 } else {
-                    compactLimitStatus(limitStore.statusMessage, symbol: "exclamationmark.triangle")
+                    compactLimitStatus(currentLimitStatusMessage, symbol: "exclamationmark.triangle")
                 }
             }
             .padding(.horizontal, 18)
@@ -277,7 +295,7 @@ struct MenuPopoverView: View {
     private var header: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                ForEach(UsageProvider.allCases) { provider in
+                ForEach(availableProviders) { provider in
                     providerTab(provider)
                 }
             }
@@ -287,15 +305,15 @@ struct MenuPopoverView: View {
 
             if store.provider == .codex {
                 CodexAccountSwitcher(accounts: accounts)
-
-                HStack(spacing: 8) {
-                    ForEach(MenuPopoverSection.allCases) { section in
-                        sectionTab(section)
-                    }
-                }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 8)
             }
+
+            HStack(spacing: 8) {
+                ForEach(MenuPopoverSection.allCases) { section in
+                    sectionTab(section)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 8)
 
             Divider()
         }
@@ -343,7 +361,7 @@ struct MenuPopoverView: View {
             HStack(spacing: 6) {
                 Image(systemName: section.symbol)
                     .font(.system(size: 14, weight: .medium))
-                Text(section.title)
+                Text(section.title(for: store.provider))
                     .font(.subheadline.weight(isSelected ? .semibold : .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.86)
@@ -359,9 +377,9 @@ struct MenuPopoverView: View {
         }
         .buttonStyle(MenuInteractionStyle())
         .keyboardShortcut(section == .overview ? "1" : "2", modifiers: .command)
-        .accessibilityLabel(section.title)
+        .accessibilityLabel(section.title(for: store.provider))
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
-        .accessibilityHint("Show \(section.title.lowercased())")
+        .accessibilityHint("Show \(section.title(for: store.provider).lowercased())")
         .accessibilityIdentifier("menu.section.\(section.rawValue)")
     }
 
@@ -492,8 +510,8 @@ struct MenuPopoverView: View {
             if shouldShowStatus {
                 HStack {
                     Label {
-                        if store.provider == .codex && selectedSection == .codex {
-                            Text(limitStore.statusMessage)
+                        if selectedSection == .codex {
+                            Text(currentLimitStatusMessage)
                         } else if profileEnabled, let profileSnapshot = profileStore.snapshot {
                             if profileStore.status == .ready {
                                 Text("Account totals through \(profileDate(profileSnapshot.statsAsOf))")
@@ -534,7 +552,9 @@ struct MenuPopoverView: View {
                 Button {
                     Task {
                         guard store.provider == .codex else {
-                            await store.refresh()
+                            async let localRefresh: Void = store.refresh()
+                            async let limitsRefresh: Void = claude.refresh()
+                            _ = await (localRefresh, limitsRefresh)
                             return
                         }
                         async let localRefresh: Void = store.refresh()
@@ -563,7 +583,11 @@ struct MenuPopoverView: View {
                 .help("Refresh usage")
 
                 Button {
-                    SettingsWindowController.shared.showSettings(for: store, limitStore: limitStore)
+                    SettingsWindowController.shared.showSettings(
+                        for: store,
+                        limitStore: limitStore,
+                        claude: claude
+                    )
                 } label: {
                     Label("Settings", systemImage: "gearshape")
                         .padding(.horizontal, 6)
@@ -611,8 +635,8 @@ struct MenuPopoverView: View {
     }
 
     private var shouldShowStatus: Bool {
-        if store.provider == .codex && selectedSection == .codex {
-            return accountLimitsEnabled
+        if selectedSection == .codex {
+            return currentLimitsEnabled
         }
         let qualityNeedsStatus = switch store.snapshot.quality {
         case .stale, .unavailable, .error: true
@@ -623,8 +647,8 @@ struct MenuPopoverView: View {
 
     private var statusSymbol: String {
         if isRefreshing { return "arrow.triangle.2.circlepath" }
-        if store.provider == .codex && selectedSection == .codex {
-            return switch limitStore.status {
+        if selectedSection == .codex {
+            return switch currentLimitStatus {
             case .ready: "checkmark.circle"
             case .stale: "clock.badge.exclamationmark"
             case .disabled: "gauge.with.dots.needle.0percent"
@@ -654,7 +678,9 @@ struct MenuPopoverView: View {
     }
 
     private var isRefreshing: Bool {
-        store.isRefreshing || (store.provider == .codex && (profileStore.isRefreshing || limitStore.isRefreshing))
+        store.isRefreshing
+            || (store.provider == .codex && (profileStore.isRefreshing || limitStore.isRefreshing))
+            || (store.provider == .claude && claude.isRefreshing)
     }
 
     private func displayedTotal(for period: UsagePeriod) -> Int64 {
@@ -765,7 +791,46 @@ struct MenuPopoverView: View {
     }
 
     private func visibleAccountLimitWindows(_ windows: [AccountLimitWindow]) -> [AccountLimitWindow] {
-        AccountLimitPresentation.visibleWindows(windows, includesAdditional: additionalLimitsEnabled)
+        guard store.provider == .codex else { return windows }
+        return AccountLimitPresentation.visibleWindows(windows, includesAdditional: additionalLimitsEnabled)
+    }
+
+    private var availableProviders: [UsageProvider] {
+        claude.isAvailable ? UsageProvider.allCases : [.codex]
+    }
+
+    private var currentLimitsEnabled: Bool {
+        store.provider == .codex ? accountLimitsEnabled : claude.isAvailable
+    }
+
+    private var currentLimitSnapshot: AccountLimitsSnapshot? {
+        store.provider == .codex ? limitStore.snapshot : claude.snapshot
+    }
+
+    private var currentLimitStatus: AccountLimitStatus {
+        guard store.provider == .claude else { return limitStore.status }
+        return switch claude.status {
+        case .disabled: .disabled
+        case .checking, .connecting: .loading
+        case .ready: .ready
+        case .waitingForLimits, .needsAccount, .unavailable: .unavailable
+        }
+    }
+
+    private var currentLimitStatusMessage: String {
+        store.provider == .codex ? limitStore.statusMessage : claude.statusMessage
+    }
+
+    private var currentLimitsRefreshing: Bool {
+        store.provider == .codex ? limitStore.isRefreshing : claude.isRefreshing
+    }
+
+    private func refreshCurrentLimits() async {
+        if store.provider == .codex {
+            await limitStore.refresh()
+        } else {
+            await claude.refresh()
+        }
     }
 
     @ViewBuilder

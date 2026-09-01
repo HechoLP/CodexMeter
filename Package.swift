@@ -8,7 +8,8 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "CodexMeter", targets: ["CodexMeter"])
+        .executable(name: "CodexMeter", targets: ["CodexMeter"]),
+        .executable(name: "CodexMeterClaudeBridge", targets: ["CodexMeterClaudeBridge"])
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6")
@@ -21,6 +22,7 @@ let package = Package(
         .executableTarget(
             name: "CodexMeter",
             dependencies: [
+                "ClaudeBridgeCore",
                 "CSQLite",
                 .product(name: "Sparkle", package: "Sparkle")
             ],
@@ -36,9 +38,18 @@ let package = Package(
                 .linkedLibrary("sqlite3")
             ]
         ),
+        .target(
+            name: "ClaudeBridgeCore",
+            path: "Sources/ClaudeBridgeCore"
+        ),
+        .executableTarget(
+            name: "CodexMeterClaudeBridge",
+            dependencies: ["ClaudeBridgeCore"],
+            path: "Sources/CodexMeterClaudeBridge"
+        ),
         .testTarget(
             name: "CodexMeterTests",
-            dependencies: ["CodexMeter"],
+            dependencies: ["CodexMeter", "ClaudeBridgeCore"],
             path: "Tests/CodexMeterTests"
         )
     ]

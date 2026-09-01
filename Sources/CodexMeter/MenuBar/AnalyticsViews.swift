@@ -2,43 +2,50 @@ import Charts
 import SwiftUI
 
 struct AccountLimitsView: View {
-    @EnvironmentObject private var limitStore: AccountLimitStore
+    let snapshot: AccountLimitsSnapshot?
+    let status: AccountLimitStatus
+    let statusMessage: String
+    let isRefreshing: Bool
+    let provider: UsageProvider
+    let refresh: @MainActor () async -> Void
     @AppStorage("additionalLimitsEnabled") private var additionalLimitsEnabled = AppPreferences.defaultAdditionalLimitsEnabled
     @AppStorage("resetCreditsEnabled") private var resetCreditsEnabled = AppPreferences.defaultResetCreditsEnabled
 
     var body: some View {
         ContentFittingScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if let snapshot = limitStore.snapshot {
+                if let snapshot {
                     let windows = visibleWindows(snapshot.windows)
                     if windows.isEmpty {
                         unavailable(
                             snapshot.windows.isEmpty
                                 ? "No account limit windows were returned."
-                                : "No Codex limit window was reported. Enable additional limits to view the other windows."
+                                : "No \(provider.tabTitle) limit window was reported. Enable additional limits to view the other windows."
                         )
                     } else {
                         ForEach(windows) { window in
                             limitCard(window)
                         }
                     }
-                    if resetCreditsEnabled, let credits = snapshot.resetCredits {
+                    if provider == .codex, resetCreditsEnabled, let credits = snapshot.resetCredits {
                         resetCreditsCard(credits)
                     }
                     DisclosureGroup("About these limits") {
-                        Text("Reported by Codex; read-only. Reset credits are never consumed here. Pace assumes even use; run-out times are estimates, not guarantees.")
+                        Text(provider == .codex
+                             ? "Reported by Codex; read-only. Reset credits are never consumed here. Pace assumes even use; run-out times are estimates, not guarantees."
+                             : "Reported by Claude Code; read-only. Limits update after a Claude response. Pace assumes even use; run-out times are estimates, not guarantees.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.top, 4)
                     }
                     .font(.caption)
                     HStack(spacing: 5) {
-                        Image(systemName: limitStore.status == .stale ? "wifi.slash" : "clock")
+                        Image(systemName: status == .stale ? "wifi.slash" : "clock")
                         Text(limitStatusText(snapshot))
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                } else if limitStore.isRefreshing || limitStore.status == .loading {
+                } else if isRefreshing || status == .loading {
                     HStack(spacing: 10) {
                         ProgressView().controlSize(.small)
                         Text("Reading account limits…")
@@ -46,14 +53,14 @@ struct AccountLimitsView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 120)
                 } else {
-                    unavailable(limitStore.statusMessage)
+                    unavailable(statusMessage)
                 }
             }
             .padding(16)
         }
         .frame(width: MenuPopoverMetrics.width)
         .task {
-            if limitStore.snapshot == nil { await limitStore.refresh() }
+            if snapshot == nil { await refresh() }
         }
     }
 
@@ -78,7 +85,7 @@ struct AccountLimitsView: View {
                     .foregroundStyle(.secondary)
                     .help("Resets \(reset.formatted(date: .complete, time: .shortened))")
             }
-            if limitStore.status.allowsPaceEstimates,
+            if status.allowsPaceEstimates,
                let pace = window.pace(at: Date()) {
                 HStack(spacing: 4) {
                     Image(systemName: pace.state == .ahead ? "exclamationmark.triangle" : "speedometer")
@@ -121,7 +128,9 @@ struct AccountLimitsView: View {
     }
 
     private func visibleWindows(_ windows: [AccountLimitWindow]) -> [AccountLimitWindow] {
-        AccountLimitPresentation.visibleWindows(windows, includesAdditional: additionalLimitsEnabled)
+        provider == .codex
+            ? AccountLimitPresentation.visibleWindows(windows, includesAdditional: additionalLimitsEnabled)
+            : windows
     }
 
     private func limitStatusText(_ snapshot: AccountLimitsSnapshot) -> String {
@@ -140,7 +149,7 @@ struct AccountLimitsView: View {
             let days = Int(age / 86_400)
             ageText = "\(days) \(days == 1 ? "day" : "days") ago"
         }
-        if limitStore.status == .stale {
+        if status == .stale {
             return "Offline · last updated \(ageText)"
         }
         return "Updated \(ageText)"

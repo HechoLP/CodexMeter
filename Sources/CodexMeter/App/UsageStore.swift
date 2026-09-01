@@ -153,6 +153,11 @@ final class UsageStore: ObservableObject {
             statusMessage = initialSnapshot.updatedAt == nil ? "No \(provider.title) usage found" : "Updated"
         }
         guard automaticallyRefresh else { return }
+        startAutomaticRefresh()
+    }
+
+    func startAutomaticRefresh() {
+        guard refreshSchedulerTask == nil else { return }
         previousWeekStartRawValue = storedWeekStartRawValue
         previousRefreshModeRawValue = currentRefreshMode.rawValue
         refreshSchedulerTask = Task { [weak self] in
@@ -213,6 +218,24 @@ final class UsageStore: ObservableObject {
             }
         }
         scheduleCalendarBoundary()
+    }
+
+    func stopAutomaticRefresh() {
+        stopWatcher()
+        debounceTask?.cancel()
+        debounceTask = nil
+        refreshSchedulerTask?.cancel()
+        refreshSchedulerTask = nil
+        wakeTask?.cancel()
+        wakeTask = nil
+        defaultsTask?.cancel()
+        defaultsTask = nil
+        clockChangeTask?.cancel()
+        clockChangeTask = nil
+        timeZoneChangeTask?.cancel()
+        timeZoneChangeTask = nil
+        calendarBoundaryTask?.cancel()
+        calendarBoundaryTask = nil
     }
 
     func refresh() async {

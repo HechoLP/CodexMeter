@@ -10,11 +10,11 @@ final class MenuPopoverLayoutTests: XCTestCase {
         var section = MenuPopoverSection.codex
         MenuProviderSelection.apply(.claude, selection: &selection, section: &section)
         XCTAssertEqual(selection, UsageProvider.claude.rawValue)
-        XCTAssertEqual(section, .overview)
+        XCTAssertEqual(section, .codex)
 
         MenuProviderSelection.apply(.codex, selection: &selection, section: &section)
         XCTAssertEqual(selection, UsageProvider.codex.rawValue)
-        XCTAssertEqual(section, .overview)
+        XCTAssertEqual(section, .codex)
         XCTAssertEqual(UsageProvider.allCases.map(\.tabTitle), ["Codex", "Claude"])
         XCTAssertTrue(UsageProvider.allCases.allSatisfy { !$0.symbol.isEmpty })
     }
@@ -53,6 +53,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
                             .environmentObject(store)
                             .environmentObject(ProfileUsageStore())
                             .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                            .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
                             .environment(\.colorScheme, dark ? .dark : .light)
                     )
                     host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -98,6 +99,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
                             automaticallyRefresh: false))
                         .environmentObject(ProfileUsageStore())
                         .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                        .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
                         .environment(\.colorScheme, dark ? .dark : .light)
                 )
                 host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -125,6 +127,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
             .environmentObject(store)
             .environmentObject(profileStore)
             .environmentObject(limitStore)
+            .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
         let hostingView = NSHostingView(rootView: view)
 
         hostingView.layoutSubtreeIfNeeded()
@@ -364,6 +367,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
                     .environmentObject(UsageStore())
                     .environmentObject(ProfileUsageStore())
                     .environmentObject(store)
+                    .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
                     .defaultAppStorage(defaults)
                     .environment(\.colorScheme, .dark)
             )
@@ -392,6 +396,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
             .environmentObject(UsageStore(analyticsSnapshots: snapshots))
             .environmentObject(ProfileUsageStore())
             .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+            .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
     }
 
     private func topOriginFrame(of view: NSView, in hostingView: NSView) -> NSRect {

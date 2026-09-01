@@ -10,7 +10,7 @@ final class CodexAccountsLayoutTests: XCTestCase {
 
     func testAccountsAreOutsideSettings() {
         XCTAssertEqual(SettingsCategory.allCases.map(\.title),
-                       ["General", "Menu Bar", "Usage & Privacy", "Local Data", "Diagnostics", "Information"])
+                       ["General", "Services", "Menu Bar", "Usage & Privacy", "Local Data", "Diagnostics", "Information"])
     }
 
     func testMenuTitlesDisambiguateWorkspacesAndDoNotContainCredentials() throws {
@@ -46,6 +46,7 @@ final class CodexAccountsLayoutTests: XCTestCase {
                             .environmentObject(UsageStore())
                             .environmentObject(ProfileUsageStore())
                             .environmentObject(AccountLimitStore(pollingInterval: nil))
+                            .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
                             .environment(\.colorScheme, dark ? .dark : .light)
                             .environment(\.displayScale, Self.renderScale)
                     )

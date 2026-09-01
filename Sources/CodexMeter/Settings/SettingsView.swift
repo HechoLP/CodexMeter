@@ -41,6 +41,8 @@ struct SettingsView: View {
         switch category {
         case .general:
             GeneralSettingsView()
+        case .services:
+            ServiceSettingsView()
         case .appearance:
             AppearanceSettingsView()
         case .usage:
@@ -57,6 +59,7 @@ struct SettingsView: View {
 
 enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     case general
+    case services
     case appearance
     case usage
     case data
@@ -68,6 +71,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .general: "General"
+        case .services: "Services"
         case .appearance: "Menu Bar"
         case .usage: "Usage & Privacy"
         case .data: "Local Data"
@@ -79,6 +83,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     var summary: String {
         switch self {
         case .general: "Startup, refresh, updates, and calendar"
+        case .services: "Enable providers and connect accounts"
         case .appearance: "Icon, token text, and popover display"
         case .usage: "What is counted and what stays local"
         case .data: "Source status and history management"
@@ -90,12 +95,81 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     var systemImage: String {
         switch self {
         case .general: "gearshape"
+        case .services: "person.crop.circle.badge.checkmark"
         case .appearance: "menubar.rectangle"
         case .usage: "chart.bar.xaxis"
         case .data: "externaldrive"
         case .advanced: "stethoscope"
         case .about: "info.circle"
         }
+    }
+}
+
+private struct ServiceSettingsView: View {
+    @EnvironmentObject private var claude: ClaudeIntegrationStore
+
+    var body: some View {
+        Form {
+            Section("Codex") {
+                LabeledContent("Status", value: "Available")
+                Text("Codex remains the primary service and uses the account already signed in to the Codex app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Claude Code") {
+                Toggle("Enable Claude Code", isOn: Binding(
+                    get: { claude.isEnabled },
+                    set: { enabled in Task { await claude.setEnabled(enabled) } }
+                ))
+
+                if claude.isEnabled {
+                    if claude.isConnected, let account = claude.account {
+                        LabeledContent("Account", value: account.displayName)
+                        if let plan = account.planName {
+                            LabeledContent("Plan", value: plan)
+                        }
+                        LabeledContent("Limits", value: claude.statusMessage)
+                        HStack {
+                            Button("Refresh") { Task { await claude.refresh() } }
+                                .disabled(claude.isRefreshing)
+                            Button("Disconnect from CodexMeter", role: .destructive) {
+                                Task { await claude.disconnect() }
+                            }
+                        }
+                    } else {
+                        LabeledContent("Status", value: claude.statusMessage)
+                        if let account = claude.detectedAccount {
+                            Button("Add \(account.displayName)") {
+                                Task { await claude.addCurrentAccount() }
+                            }
+                            .disabled(claude.isRefreshing)
+                        } else {
+                            Button("Sign In and Add Claude Account…") {
+                                Task { await claude.signInAndAddAccount() }
+                            }
+                            .disabled(claude.isRefreshing)
+                        }
+                        if claude.isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                }
+            }
+
+            Section("Privacy") {
+                Label("Claude Code owns the sign-in", systemImage: "key")
+                Label("CodexMeter never reads or stores Claude credentials", systemImage: "lock.shield")
+                Label("Only 5-hour and weekly percentages and reset times are saved", systemImage: "gauge.with.dots.needle.50percent")
+                Text("Disconnecting removes CodexMeter's status-line integration. It does not sign you out of Claude Code.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .task { if claude.isEnabled { await claude.refresh() } }
     }
 }
 
@@ -304,6 +378,7 @@ private struct AppearanceSettingsView: View {
 private struct UsageSettingsView: View {
     @EnvironmentObject private var store: UsageStore
     @EnvironmentObject private var limitStore: AccountLimitStore
+    @EnvironmentObject private var claude: ClaudeIntegrationStore
     @AppStorage("profileSyncEnabled") private var profileSyncEnabled = AppPreferences.defaultProfileSyncEnabled
     @AppStorage("accountLimitsEnabled") private var accountLimitsEnabled = AppPreferences.defaultAccountLimitsEnabled
     @AppStorage("analyticsEnabled") private var analyticsEnabled = AppPreferences.defaultAnalyticsEnabled
@@ -360,7 +435,7 @@ private struct UsageSettingsView: View {
                 }
             } else {
                 Section("Claude Code") {
-                    Text("Usage comes from Claude Code session logs on this Mac. Claude web/mobile usage, account limits, account switching, and attachment counts are not included.")
+                    Text("Token usage comes from Claude Code session logs on this Mac. Five-hour and weekly limits appear after an enabled, connected Claude account completes a response.")
                     Text("Claude cost estimates are not available yet. Unknown prices are never shown as zero cost.")
                         .foregroundStyle(.secondary)
                 }
@@ -380,7 +455,7 @@ private struct UsageSettingsView: View {
                 Label("Prompts, responses, paths, and attachment contents are not stored", systemImage: "hand.raised")
                 Text(store.provider == .codex
                      ? "Limits are requested read-only from the signed Codex app-server. The last successful response stays in memory only."
-                     : "Claude Code logs are read locally. Claude credentials and settings are not accessed or changed.")
+                     : "Claude Code logs are read locally. Sign-in stays with Claude Code; CodexMeter changes only the status-line command used to receive documented limit percentages.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
