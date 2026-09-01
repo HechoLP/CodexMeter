@@ -304,8 +304,8 @@ struct MenuPopoverView: View {
                         sectionTab(section)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 8)
             }
 
             Divider()
@@ -356,16 +356,17 @@ struct MenuPopoverView: View {
                 Image(systemName: section.symbol)
                     .font(.system(size: 14, weight: .medium))
                 Text(section.title)
-                    .font(.subheadline.weight(.medium))
+                    .font(.subheadline.weight(isSelected ? .semibold : .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.86)
             }
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-            .frame(maxWidth: .infinity, minHeight: 40)
-            .background(
-                Color.accentColor.opacity(isSelected ? 0.16 : 0),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
+            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .overlay(alignment: .bottom) {
+                Capsule()
+                    .fill(isSelected ? Color.accentColor : Color.clear)
+                    .frame(width: 52, height: 2)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(MenuInteractionStyle())
