@@ -7,6 +7,8 @@ enum UsageProvider: String, CaseIterable, Identifiable, Sendable {
 
     var id: Self { self }
     var title: String { self == .codex ? "Codex" : "Claude Code" }
+    var tabTitle: String { self == .codex ? "Codex" : "Claude" }
+    var symbol: String { self == .codex ? "terminal" : "sparkles" }
     var supportsAccountTotals: Bool { self == .codex }
 
     func analyticsHint(for destinationTitle: String) -> String {

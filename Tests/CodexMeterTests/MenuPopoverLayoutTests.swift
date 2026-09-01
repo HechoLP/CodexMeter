@@ -5,27 +5,18 @@ import XCTest
 
 @MainActor
 final class MenuPopoverLayoutTests: XCTestCase {
-    func testNativeProviderPickerWritesTheSelectedServicePreference() throws {
-        _ = NSApplication.shared
-        let suite = "CodexMeter.ProviderInteractionTests.\(UUID())"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(UsageProvider.codex.rawValue, forKey: "usageProvider")
-        let host = NSHostingView(rootView:
-            MenuPopoverView(accounts: AccountLayoutFixture.emptyStore())
-                .environmentObject(UsageStore(automaticallyRefresh: false, defaults: defaults))
-                .environmentObject(ProfileUsageStore())
-                .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
-                .defaultAppStorage(defaults)
-        )
-        host.setFrameSize(host.fittingSize)
-        host.layoutSubtreeIfNeeded()
-        let selector = try XCTUnwrap(descendants(of: NSSegmentedControl.self, in: host).first)
-        for (segment, provider) in [(1, UsageProvider.claude), (0, UsageProvider.codex)] {
-            selector.selectedSegment = segment
-            XCTAssertTrue(selector.sendAction(selector.action, to: selector.target))
-            XCTAssertEqual(defaults.string(forKey: "usageProvider"), provider.rawValue)
-        }
+    func testProviderTabSelectionKeepsOnlySupportedSections() {
+        var selection = UsageProvider.codex.rawValue
+        var section = MenuPopoverSection.codex
+        MenuProviderSelection.apply(.claude, selection: &selection, section: &section)
+        XCTAssertEqual(selection, UsageProvider.claude.rawValue)
+        XCTAssertEqual(section, .overview)
+
+        MenuProviderSelection.apply(.codex, selection: &selection, section: &section)
+        XCTAssertEqual(selection, UsageProvider.codex.rawValue)
+        XCTAssertEqual(section, .overview)
+        XCTAssertEqual(UsageProvider.allCases.map(\.tabTitle), ["Codex", "Claude"])
+        XCTAssertTrue(UsageProvider.allCases.allSatisfy { !$0.symbol.isEmpty })
     }
 
     func testClaudeAndCodexProviderScreensFitBothAppearances() throws {
@@ -62,11 +53,8 @@ final class MenuPopoverLayoutTests: XCTestCase {
                     XCTAssertEqual(host.fittingSize.width, MenuPopoverMetrics.width, name)
                     XCTAssertLessThanOrEqual(host.fittingSize.height, 700, name)
                     XCTAssertFalse(containsScrollView(in: host), name)
-                    let selector = try XCTUnwrap(descendants(of: NSSegmentedControl.self, in: host).first)
-                    XCTAssertEqual(selector.segmentCount, 2)
-                    XCTAssertEqual(selector.selectedSegment, provider == .codex ? 0 : 1)
-                    XCTAssertTrue(selector.isEnabled)
-                    XCTAssertEqual(selector.label(forSegment: 1), "Claude Code")
+                    XCTAssertTrue(descendants(of: NSSegmentedControl.self, in: host).isEmpty,
+                                  "\(name): provider tabs must not regress to a segmented control")
                     try captureIfRequested(host, name: name)
                 }
             }

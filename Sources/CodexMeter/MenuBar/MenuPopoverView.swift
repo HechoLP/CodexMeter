@@ -63,6 +63,14 @@ enum MenuPopoverCategory: String, CaseIterable, Identifiable {
     }
 }
 
+enum MenuProviderSelection {
+    static func apply(_ provider: UsageProvider, selection: inout String,
+                      section: inout MenuPopoverSection) {
+        selection = provider.rawValue
+        if provider == .claude { section = .overview }
+    }
+}
+
 struct MenuPopoverView: View {
     @StateObject private var navigation: MenuNavigation
     private let accounts: CodexAccountStore
@@ -278,19 +286,15 @@ struct MenuPopoverView: View {
             }
             .padding(.horizontal, 18)
             .padding(.top, 15)
-            .padding(.bottom, 12)
+            .padding(.bottom, 8)
 
-            Picker("Service", selection: $usageProvider) {
+            HStack(spacing: 8) {
                 ForEach(UsageProvider.allCases) { provider in
-                    Text(provider.title).tag(provider.rawValue)
+                    providerTab(provider)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityLabel("Usage service")
-            .accessibilityIdentifier("menu.provider")
-            .padding(.horizontal, 18)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
 
             if store.provider == .codex {
                 CodexAccountSwitcher(accounts: accounts)
@@ -306,6 +310,39 @@ struct MenuPopoverView: View {
 
             Divider()
         }
+    }
+
+    private func providerTab(_ provider: UsageProvider) -> some View {
+        let isSelected = usageProvider == provider.rawValue
+        return Button {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                MenuProviderSelection.apply(provider, selection: &usageProvider, section: &selectedSection)
+            }
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: provider.symbol)
+                    .font(.system(size: 16, weight: .medium))
+                    .accessibilityHidden(true)
+                Text(provider.tabTitle)
+                    .font(.subheadline.weight(isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(
+                isSelected ? Color(nsColor: .alternateSelectedControlTextColor) : Color.secondary
+            )
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(
+                isSelected ? Color(nsColor: .controlAccentColor) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MenuInteractionStyle())
+        .keyboardShortcut(provider == .codex ? "1" : "2", modifiers: [.command, .shift])
+        .accessibilityLabel(provider.title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Show \(provider.title) usage")
+        .accessibilityIdentifier("menu.provider.\(provider.rawValue)")
     }
 
     private func sectionTab(_ section: MenuPopoverSection) -> some View {
