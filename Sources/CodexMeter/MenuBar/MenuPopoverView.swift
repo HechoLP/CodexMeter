@@ -225,11 +225,7 @@ struct MenuPopoverView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Open Settings") {
-                    SettingsWindowController.shared.showSettings(
-                        for: store,
-                        limitStore: limitStore,
-                        claude: claude
-                    )
+                    SettingsWindowController.shared.present()
                 }
                 .buttonStyle(.link)
             }
@@ -616,11 +612,7 @@ struct MenuPopoverView: View {
                 .help("Refresh usage")
 
                 Button {
-                    SettingsWindowController.shared.showSettings(
-                        for: store,
-                        limitStore: limitStore,
-                        claude: claude
-                    )
+                    SettingsWindowController.shared.present()
                 } label: {
                     Label("Settings", systemImage: "gearshape")
                         .padding(.horizontal, 6)
