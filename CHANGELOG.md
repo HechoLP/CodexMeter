@@ -4,6 +4,13 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-05
+
+### Fixed
+
+- Provider rows in Settings show the actual OpenAI and Claude marks instead of generic terminal/sparkles icons, on a neutral bordered chip rather than a flat color fill.
+- Removed the sidebar sort-menu button; it added nothing with six entries and read as a straight copy of the app it was inspired by.
+
 ## [1.4.0] - 2026-09-04
 
 ### Changed
