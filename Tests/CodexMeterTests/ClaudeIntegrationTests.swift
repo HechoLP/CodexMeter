@@ -144,6 +144,29 @@ final class ClaudeIntegrationStoreTests: XCTestCase {
         XCTAssertEqual(fixture.defaults.string(forKey: "usageProvider"), UsageProvider.codex.rawValue)
     }
 
+    func testUsageStaysAvailableWhenTheLimitsHelperCannotInstall() async throws {
+        let fixture = try ClaudeIntegrationFixture()
+        defer { fixture.cleanup() }
+        fixture.defaults.set(true, forKey: "claudeEnabled")
+        let account = ClaudeAccount(email: "person@example.com", subscriptionType: "pro", authenticationMethod: "claude.ai")
+        let store = ClaudeIntegrationStore(
+            authenticator: StaticClaudeAuthenticator(account: account),
+            installer: ThrowingInstallClaudeInstaller(),
+            defaults: fixture.defaults,
+            limitsURL: fixture.limitsURL,
+            automaticallyRefresh: false
+        )
+
+        await store.addCurrentAccount()
+
+        XCTAssertTrue(store.isConnected, "usage tracking must not depend on the limits helper")
+        XCTAssertTrue(store.isAvailable)
+        XCTAssertNil(store.snapshot)
+        XCTAssertEqual(store.status, .waitingForLimits)
+        XCTAssertEqual(store.statusMessage, ClaudeIntegrationError.bridgeNotFound.errorDescription)
+        XCTAssertTrue(fixture.defaults.bool(forKey: "claudeAccountLinked"))
+    }
+
     func testChangedClaudeAccountMustBeAddedBeforeOldLimitsCanAppear() async throws {
         let fixture = try ClaudeIntegrationFixture()
         defer { fixture.cleanup() }
@@ -399,6 +422,11 @@ private final class RecordingClaudeInstaller: ClaudeStatusLineInstalling, @unche
 private struct ThrowingUninstallClaudeInstaller: ClaudeStatusLineInstalling {
     func install() throws {}
     func uninstall() throws { throw ClaudeIntegrationError.invalidSettings }
+}
+
+private struct ThrowingInstallClaudeInstaller: ClaudeStatusLineInstalling {
+    func install() throws { throw ClaudeIntegrationError.bridgeNotFound }
+    func uninstall() throws {}
 }
 
 private struct ClaudeIntegrationFixture {

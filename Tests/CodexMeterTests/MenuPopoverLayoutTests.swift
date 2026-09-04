@@ -1,10 +1,122 @@
 import AppKit
+import ClaudeBridgeCore
 import SwiftUI
 import XCTest
 @testable import CodexMeter
 
+private struct StubClaudeAuth: ClaudeAuthenticating {
+    let account: ClaudeAccount?
+    func accountStatus() async throws -> ClaudeAccount? { account }
+}
+
+private struct StubClaudeInstaller: ClaudeStatusLineInstalling {
+    func install() throws {}
+    func uninstall() throws {}
+}
+
+@MainActor
+func makeConnectedClaudeStore(
+    fiveHourLeft: Double = 62,
+    weeklyLeft: Double = 41,
+    fetchedAt: Date = Date()
+) throws -> ClaudeIntegrationStore {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let limitsURL = root.appendingPathComponent("ClaudeLimits.json")
+    let snapshot = ClaudeRateLimitSnapshot(
+        fiveHour: ClaudeRateLimitWindow(usedPercentage: 100 - fiveHourLeft, resetsAt: fetchedAt.addingTimeInterval(3_600)),
+        sevenDay: ClaudeRateLimitWindow(usedPercentage: 100 - weeklyLeft, resetsAt: fetchedAt.addingTimeInterval(4 * 86_400)),
+        fetchedAt: fetchedAt
+    )
+    try ClaudeRateLimitCodec.encode(snapshot).write(to: limitsURL)
+    let account = ClaudeAccount(email: "person@example.com", subscriptionType: "pro", authenticationMethod: "claude.ai")
+    let defaults = UserDefaults(suiteName: "CodexMeter.MenuClaude.\(UUID().uuidString)")!
+    defaults.set(true, forKey: "claudeEnabled")
+    defaults.set(true, forKey: "claudeAccountLinked")
+    defaults.set(account.linkIdentifier, forKey: "claudeLinkedAccountID")
+    let store = ClaudeIntegrationStore(
+        authenticator: StubClaudeAuth(account: account),
+        installer: StubClaudeInstaller(),
+        defaults: defaults,
+        limitsURL: limitsURL,
+        now: { fetchedAt.addingTimeInterval(30) },
+        automaticallyRefresh: false
+    )
+    return store
+}
+
 @MainActor
 final class MenuPopoverLayoutTests: XCTestCase {
+    func testClaudeLimitsSectionRendersRemainingLikeCodex() async throws {
+        _ = NSApplication.shared
+        let claude = try makeConnectedClaudeStore()
+        await claude.refresh()
+        XCTAssertEqual(claude.status, .ready, "expected a ready snapshot; got \(claude.statusMessage)")
+        XCTAssertEqual(claude.snapshot?.windows.count, 2)
+
+        for (label, view) in [
+            ("preview", AnyView(MenuPopoverView(accounts: AccountLayoutFixture.emptyStore(), section: .codex))),
+            ("detail", AnyView(MenuPopoverView(accounts: AccountLayoutFixture.emptyStore(),
+                                               navigation: MenuNavigation(path: [.limits])))),
+        ] {
+            let host = NSHostingView(rootView:
+                view
+                    .environmentObject(UsageStore(provider: .claude, initialSnapshot: .empty, automaticallyRefresh: false))
+                    .environmentObject(ProfileUsageStore())
+                    .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                    .environmentObject(claude)
+                    .environment(\.colorScheme, .light)
+            )
+            host.appearance = NSAppearance(named: .aqua)
+            for _ in 0..<5 { host.setFrameSize(host.fittingSize); host.layoutSubtreeIfNeeded() }
+            XCTAssertEqual(host.fittingSize.width, MenuPopoverMetrics.width)
+            XCTAssertLessThanOrEqual(host.fittingSize.height, 640)
+            // "Weekly · Weekly" style redundancy must not appear in the card title.
+            XCTAssertFalse(claude.snapshot!.windows.contains { $0.displayName.caseInsensitiveCompare($0.windowLabel) == .orderedSame },
+                           "Claude limit window displayName must not duplicate its windowLabel")
+            try captureIfRequested(host, name: "claude-limits-\(label)")
+        }
+    }
+
+    func testCodexOverviewFooterShowsRelativeUpdateEvenWithProfileTotals() async throws {
+        _ = NSApplication.shared
+        let suite = "CodexMeter.FooterTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "profileSyncEnabled")
+        defaults.set(true, forKey: "showLastUpdated")
+
+        let usage = TokenUsage(inputTokens: 5_000_000, cachedInputTokens: 1_000_000, outputTokens: 40_000)
+        let now = Date()
+        let store = UsageStore(
+            provider: .codex,
+            initialSnapshot: UsageSnapshot(today: usage, week: usage, month: usage, allTime: usage,
+                                           quality: .exact, updatedAt: now),
+            automaticallyRefresh: false,
+            defaults: defaults
+        )
+        let profile = ProfileUsageStore(defaults: defaults) { _, _, _ in
+            ProfileUsageSnapshot(today: 9, week: 800_000_000, month: 900_000_000, lifetime: 5_000_000_000,
+                                 statsAsOf: now.addingTimeInterval(-2 * 86_400),
+                                 generatedAt: now.addingTimeInterval(-2 * 86_400))
+        }
+        await profile.refresh(weekStart: .monday)
+        XCTAssertEqual(profile.status, .ready)
+
+        let host = NSHostingView(rootView:
+            MenuPopoverView(accounts: AccountLayoutFixture.emptyStore())
+                .environmentObject(store)
+                .environmentObject(profile)
+                .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
+                .defaultAppStorage(defaults)
+                .environment(\.colorScheme, .light)
+        )
+        for _ in 0..<5 { host.setFrameSize(host.fittingSize); host.layoutSubtreeIfNeeded() }
+        XCTAssertEqual(host.fittingSize.width, MenuPopoverMetrics.width)
+        try captureIfRequested(host, name: "codex-overview-profile-footer")
+    }
+
     func testProviderTabSelectionKeepsOnlySupportedSections() {
         var selection = UsageProvider.codex.rawValue
         var section = MenuPopoverSection.codex

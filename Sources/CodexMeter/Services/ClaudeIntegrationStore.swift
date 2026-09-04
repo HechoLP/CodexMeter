@@ -418,14 +418,8 @@ final class ClaudeIntegrationStore: ObservableObject {
                 return
             }
             clearLimitsCache()
-            try await performInstall()
-            defaults.set(true, forKey: "claudeAccountLinked")
-            defaults.set(found.linkIdentifier, forKey: "claudeLinkedAccountID")
             detectedAccount = found
-            account = found
-            isConnected = true
-            loadLimits()
-            notifyAvailabilityIfNeeded()
+            await linkAndConnect(found)
         } catch {
             if isCurrent(operation) { fail(error) }
         }
@@ -477,14 +471,33 @@ final class ClaudeIntegrationStore: ObservableObject {
                 notifyAvailabilityIfNeeded()
                 return
             }
-            try await performInstall()
-            account = found
-            isConnected = true
-            loadLimits()
-            notifyAvailabilityIfNeeded()
+            await linkAndConnect(found)
         } catch {
             if isCurrent(operation) { fail(error) }
         }
+    }
+
+    /// Local Claude usage needs no helper; only the limit percentages do. Connect
+    /// for usage even when the status-line helper cannot be installed, and surface
+    /// the limits problem rather than failing the whole integration.
+    private func linkAndConnect(_ found: ClaudeAccount) async {
+        defaults.set(true, forKey: "claudeAccountLinked")
+        defaults.set(found.linkIdentifier, forKey: "claudeLinkedAccountID")
+        account = found
+        isConnected = true
+        do {
+            try await performInstall()
+            loadLimits()
+        } catch where snapshot != nil {
+            status = .stale
+            statusMessage = "Showing last known Claude limits"
+        } catch {
+            snapshot = nil
+            status = .waitingForLimits
+            statusMessage = (error as? LocalizedError)?.errorDescription
+                ?? "Claude limits could not be set up. Reconnect in Settings to retry."
+        }
+        notifyAvailabilityIfNeeded()
     }
 
     private func loadLimits() {
@@ -546,10 +559,13 @@ final class ClaudeIntegrationStore: ObservableObject {
         duration: Int,
         source: ClaudeRateLimitWindow
     ) -> AccountLimitWindow {
+        // Mirror the Codex primary-limit shape: one limit name ("Claude"), with
+        // the window itself named by AccountLimitWindow.windowLabel ("Weekly" /
+        // "5 hours"). Keeps the card title from reading "Weekly · Weekly".
         AccountLimitWindow(
             id: id,
             limitID: "claude",
-            displayName: duration == 10_080 ? "Weekly" : "Session",
+            displayName: "Claude",
             windowDurationMinutes: duration,
             usedPercent: source.usedPercentage,
             resetsAt: source.resetsAt

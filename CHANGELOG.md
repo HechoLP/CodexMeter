@@ -4,6 +4,14 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-04
+
+### Fixed
+
+- Claude limit cards no longer read "Weekly · Weekly"; the window name ("Weekly" / "5 hours") is shown once, matching the Codex limit layout.
+- The popover footer shows a consistent "Updated <relative>" line on both providers. The ChatGPT account-totals snapshot date stays in the Token History header instead of replacing the footer's freshness indicator.
+- Claude local usage now connects even when the status-line limits helper cannot be installed; the Limits section reports the helper problem instead of the whole integration going unavailable.
+
 ## [1.3.0] - 2026-09-04
 
 ### Added

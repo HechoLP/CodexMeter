@@ -545,8 +545,16 @@ struct MenuPopoverView: View {
             if shouldShowStatus {
                 HStack {
                     Label {
+                        // "Updated <relative>" is the shared freshness line for both
+                        // providers. The ChatGPT snapshot date already appears in the
+                        // Token History header, so it is not repeated here.
                         if selectedSection == .codex {
                             Text(currentLimitStatusMessage)
+                        } else if showsRelativeUpdate, let lastSourceRefreshAt = store.lastSourceRefreshAt {
+                            HStack(spacing: 3) {
+                                Text("Updated")
+                                Text(lastSourceRefreshAt, style: .relative)
+                            }
                         } else if profileEnabled, let profileSnapshot = profileStore.snapshot {
                             if profileStore.status == .ready {
                                 Text("Account totals through \(profileDate(profileSnapshot.statsAsOf))")
@@ -555,16 +563,6 @@ struct MenuPopoverView: View {
                             }
                         } else if profileEnabled {
                             Text("\(profileStore.statusMessage) · showing This Mac")
-                        } else if showLastUpdated,
-                                  !store.isRefreshing,
-                                  !store.isImportingHistory,
-                                  let lastSourceRefreshAt = store.lastSourceRefreshAt,
-                                  store.snapshot.quality != .stale,
-                                  store.snapshot.quality != .error {
-                            HStack(spacing: 3) {
-                                Text("Updated")
-                                Text(lastSourceRefreshAt, style: .relative)
-                            }
                         } else {
                             Text(store.statusMessage)
                         }
@@ -691,10 +689,23 @@ struct MenuPopoverView: View {
             case .unavailable: "exclamationmark.triangle"
             }
         }
+        // Match the footer: the "Updated <relative>" line owns the icon when it shows.
+        if showsRelativeUpdate { return store.operationAwareStatusSymbol }
         if profileEnabled {
             return profileStore.status == .ready ? "checkmark.circle" : "exclamationmark.triangle"
         }
         return store.operationAwareStatusSymbol
+    }
+
+    /// The shared "Updated <relative>" freshness line shows whenever a healthy
+    /// local scan is on record, on both providers and regardless of profile mode.
+    private var showsRelativeUpdate: Bool {
+        showLastUpdated
+            && !store.isRefreshing
+            && !store.isImportingHistory
+            && store.lastSourceRefreshAt != nil
+            && store.snapshot.quality != .stale
+            && store.snapshot.quality != .error
     }
 
     private var usesProfileTotals: Bool {
@@ -933,7 +944,9 @@ struct MenuPopoverView: View {
     }
 
     private func limitTitle(_ window: AccountLimitWindow) -> String {
-        window.displayName.caseInsensitiveCompare("Codex") == .orderedSame
+        // A provider's own primary limit ("Codex" / "Claude") adds nothing beyond
+        // the window label; only genuinely distinct sub-limits keep their name.
+        ["codex", "claude"].contains(window.displayName.lowercased())
             ? window.windowLabel
             : "\(window.displayName) · \(window.windowLabel)"
     }
