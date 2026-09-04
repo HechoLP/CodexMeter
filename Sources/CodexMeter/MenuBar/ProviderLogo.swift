@@ -35,6 +35,7 @@ enum ProviderLogoAsset {
 
 struct ProviderLogo: View {
     let provider: UsageProvider
+    var size: CGFloat = 15
 
     var body: some View {
         Group {
@@ -45,9 +46,9 @@ struct ProviderLogo: View {
                     .scaledToFit()
             } else {
                 Image(systemName: provider.symbol)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: size, weight: .medium))
             }
         }
-        .frame(width: 15, height: 15)
+        .frame(width: size, height: size)
     }
 }

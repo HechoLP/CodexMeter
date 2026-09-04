@@ -86,11 +86,3 @@ enum SettingsPane: Hashable, Identifiable {
         return false
     }
 }
-
-enum SettingsSidebarSort: String, CaseIterable, Identifiable {
-    case recommended
-    case name
-
-    var id: Self { self }
-    var title: String { self == .recommended ? "Recommended" : "Name" }
-}

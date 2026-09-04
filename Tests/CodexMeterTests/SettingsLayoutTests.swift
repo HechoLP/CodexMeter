@@ -95,8 +95,8 @@ final class SettingsLayoutTests: XCTestCase {
                         }
                     }
                     Section {
-                        SettingsChipLabel(title: "Codex", systemImage: "terminal", tint: .green, statusDot: .green)
-                        SettingsChipLabel(title: "Claude", systemImage: "sparkles", tint: .orange, statusDot: nil, dimmed: true)
+                        SettingsChipLabel(title: "Codex", logoProvider: .codex, statusDot: .green)
+                        SettingsChipLabel(title: "Claude", logoProvider: .claude, statusDot: nil, dimmed: true)
                     } header: {
                         HStack { Text("Providers"); Spacer(); Text("1 on").font(.caption).foregroundStyle(.secondary) }
                     }
