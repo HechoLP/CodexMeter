@@ -27,7 +27,7 @@ Optional profile totals follow a separate boundary:
 
 The profile response is not merged into `UsageSnapshot` or SQLite. Remote failure cannot change local parser state, and local input/cached-input/output values are always presented as a separate **This Mac** breakdown.
 
-Phase 2 extends the same token pipeline without a second database:
+Phase 2 analytics reuse each provider's token pipeline:
 
 ```text
 normalized usage_events
@@ -36,6 +36,12 @@ normalized usage_events
   -> one PricingCatalog + CostEstimator
   -> Usage / Projects / Sessions drill-down views
 ```
+
+`UsageProvider` selects the local roots and an independent `UsageStore`/database. Codex keeps `CodexMeter.sqlite` unchanged; Claude uses `Claude.sqlite` under the same owner-only Application Support directory. The shared bounded reader/checkpoint machinery dispatches to `ClaudeJSONLParser` for Claude records. Claude messages are identified by hashed `message.id` across files, repeated blocks, restarts, and copied history. Conflict updates take maxima of the disjoint uncached-input/cache-read/cache-write/output components and retain the earliest observation date. Codex's cumulative normalizer and conflict behavior remain unchanged. See [Claude accounting](CLAUDE.md).
+
+The provider selection scopes the menu bar label, popover, analytics destinations, and data-management settings. Only Codex can render ChatGPT profile totals, account switching, or Codex account limits; switching provider resets detail navigation. A reused Settings window rebinds its store before displaying another provider.
+
+`UsageStore` refreshes every requested analytics range after an import or calendar recalculation. Maintenance invalidates the analytics cache before starting; revision/request identifiers discard older in-flight results. Claude's optional `claude_message_exclusions` table retains only hashed response identities across clear/rebuild to reject later copies of pre-cutoff messages, without changing the Codex schema or retaining cleared usage values.
 
 Canonical model IDs are retained for pricing. Full working directories are immediately projected to a keyed HMAC plus their final folder name; raw paths never enter SQLite. Parent-session IDs are hashed with the existing storage identifier. Image attachment records contribute only a timestamped numeric count when the local schema is unambiguous; the retained whole-session count respects the local-history cutoff and attachment payloads are never copied. Inherited parent replay remains excluded before events reach aggregation, so parent and sub-agent rows are not added twice.
 

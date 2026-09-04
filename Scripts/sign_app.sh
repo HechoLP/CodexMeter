@@ -19,8 +19,13 @@ if [[ ! -d "${app_path}" ]]; then
 fi
 
 sparkle_framework="${app_path}/Contents/Frameworks/Sparkle.framework"
+claude_bridge="${app_path}/Contents/Helpers/CodexMeterClaudeBridge"
 if [[ ! -d "${sparkle_framework}" ]]; then
   print -u2 "Embedded Sparkle.framework not found: ${sparkle_framework}"
+  exit 1
+fi
+if [[ ! -x "${claude_bridge}" ]]; then
+  print -u2 "Claude limits helper not found: ${claude_bridge}"
   exit 1
 fi
 
@@ -36,6 +41,8 @@ for candidate in "${sparkle_nested_code[@]}"; do
   codesign --force --sign "${identity}" --options runtime --timestamp \
     --preserve-metadata=identifier,entitlements,requirements "${candidate}"
 done
+
+codesign --force --sign "${identity}" --options runtime --timestamp "${claude_bridge}"
 
 codesign --force --sign "${identity}" --options runtime --timestamp \
   --entitlements "${project_root}/Config/CodexMeter.entitlements" "${app_path}"

@@ -168,6 +168,7 @@ private enum CollectorResourceLimits {
 }
 
 actor CodexUsageCollector {
+    private let provider: UsageProvider
     private let database: SQLiteDatabase
     private let roots: [URL]
     private let discovery = CodexSourceDiscovery()
@@ -181,10 +182,12 @@ actor CodexUsageCollector {
     init(
         database: SQLiteDatabase,
         roots: [URL],
+        provider: UsageProvider = .codex,
         maximumBytesPerRefresh: Int64 = CollectorResourceLimits.maximumBytesPerRefresh,
         maximumRefreshDuration: Duration = CollectorResourceLimits.maximumRefreshDuration
     ) {
         self.database = database
+        self.provider = provider
         self.roots = roots
         self.maximumBytesPerRefresh = max(
             Int64((CodexJSONLParser.maximumLineBytes + 1) * 2),
@@ -268,7 +271,9 @@ actor CodexUsageCollector {
     }
 
     func clearLocalHistory(at cutoff: Date = Date(), calendar: Calendar = .current, weekStart: WeekStart) async throws -> CollectorRefreshResult {
-        let compactionStatus = try await database.clearLocalHistory(at: cutoff)
+        let compactionStatus = try await database.clearLocalHistory(
+            at: cutoff, preservesMessageExclusions: provider == .claude
+        )
         let result = try await refresh(now: cutoff, calendar: calendar, weekStart: weekStart)
         return CollectorRefreshResult(
             snapshot: result.snapshot,
@@ -483,6 +488,7 @@ actor CodexUsageCollector {
         var persistedNormalizationState = normalizationState
         var loadedStateSessionID = checkpoint.sessionID
         var pendingEvents: [UsageEvent] = []
+        var excludedEventKeys: Set<String> = []
         pendingEvents.reserveCapacity(256)
         var completedLineCount = 0
         let startingOffset = checkpoint.committedOffset
@@ -551,6 +557,7 @@ actor CodexUsageCollector {
                     persistedNormalizationState: &persistedNormalizationState,
                     loadedStateSessionID: &loadedStateSessionID,
                     pendingEvents: &pendingEvents,
+                    excludedEventKeys: &excludedEventKeys,
                     importCutoff: importCutoff
                 )
                 completedLineCount += 1
@@ -569,7 +576,9 @@ actor CodexUsageCollector {
                         checkpoint: checkpoint,
                         normalizationState: checkpoint.sessionID == nil ? nil : normalizationState,
                         expectedEpoch: expectedEpoch,
-                        expectedNormalizationState: checkpoint.sessionID == nil ? nil : persistedNormalizationState
+                        expectedNormalizationState: checkpoint.sessionID == nil ? nil : persistedNormalizationState,
+                        mergesMessageUsage: provider == .claude,
+                        excludedEventKeys: excludedEventKeys
                     )
                     if let committedNormalizationState {
                         persistedNormalizationState = committedNormalizationState
@@ -578,6 +587,7 @@ actor CodexUsageCollector {
                         }
                     }
                     pendingEvents.removeAll(keepingCapacity: true)
+                    excludedEventKeys.removeAll(keepingCapacity: true)
                     completedLineCount = 0
                 }
             }
@@ -614,7 +624,9 @@ actor CodexUsageCollector {
                 checkpoint: checkpoint,
                 normalizationState: checkpoint.sessionID == nil ? nil : normalizationState,
                 expectedEpoch: expectedEpoch,
-                expectedNormalizationState: checkpoint.sessionID == nil ? nil : persistedNormalizationState
+                expectedNormalizationState: checkpoint.sessionID == nil ? nil : persistedNormalizationState,
+                mergesMessageUsage: provider == .claude,
+                excludedEventKeys: excludedEventKeys
             )
             if let committedNormalizationState,
                normalizationState.cumulativeHighWaterMark != nil {
@@ -740,8 +752,16 @@ actor CodexUsageCollector {
         persistedNormalizationState: inout UsageNormalizationState,
         loadedStateSessionID: inout String?,
         pendingEvents: inout [UsageEvent],
+        excludedEventKeys: inout Set<String>,
         importCutoff: Date?
     ) async throws {
+        if provider == .claude {
+            try await processClaudeLine(line, position: position, source: source,
+                                        checkpoint: &checkpoint, pendingEvents: &pendingEvents,
+                                        excludedEventKeys: &excludedEventKeys,
+                                        importCutoff: importCutoff)
+            return
+        }
         guard line.containsASCII("\"token_count\"")
                 || line.containsASCII("\"session_meta\"")
                 || line.containsASCII("\"task_started\"")
@@ -883,6 +903,51 @@ actor CodexUsageCollector {
             "cumulative:\(usageIdentity(observation.cumulativeUsage))"
         ].joined(separator: "|")
         return storageIdentifier(Data(material.utf8))
+    }
+
+    private func processClaudeLine(
+        _ line: Data,
+        position: Int64,
+        source: CodexSessionSource,
+        checkpoint: inout SourceCheckpoint,
+        pendingEvents: inout [UsageEvent],
+        excludedEventKeys: inout Set<String>,
+        importCutoff: Date?
+    ) async throws {
+        guard let observation = ClaudeJSONLParser().parse(line) else { return }
+        let eventKey = storageIdentifier("claude-message|\(observation.messageID)")
+        if let importCutoff, observation.occurredAt <= importCutoff {
+            excludedEventKeys.insert(eventKey)
+            return
+        }
+        let parentID = storageIdentifier("claude-session|\(observation.sessionID)")
+        // Subagent transcripts share the parent sessionId but own their messages.
+        let filename = source.url.deletingPathExtension().lastPathComponent
+        let agentID = observation.agentID.map { $0.hasPrefix("agent-") ? $0 : "agent-\($0)" }
+            ?? (filename.hasPrefix("agent-") ? filename : nil)
+        let sessionID = agentID.map {
+            storageIdentifier("claude-agent|\(observation.sessionID)|\($0)")
+        } ?? parentID
+        let project = try await projectProjection(observation.workingDirectory)
+        checkpoint.sessionID = sessionID
+        checkpoint.parentSessionID = agentID == nil ? nil : parentID
+        checkpoint.sessionStartedAt = min(checkpoint.sessionStartedAt ?? observation.occurredAt,
+                                          observation.occurredAt)
+        checkpoint.model = observation.model
+        checkpoint.projectPath = project?.id ?? checkpoint.projectPath
+        checkpoint.projectName = project?.name ?? checkpoint.projectName
+        pendingEvents.append(UsageEvent(
+            // A response may be repeated for text/tool blocks and in copied history.
+            // Its message ID, not a line UUID, file path or timestamp, is the identity.
+            eventKey: eventKey,
+            occurredAt: observation.occurredAt,
+            sessionID: sessionID,
+            model: observation.model,
+            projectPath: checkpoint.projectPath,
+            usage: observation.usage,
+            sourcePath: storageIdentifier(source.url.standardizedFileURL.path),
+            sourcePosition: position
+        ))
     }
 
     private func usageIdentity(_ usage: TokenUsage?) -> String {

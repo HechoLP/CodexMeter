@@ -5,6 +5,73 @@ import XCTest
 
 @MainActor
 final class MenuPopoverLayoutTests: XCTestCase {
+    func testProviderTabSelectionKeepsOnlySupportedSections() {
+        var selection = UsageProvider.codex.rawValue
+        var section = MenuPopoverSection.codex
+        MenuProviderSelection.apply(.claude, selection: &selection, section: &section)
+        XCTAssertEqual(selection, UsageProvider.claude.rawValue)
+        XCTAssertEqual(section, .codex)
+
+        MenuProviderSelection.apply(.codex, selection: &selection, section: &section)
+        XCTAssertEqual(selection, UsageProvider.codex.rawValue)
+        XCTAssertEqual(section, .codex)
+        XCTAssertEqual(UsageProvider.allCases.map(\.tabTitle), ["Codex", "Claude"])
+        XCTAssertTrue(UsageProvider.allCases.allSatisfy { !$0.symbol.isEmpty })
+    }
+
+    func testProviderLogoAssetsAreBundledAsTemplateImages() throws {
+        _ = NSApplication.shared
+        for provider in UsageProvider.allCases {
+            let image = try XCTUnwrap(ProviderLogoAsset.image(for: provider), provider.title)
+            XCTAssertTrue(image.isTemplate, provider.title)
+            XCTAssertGreaterThan(image.size.width, 0, provider.title)
+            XCTAssertGreaterThan(image.size.height, 0, provider.title)
+        }
+    }
+
+    func testClaudeAndCodexProviderScreensFitBothAppearances() throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        let previous = defaults.object(forKey: "usageProvider")
+        defer {
+            if let previous { defaults.set(previous, forKey: "usageProvider") }
+            else { defaults.removeObject(forKey: "usageProvider") }
+        }
+        let usage = TokenUsage(inputTokens: 1_200_000, cachedInputTokens: 900_000,
+                               cacheWriteInputTokens: 100_000, outputTokens: 50_000)
+        let snapshot = UsageSnapshot(today: usage, week: usage, month: usage, allTime: usage,
+                                     quality: .exact, updatedAt: Date())
+        for provider in UsageProvider.allCases {
+            defaults.set(provider.rawValue, forKey: "usageProvider")
+            for dark in [false, true] {
+                for empty in [false, true] {
+                    let name = "\(provider.rawValue)-\(empty ? "empty" : "ready")-\(dark ? "dark" : "light")"
+                    let store = UsageStore(provider: provider,
+                        initialSnapshot: empty ? .empty : snapshot, automaticallyRefresh: false)
+                    let host = NSHostingView(rootView:
+                        MenuPopoverView(accounts: AccountLayoutFixture.emptyStore())
+                            .environmentObject(store)
+                            .environmentObject(ProfileUsageStore())
+                            .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                            .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
+                            .environment(\.colorScheme, dark ? .dark : .light)
+                    )
+                    host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                    for _ in 0..<5 {
+                        host.setFrameSize(host.fittingSize)
+                        host.layoutSubtreeIfNeeded()
+                    }
+                    XCTAssertEqual(host.fittingSize.width, MenuPopoverMetrics.width, name)
+                    XCTAssertLessThanOrEqual(host.fittingSize.height, 700, name)
+                    XCTAssertFalse(containsScrollView(in: host), name)
+                    XCTAssertTrue(descendants(of: NSSegmentedControl.self, in: host).isEmpty,
+                                  "\(name): provider tabs must not regress to a segmented control")
+                    try captureIfRequested(host, name: name)
+                }
+            }
+        }
+    }
+
     func testPopoverSectionsSeparateTokenUsageFromCodexLimits() {
         XCTAssertEqual(
             MenuPopoverSection.allCases.map(\.title),
@@ -20,6 +87,34 @@ final class MenuPopoverLayoutTests: XCTestCase {
         )
     }
 
+    func testClaudeDetailScreensPreserveProviderContext() throws {
+        _ = NSApplication.shared
+        for dark in [false, true] {
+            for destination in analyticsDestinations {
+                let host = NSHostingView(rootView:
+                    MenuPopoverView(accounts: AccountLayoutFixture.emptyStore(),
+                        navigation: MenuNavigation(path: [destination]))
+                        .environmentObject(UsageStore(provider: .claude,
+                            analyticsSnapshots: makeAnalyticsFixtures(provider: .claude),
+                            automaticallyRefresh: false))
+                        .environmentObject(ProfileUsageStore())
+                        .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+                        .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
+                        .environment(\.colorScheme, dark ? .dark : .light)
+                )
+                host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                for _ in 0..<5 {
+                    host.setFrameSize(host.fittingSize)
+                    host.layoutSubtreeIfNeeded()
+                }
+                XCTAssertEqual(host.fittingSize.width, MenuPopoverMetrics.width)
+                XCTAssertLessThanOrEqual(host.fittingSize.height, 580)
+                XCTAssertEqual(scrollViewCount(in: host), 1)
+                try captureIfRequested(host, name: "claude-\(destination.title(usesProfileTotals: false))-\(dark ? "dark" : "light")")
+            }
+        }
+    }
+
     func testPopoverFittingSizeShowsContentWithoutEmbeddingAScrollView() {
         _ = NSApplication.shared
         let store = UsageStore()
@@ -32,6 +127,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
             .environmentObject(store)
             .environmentObject(profileStore)
             .environmentObject(limitStore)
+            .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
         let hostingView = NSHostingView(rootView: view)
 
         hostingView.layoutSubtreeIfNeeded()
@@ -108,6 +204,15 @@ final class MenuPopoverLayoutTests: XCTestCase {
         XCTAssertNil(navigation.destination)
         navigation.back()
         XCTAssertTrue(navigation.path.isEmpty)
+    }
+
+    func testDisablingCostEstimatesRestoresTokenChartWithoutLosingSelection() {
+        let navigation = MenuNavigation(path: [.usage])
+        navigation.chartMetric = .cost
+        XCTAssertEqual(navigation.chartMetric.resolved(costEstimatesEnabled: false), .tokens)
+        XCTAssertEqual(navigation.chartMetric, .cost)
+        XCTAssertEqual(navigation.chartMetric.resolved(costEstimatesEnabled: true), .cost)
+        XCTAssertEqual(AnalyticsChartMetric.tokens.resolved(costEstimatesEnabled: true), .tokens)
     }
 
     func testEveryDestinationKeepsThePopoverWidthAndBoundedHeight() {
@@ -262,6 +367,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
                     .environmentObject(UsageStore())
                     .environmentObject(ProfileUsageStore())
                     .environmentObject(store)
+                    .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
                     .defaultAppStorage(defaults)
                     .environment(\.colorScheme, .dark)
             )
@@ -290,6 +396,7 @@ final class MenuPopoverLayoutTests: XCTestCase {
             .environmentObject(UsageStore(analyticsSnapshots: snapshots))
             .environmentObject(ProfileUsageStore())
             .environmentObject(AccountLimitStore(provider: CollapsedPopoverTestLimitProvider(), pollingInterval: nil))
+            .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
     }
 
     private func topOriginFrame(of view: NSView, in hostingView: NSView) -> NSRect {
@@ -317,12 +424,13 @@ final class MenuPopoverLayoutTests: XCTestCase {
         makeAnalyticsFixtures()
     }
 
-    private func makeAnalyticsFixtures(longContent: Bool = false) -> [AnalyticsRange: AnalyticsSnapshot] {
+    private func makeAnalyticsFixtures(longContent: Bool = false, provider: UsageProvider = .codex) -> [AnalyticsRange: AnalyticsSnapshot] {
         let now = Date(timeIntervalSince1970: 1_788_055_200)
         let usage = TokenUsage(inputTokens: longContent ? 1_234_567_890_123 : 1_000_000,
                                cachedInputTokens: 900_000, outputTokens: 5_000)
         let models = [ModelUsageSummary(
-            modelID: longContent ? "test-model-with-a-long-identifier" : "test-model", usage: usage
+            modelID: provider == .claude ? "claude-sonnet-4-6"
+                : (longContent ? "test-model-with-a-long-identifier" : "test-model"), usage: usage
         )]
         let projectName = longContent ? "A long project name · 긴 프로젝트 이름" : "Project"
         return Dictionary(uniqueKeysWithValues: AnalyticsRange.allCases.map { range in

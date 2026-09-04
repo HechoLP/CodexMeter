@@ -41,6 +41,8 @@ struct SettingsView: View {
         switch category {
         case .general:
             GeneralSettingsView()
+        case .services:
+            ServiceSettingsView()
         case .appearance:
             AppearanceSettingsView()
         case .usage:
@@ -57,6 +59,7 @@ struct SettingsView: View {
 
 enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     case general
+    case services
     case appearance
     case usage
     case data
@@ -68,6 +71,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .general: "General"
+        case .services: "Services"
         case .appearance: "Menu Bar"
         case .usage: "Usage & Privacy"
         case .data: "Local Data"
@@ -79,6 +83,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     var summary: String {
         switch self {
         case .general: "Startup, refresh, updates, and calendar"
+        case .services: "Enable providers and connect accounts"
         case .appearance: "Icon, token text, and popover display"
         case .usage: "What is counted and what stays local"
         case .data: "Source status and history management"
@@ -90,12 +95,101 @@ enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
     var systemImage: String {
         switch self {
         case .general: "gearshape"
+        case .services: "person.crop.circle.badge.checkmark"
         case .appearance: "menubar.rectangle"
         case .usage: "chart.bar.xaxis"
         case .data: "externaldrive"
         case .advanced: "stethoscope"
         case .about: "info.circle"
         }
+    }
+}
+
+private struct ServiceSettingsView: View {
+    @EnvironmentObject private var claude: ClaudeIntegrationStore
+
+    var body: some View {
+        Form {
+            Section("Codex") {
+                LabeledContent("Status", value: "Available")
+                Text("Codex remains the primary service and uses the account already signed in to the Codex app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Claude Code") {
+                Toggle("Enable Claude Code", isOn: Binding(
+                    get: { claude.isEnabled },
+                    set: { enabled in Task { await claude.setEnabled(enabled) } }
+                ))
+                .accessibilityHint("Claude appears in the menu only after an account is added.")
+
+                if claude.isEnabled {
+                    if claude.isConnected, let account = claude.account {
+                        LabeledContent("Account") {
+                            Text(account.displayName)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(account.displayName)
+                        }
+                        if let plan = account.planName {
+                            LabeledContent("Plan", value: plan)
+                        }
+                        LabeledContent("Limits") {
+                            Text(claude.statusMessage)
+                                .multilineTextAlignment(.trailing)
+                                .lineLimit(2)
+                        }
+                        HStack {
+                            Button("Refresh") { Task { await claude.refresh() } }
+                                .disabled(claude.isRefreshing)
+                            Button("Disconnect", role: .destructive) {
+                                Task { await claude.disconnect() }
+                            }
+                        }
+                    } else {
+                        LabeledContent("Status") {
+                            Text(claude.statusMessage)
+                                .multilineTextAlignment(.trailing)
+                                .lineLimit(2)
+                        }
+                        if let account = claude.detectedAccount {
+                            LabeledContent("Detected account") {
+                                Text(account.displayName)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .help(account.displayName)
+                            }
+                            Button("Add Account") {
+                                Task { await claude.addCurrentAccount() }
+                            }
+                            .disabled(claude.isRefreshing)
+                        } else {
+                            Button("Sign In and Add Claude Account…") {
+                                Task { await claude.signInAndAddAccount() }
+                            }
+                            .disabled(claude.isRefreshing)
+                        }
+                        if claude.isRefreshing {
+                            ProgressView("Checking Claude…")
+                                .controlSize(.small)
+                        }
+                    }
+                }
+            }
+
+            Section("Privacy") {
+                Label("Claude Code owns the sign-in", systemImage: "key")
+                Label("CodexMeter never reads or stores Claude credentials", systemImage: "lock.shield")
+                Label("Only 5-hour and weekly percentages and reset times are saved", systemImage: "gauge.with.dots.needle.50percent")
+                Text("Disconnecting removes CodexMeter's status-line integration. It does not sign you out of Claude Code.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .task { if claude.isEnabled { await claude.refresh() } }
     }
 }
 
@@ -197,7 +291,7 @@ private struct GeneralSettingsView: View {
                         Text(mode.title).tag(mode.rawValue)
                     }
                 }
-                Text("Automatic reacts to Codex file changes and uses a lightweight one-minute fallback check. Fixed intervals are available when you prefer predictable polling.")
+                Text("Automatic reacts to local session changes and uses a lightweight one-minute fallback check. Fixed intervals are available when you prefer predictable polling.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -302,7 +396,9 @@ private struct AppearanceSettingsView: View {
 }
 
 private struct UsageSettingsView: View {
+    @EnvironmentObject private var store: UsageStore
     @EnvironmentObject private var limitStore: AccountLimitStore
+    @EnvironmentObject private var claude: ClaudeIntegrationStore
     @AppStorage("profileSyncEnabled") private var profileSyncEnabled = AppPreferences.defaultProfileSyncEnabled
     @AppStorage("accountLimitsEnabled") private var accountLimitsEnabled = AppPreferences.defaultAccountLimitsEnabled
     @AppStorage("analyticsEnabled") private var analyticsEnabled = AppPreferences.defaultAnalyticsEnabled
@@ -316,15 +412,17 @@ private struct UsageSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Limits") {
-                Toggle("Show account limits", isOn: $accountLimitsEnabled)
-                    .onChange(of: accountLimitsEnabled) { _, _ in
-                        limitStore.synchronizeEnabledPreference()
-                    }
-                Toggle("Show additional limits", isOn: $additionalLimitsEnabled)
-                    .disabled(!accountLimitsEnabled)
-                Toggle("Show reset credits", isOn: $resetCreditsEnabled)
-                    .disabled(!accountLimitsEnabled)
+            if store.provider == .codex {
+                Section("Codex Limits") {
+                    Toggle("Show account limits", isOn: $accountLimitsEnabled)
+                        .onChange(of: accountLimitsEnabled) { _, _ in
+                            limitStore.synchronizeEnabledPreference()
+                        }
+                    Toggle("Show additional limits", isOn: $additionalLimitsEnabled)
+                        .disabled(!accountLimitsEnabled)
+                    Toggle("Show reset credits", isOn: $resetCreditsEnabled)
+                        .disabled(!accountLimitsEnabled)
+                }
             }
             Section("Usage Analytics") {
                 Toggle("Show usage analytics", isOn: $analyticsEnabled)
@@ -337,29 +435,37 @@ private struct UsageSettingsView: View {
                 Toggle("Show agent details", isOn: $agentDetailsEnabled)
                     .disabled(!analyticsEnabled || !sessionsEnabled)
                 Toggle("Show attachment metadata", isOn: $attachmentMetadataEnabled)
-                    .disabled(!analyticsEnabled || !sessionsEnabled)
+                    .disabled(!analyticsEnabled || !sessionsEnabled || store.provider == .claude)
                 Text("Cost is an estimate based on current official API token prices. It is not a bill, subscription charge, or prediction of remaining quota.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section("ChatGPT Account Totals") {
-                Toggle("Use ChatGPT account totals", isOn: $profileSyncEnabled)
-                Text("When enabled, CodexMeter uses your current Codex sign-in only to request aggregate profile totals from chatgpt.com. Credentials and profile responses stay in memory and are never written to CodexMeter's database or logs.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Profile totals use a non-public ChatGPT endpoint and can be delayed to the date shown in the popover.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("The main Today value always uses this Mac's live local history. Account totals remain separate and show the server snapshot date.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if store.provider == .codex {
+                Section("ChatGPT Account Totals") {
+                    Toggle("Use ChatGPT account totals", isOn: $profileSyncEnabled)
+                    Text("When enabled, CodexMeter uses your current Codex sign-in only to request aggregate profile totals from chatgpt.com. Credentials and profile responses stay in memory and are never written to CodexMeter's database or logs.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Profile totals use a non-public ChatGPT endpoint and can be delayed to the date shown in the popover.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("The main Today value always uses this Mac's live local history. Account totals remain separate and show the server snapshot date.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Section("Claude Code") {
+                    Text("Token usage comes from Claude Code session logs on this Mac. Five-hour and weekly limits appear after an enabled, connected Claude account completes a response.")
+                    Text("Claude cost estimates are not available yet. Unknown prices are never shown as zero cost.")
+                        .foregroundStyle(.secondary)
+                }
             }
             Section("This Mac Breakdown") {
                 Label("Input is counted", systemImage: "arrow.up")
                 Label("Cached input is included in Input", systemImage: "bolt.horizontal")
                 Label("Output is counted independently", systemImage: "arrow.down")
                 Label("Total equals Input plus Output", systemImage: "sum")
-                Text("Cached input is the portion of Input that Codex served from cache. It remains visible as a breakdown, but is not added to Total a second time.")
+                Text("Cached input is included in Input, not added to Total a second time. For Claude Code, Input also includes cache creation tokens.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -367,7 +473,9 @@ private struct UsageSettingsView: View {
                 Label("Project identifiers are stored as keyed hashes", systemImage: "lock.shield")
                 Label("Only project folder names are shown", systemImage: "folder.badge.questionmark")
                 Label("Prompts, responses, paths, and attachment contents are not stored", systemImage: "hand.raised")
-                Text("Limits are requested read-only from the signed Codex app-server. The last successful response stays in memory only.")
+                Text(store.provider == .codex
+                     ? "Limits are requested read-only from the signed Codex app-server. The last successful response stays in memory only."
+                     : "Claude Code logs are read locally. Sign-in stays with Claude Code; CodexMeter changes only the status-line command used to receive documented limit percentages.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -387,7 +495,7 @@ private struct DataSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Codex Local Data") {
+            Section("\(store.provider.title) Local Data") {
                 statisticRow("Status", store.sourceStatusText)
                 statisticRow("Source files", store.sourceCount.formatted())
                 statisticRow("Database size", formattedBytes(store.dataStatistics.databaseBytes))
@@ -398,9 +506,15 @@ private struct DataSettingsView: View {
                 }
             }
             Section("Sources") {
-                statisticRow("Local Codex sessions", store.sourceStatusText)
-                statisticRow("Account limits", accountLimitStatus)
-                statisticRow("Pricing catalog", "Available · \(PricingCatalog.current.metadata.version)")
+                statisticRow("Local \(store.provider.title) sessions", store.sourceStatusText)
+                if store.provider == .codex {
+                    statisticRow("Account limits", accountLimitStatus)
+                    statisticRow("Pricing catalog", "Available · \(PricingCatalog.current.metadata.version)")
+                } else {
+                    Text("Reads ~/.claude/projects, or projects inside CLAUDE_CONFIG_DIR when set in the app's environment.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Section {
                 if store.isMaintainingData || store.isRefreshing || store.isImportingHistory {
@@ -430,14 +544,14 @@ private struct DataSettingsView: View {
                 }
                 .disabled(store.isMaintainingData || store.isRefreshing || store.isImportingHistory)
             }
-            Text("Clearing history establishes a new local cutoff. Older Codex logs stay excluded instead of being imported again on the next refresh.")
+            Text("Clearing history establishes a new cutoff for \(store.provider.title) only. Older logs stay excluded on the next refresh. Other services are not affected.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
         .padding()
         .confirmationDialog(
-            "Clear CodexMeter local history?",
+            "Clear \(store.provider.title) local history?",
             isPresented: $confirmsClear,
             titleVisibility: .visible
         ) {
@@ -446,7 +560,7 @@ private struct DataSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This deletes CodexMeter's local statistics. It does not delete Codex session files, and records at or before this time will remain excluded.")
+            Text("This deletes only the local \(store.provider.title) statistics. Session files are not deleted, and records at or before this time will remain excluded.")
         }
     }
 
@@ -495,7 +609,7 @@ private struct AdvancedSettingsView: View {
                     openLogFolder()
                 }
             }
-            Section("Account Limit Source") {
+            Section("Codex Account Limit Source") {
                 LabeledContent("Mode", value: "Automatic")
                 LabeledContent("Provider", value: "Signed Codex app-server")
                 Text("CodexMeter uses a read-only local RPC request and does not expose reset or purchase actions.")

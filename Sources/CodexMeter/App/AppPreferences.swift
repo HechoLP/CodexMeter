@@ -10,6 +10,7 @@ enum AppPreferences {
     static let defaultCostEstimatesEnabled = true
     static let defaultAdditionalLimitsEnabled = true
     static let defaultResetCreditsEnabled = true
+    static let defaultClaudeEnabled = false
     static let defaultProjectsEnabled = true
     static let defaultSessionsEnabled = true
     static let defaultAgentDetailsEnabled = true
@@ -28,6 +29,7 @@ enum AppPreferences {
                 "costEstimatesEnabled": defaultCostEstimatesEnabled,
                 "additionalLimitsEnabled": defaultAdditionalLimitsEnabled,
                 "resetCreditsEnabled": defaultResetCreditsEnabled,
+                "claudeEnabled": defaultClaudeEnabled,
                 "projectsEnabled": defaultProjectsEnabled,
                 "sessionsEnabled": defaultSessionsEnabled,
                 "agentDetailsEnabled": defaultAgentDetailsEnabled,

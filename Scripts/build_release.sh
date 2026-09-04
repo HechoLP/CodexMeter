@@ -28,6 +28,7 @@ else
   remove_swift_scratch=1
 fi
 binary_path="${swift_scratch_path}/apple/Products/Release/${PRODUCT_NAME}"
+claude_bridge_path="${swift_scratch_path}/apple/Products/Release/CodexMeterClaudeBridge"
 sparkle_framework="${swift_scratch_path}/apple/Products/Release/Frameworks/Sparkle.framework"
 
 cleanup() {
@@ -53,6 +54,10 @@ if [[ ! -f "${binary_path}" ]]; then
   print -u2 "Release executable was not produced at ${binary_path}"
   exit 1
 fi
+if [[ ! -f "${claude_bridge_path}" ]]; then
+  print -u2 "Claude limits helper was not produced at ${claude_bridge_path}"
+  exit 1
+fi
 if [[ ! -d "${sparkle_framework}" ]]; then
   print -u2 "Sparkle.framework was not produced at ${sparkle_framework}"
   exit 1
@@ -64,10 +69,18 @@ if [[ "${app_path:t}" != "${PRODUCT_NAME}.app" ]]; then
 fi
 rm -rf "${app_path}"
 mkdir -p "${app_path}/Contents/MacOS" "${app_path}/Contents/Resources" \
-  "${app_path}/Contents/Frameworks"
+  "${app_path}/Contents/Frameworks" "${app_path}/Contents/Helpers"
 install -m 755 "${binary_path}" "${app_path}/Contents/MacOS/${PRODUCT_NAME}"
+install -m 755 "${claude_bridge_path}" "${app_path}/Contents/Helpers/CodexMeterClaudeBridge"
 install -m 644 "${project_root}/Assets/AppIcon.icns" "${app_path}/Contents/Resources/AppIcon.icns"
 install -m 644 "${project_root}/Config/Info.plist" "${app_path}/Contents/Info.plist"
+provider_logo_source="${project_root}/Sources/CodexMeter/Resources/ProviderLogos"
+provider_logo_destination="${app_path}/Contents/Resources/ProviderLogos"
+mkdir -p "${provider_logo_destination}"
+for provider_logo in OpenAI Claude; do
+  install -m 644 "${provider_logo_source}/${provider_logo}.svg" \
+    "${provider_logo_destination}/${provider_logo}.svg"
+done
 ditto --norsrc --noextattr "${sparkle_framework}" \
   "${app_path}/Contents/Frameworks/Sparkle.framework"
 
@@ -87,6 +100,7 @@ fi
 /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey ${SPARKLE_PUBLIC_KEY}" "${app_path}/Contents/Info.plist"
 
 xattr -cr "${app_path}"
+codesign --force --sign - "${app_path}/Contents/Helpers/CodexMeterClaudeBridge"
 if [[ "${adhoc_hardened_runtime}" == "1" ]]; then
   codesign --force --sign - --options runtime \
     --entitlements "${project_root}/Config/CodexMeter.entitlements" "${app_path}"

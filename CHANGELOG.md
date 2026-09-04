@@ -4,6 +4,34 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced the provider segmented control with compact, logo-first Codex and Claude Code tabs, and removed redundant popover branding so usage information appears first.
+- Show the connected Claude account and plan in the menu header so it lines up with the Codex account row instead of leaving the space blank.
+- Made Claude Code an explicit Services integration: enable it, add the official CLI account, then access its token and limit views.
+
+### Fixed
+
+- Keep the last known Claude account and limits visible during temporary CLI failures, while clearly marking expired or old limit snapshots instead of presenting them as current.
+- Distinguish Claude accounts in the same organization, cancel in-flight account setup when Claude is turned off, and fail safely if the existing status-line configuration cannot be restored.
+- Refresh previously opened 7D/30D analysis after imports, calendar changes, rebuilds, and history clearing; discard superseded in-flight analytics results.
+- Keep cleared Claude responses excluded when later streaming blocks or copied transcripts appear, including across restarts and rebuilds.
+- Restore the user's original Claude status line on disconnect even when they changed it themselves while CodexMeter was connected; the first captured value is no longer overwritten on a later reinstall.
+- Run the Claude status-line install and byte-comparison off the main thread so the periodic account refresh never blocks the menu.
+- Show the token chart when cost estimates are turned off, even if Cost was previously selected.
+
+### Added
+
+- Claude Code local token usage with Today/week/month/history totals, model/project/session analytics, and sub-agent relationships.
+- A persistent Codex / Claude Code selector in the menu. Each provider has a separate database and history cutoff; Codex account data never appears as Claude usage.
+- Claude response-ID deduplication and streaming-counter reconciliation, including cache-read and cache-creation input accounting.
+- Read-only Claude five-hour and weekly limits through the documented status-line fields, with existing user status-line configuration preserved and restored.
+- A bundled owner-only Claude limits helper that stores no prompts, paths, session identifiers, or credentials.
+
+### Scope
+
+- Claude web/mobile totals, account switching, attachment counts, and cost estimates are not included. Claude credentials are never read or copied.
+
 ## [1.2.0] - 2026-08-31
 
 ### Added

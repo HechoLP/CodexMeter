@@ -1,6 +1,6 @@
-# CodexMeter ◈ — Know where your Codex tokens went.
+# CodexMeter ◈ — Know where your coding tokens went.
 
-> Local Codex token usage, always one click away on macOS.
+> Local Codex and Claude Code token usage, one click away on macOS.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
@@ -12,12 +12,12 @@
 
 <p align="center"><sub>The app popover shown above is an actual CodexMeter screen.</sub></p>
 
-Tiny native macOS menu bar app that turns **local Codex session history** into clear token totals. Local totals stay one click away without an account login, API key, browser cookie, telemetry, or cloud sync. You can also opt in to a separate, memory-only ChatGPT account-total view.
+Tiny native macOS menu bar app that turns **local Codex and Claude Code session history** into separate token totals. Codex also offers a separate, opt-in, memory-only ChatGPT account-total view. Claude is opt-in: after you enable it and add the Claude Code account, CodexMeter can show the documented five-hour and weekly limits without reading or storing Claude credentials.
 
 ## Why
 
 - **Glanceable totals.** See input, cached input, output, and total tokens without leaving the menu bar.
-- **Plan around limits.** See the nearest Codex quota windows, reset countdowns, and an explicitly labeled even-use pace estimate before starting a long task.
+- **Plan around limits.** See the nearest Codex or Claude Code quota windows, reset countdowns, and an explicitly labeled even-use pace estimate before starting a long task.
 - **Honest accounting.** Cumulative snapshots are normalized into increases instead of being added repeatedly.
 - **Local by design.** Prompts, responses, source code, credentials, and raw session paths are not stored in CodexMeter's database.
 - **Native and quiet.** SwiftUI and AppKit, no Dock window, and no telemetry.
@@ -81,22 +81,23 @@ open /Applications/CodexMeter.app
 ## First run
 
 1. Launch CodexMeter after Codex has created local session history.
-2. Select the diamond meter in the macOS menu bar.
-3. Open **Settings** to choose the displayed period, refresh mode, menu bar elements, and launch-at-login behavior.
-4. Use **Refresh** whenever you want an immediate reconciliation.
+2. To add Claude Code, open **Settings → Services**, enable Claude Code, and explicitly add the account already signed in to the official Claude CLI. If no account is signed in, use **Sign In and Add Claude Account**.
+3. Select the diamond meter in the macOS menu bar, then choose **Codex** or **Claude**.
+4. Use **Refresh** whenever you want an immediate reconciliation. Claude limits appear after Claude Code completes a response.
 
 Local totals require no account connection. On macOS, **Settings → Usage & Privacy → Use ChatGPT account totals** can optionally use the existing Codex sign-in to match ChatGPT profile totals.
 
 ## Features
 
+- **Codex and opt-in Claude Code** local usage, selected directly in the menu after the Claude account is added. Each service has independent history, refresh, and data controls; token totals are never mixed. See [Claude Code support](Documentation/CLAUDE.md).
 - User-selected Codex account switching: save logins in this Mac’s Keychain, add another account through Codex’s browser sign-in, and explicitly quit/switch/reopen Codex. No automatic quota-based rotation. See [account setup and supported configurations](Documentation/ACCOUNTS.md).
 
-- Live Today total from local Codex records always stays in the primary summary
+- Live Today total from the selected service's local records always stays in the primary summary
 - Current week/month through the server snapshot date and lifetime totals when explicitly enabled
 - Week, month, and **Local History** totals from local Codex records when account totals are off
 - Input, cached input, output, and total-token breakdowns
 - macOS drill-down views for account limits, Today/7D/30D charts, models, projects, sessions, and verified sub-agent relationships
-- Read-only 5-hour/weekly/additional limit windows and reset credits from the signed local Codex app-server
+- Read-only Codex 5-hour/weekly/additional limit windows and reset credits, plus documented Claude Code five-hour and weekly limit percentages
 - First-screen limit previews with low-quota text warnings, reset countdowns, and even-use pace; detailed Limits can also show a current-window run-out estimate
 - Model-aware API-equivalent cost estimates using the current official price catalog; these are estimates, not bills or subscription charges
 - Privacy-minimized project and session analytics with keyed project identifiers and image counts only—never attachment contents
@@ -142,6 +143,8 @@ Optional profile sync also reads only `tokens.access_token` and `tokens.account_
 
 The macOS **Limits** view uses the signed Codex app-server's read-only `account/rateLimits/read` RPC. The last successful limit response is held in memory only. This provider never changes accounts, consumes reset credits, or makes purchases. The separate **Accounts** feature changes the local Codex login only after the user confirms a switch.
 
+Claude account discovery and sign-in are delegated to the official `claude auth` commands. After the user enables Claude and adds that account, CodexMeter installs a small local status-line helper and records only the documented five-hour/weekly percentages and reset timestamps. Claude credentials remain owned by Claude Code. Any prior user status-line command is preserved and restored when the integration is disabled or disconnected.
+
 For local analytics, CodexMeter stores canonical model IDs, a keyed HMAC of each normalized working directory, the final project-folder name, hashed session relationships, and numeric image counts. Image counts describe the whole retained session after the local-history cutoff, rather than only the selected chart range. It does not store full working-directory paths, session text, image bytes, MIME payloads, or attachment contents.
 
 ## Accuracy and limitations
@@ -158,13 +161,13 @@ For local analytics, CodexMeter stores canonical model IDs, a keyed HMAC of each
 
 ## Roadmap
 
-Codex is the first supported data source. Future releases are planned to expand CodexMeter into a multi-service local usage meter, including **Claude** and other AI coding assistants where reliable local usage data is available. Support will be added service by service while preserving CodexMeter's local-first privacy model.
+Codex and **Claude Code local session logs** are supported. Claude five-hour and weekly limits are available after explicit account setup. Claude web/mobile token totals, account switching, attachment counts, and cost estimates are not included. Additional service integrations will be added where reliable usage data is available, preserving the local-first privacy model.
 
 CodexBar's current feature families have been reviewed as a product reference, but CodexMeter keeps an independent interface and a narrower trust boundary. See the [CodexBar feature strategy](Documentation/CODEXBAR_STRATEGY.md) for what is adopted, adapted, deferred, or intentionally excluded.
 
 ## Privacy
 
-Local accounting and analytics remain on-device. The app can check a signed Sparkle update feed. Optional profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, full project paths, remote profile responses, or attachment contents. Credentials never enter the usage database or logs. Only explicitly saved accounts are retained in the local Keychain; registration and the selected active login use private Codex authentication files as described in [Accounts](Documentation/ACCOUNTS.md).
+Local accounting and analytics remain on-device. The app can check a signed Sparkle update feed. Optional profile sync sends the existing Codex access token and account ID only to `chatgpt.com` to retrieve aggregate profile statistics. CodexMeter does **not** store or log prompts, responses, reasoning text, source code, tool input or output, terminal output, raw session paths, full project paths, remote profile responses, or attachment contents. Credentials never enter the usage database or logs. Explicitly saved Codex accounts remain in the local Keychain; Claude sign-in remains in Claude Code's credential store and is never copied into CodexMeter.
 
 The Application Support directory is owner-only (`0700`); the SQLite database, lock, and fingerprint-key files are owner-only (`0600`). See [Privacy](Documentation/PRIVACY.md) for the complete boundary.
 
@@ -172,11 +175,12 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 
 | Capability | Required? | Why |
 | --- | :---: | --- |
-| Full Disk Access | No | Reads only supported files under `.codex`. |
+| Full Disk Access | No | Reads supported local sessions under `.codex` and `.claude/projects` (or `CLAUDE_CONFIG_DIR/projects`). |
 | Accessibility | No | Does not control other apps. |
 | Screen Recording | No | Does not inspect the screen. |
 | Profile credential access | Optional | Reads only the access token and account ID after the user enables account totals. |
 | Saved Codex accounts | Optional | Explicit registration stores a login in this Mac’s Keychain; a confirmed switch replaces the local Codex login and restarts Codex. |
+| Claude account | Optional | Uses the official Claude CLI for sign-in and status; CodexMeter stores only connection consent and documented limit percentages/reset times. |
 | Launch at Login | Optional | Enabled only by the user in Settings. |
 
 ## Settings

@@ -4,6 +4,7 @@ import SwiftUI
 
 @MainActor
 final class UsageStore: ObservableObject {
+    let provider: UsageProvider
     @Published private(set) var snapshot = UsageSnapshot.empty
     @Published private(set) var hasLoadedSnapshot = false
     @Published private(set) var isRefreshing = false
@@ -20,7 +21,7 @@ final class UsageStore: ObservableObject {
     @Published private(set) var analyticsStatusMessage = "Analytics are ready to load"
 
     private let formatter = TokenFormatter()
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private var collector: CodexUsageCollector?
     private var sourceRoots: [URL] = []
     private var watcher: CodexSessionWatcher?
@@ -33,6 +34,9 @@ final class UsageStore: ObservableObject {
     private var timeZoneChangeTask: Task<Void, Never>?
     private var calendarBoundaryTask: Task<Void, Never>?
     private var refreshPending = false
+    private var requestedAnalyticsRanges: Set<AnalyticsRange> = [.today]
+    private var analyticsRevision: UInt64 = 0
+    private var analyticsRequests: [AnalyticsRange: UUID] = [:]
     private var previousWeekStartRawValue = WeekStart.monday.rawValue
     private var previousRefreshModeRawValue = RefreshMode.automatic.rawValue
 
@@ -128,8 +132,32 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    init(analyticsSnapshots: [AnalyticsRange: AnalyticsSnapshot] = [:]) {
+    init(
+        provider: UsageProvider = .codex,
+        analyticsSnapshots: [AnalyticsRange: AnalyticsSnapshot] = [:],
+        initialSnapshot: UsageSnapshot? = nil,
+        automaticallyRefresh: Bool = true,
+        collector: CodexUsageCollector? = nil,
+        defaults: UserDefaults = .standard
+    ) {
+        self.provider = provider
+        self.collector = collector
+        self.defaults = defaults
+        statusMessage = "Looking for \(provider.title) usage…"
         self.analyticsSnapshots = analyticsSnapshots
+        requestedAnalyticsRanges.formUnion(analyticsSnapshots.keys)
+        if let initialSnapshot {
+            self.snapshot = initialSnapshot
+            hasLoadedSnapshot = true
+            lastSourceRefreshAt = initialSnapshot.updatedAt
+            statusMessage = initialSnapshot.updatedAt == nil ? "No \(provider.title) usage found" : "Updated"
+        }
+        guard automaticallyRefresh else { return }
+        startAutomaticRefresh()
+    }
+
+    func startAutomaticRefresh() {
+        guard refreshSchedulerTask == nil else { return }
         previousWeekStartRawValue = storedWeekStartRawValue
         previousRefreshModeRawValue = currentRefreshMode.rawValue
         refreshSchedulerTask = Task { [weak self] in
@@ -192,6 +220,24 @@ final class UsageStore: ObservableObject {
         scheduleCalendarBoundary()
     }
 
+    func stopAutomaticRefresh() {
+        stopWatcher()
+        debounceTask?.cancel()
+        debounceTask = nil
+        refreshSchedulerTask?.cancel()
+        refreshSchedulerTask = nil
+        wakeTask?.cancel()
+        wakeTask = nil
+        defaultsTask?.cancel()
+        defaultsTask = nil
+        clockChangeTask?.cancel()
+        clockChangeTask = nil
+        timeZoneChangeTask?.cancel()
+        timeZoneChangeTask = nil
+        calendarBoundaryTask?.cancel()
+        calendarBoundaryTask = nil
+    }
+
     func refresh() async {
         guard !isMaintainingData else {
             refreshPending = true
@@ -221,7 +267,7 @@ final class UsageStore: ObservableObject {
                     snapshot = cached
                     statusMessage = "Updating local usage…"
                 } else {
-                    statusMessage = "Scanning local Codex usage…"
+                    statusMessage = "Scanning local \(provider.title) usage…"
                 }
             }
             let result = try await collector.refresh(weekStart: weekStart)
@@ -233,7 +279,8 @@ final class UsageStore: ObservableObject {
             sourceCount = result.sourceCount
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
-            await refreshAnalytics(range: .today, using: collector)
+            invalidateAnalytics(clearSnapshots: false)
+            await refreshRequestedAnalytics(using: collector)
             updateWatcherForRefreshMode()
             await DiagnosticsLogger.shared.record(
                 .refreshCompleted(
@@ -248,11 +295,11 @@ final class UsageStore: ObservableObject {
             } else {
                 switch result.snapshot.quality {
                 case .exact, .partial:
-                    statusMessage = result.snapshot.updatedAt == nil ? "No Codex usage found" : "Updated just now"
+                    statusMessage = result.snapshot.updatedAt == nil ? "No \(provider.title) usage found" : "Updated just now"
                 case .stale:
                     statusMessage = "Refresh failed"
                 case .unavailable:
-                    statusMessage = result.sourceCount == 0 ? "Codex sessions not found" : "No Codex usage found"
+                    statusMessage = result.sourceCount == 0 ? "\(provider.title) sessions not found" : "No \(provider.title) usage found"
                 case .error:
                     statusMessage = "Refresh failed"
                 }
@@ -269,7 +316,7 @@ final class UsageStore: ObservableObject {
             )
             let resourceMessage: String? = switch error {
             case CodexSourceDiscoveryError.sourceLimitExceeded:
-                "Too many Codex session files to scan safely"
+                "Too many \(provider.title) session files to scan safely"
             case SQLiteDatabaseError.resourceLimit:
                 "Local database safety limit reached"
             default:
@@ -294,6 +341,7 @@ final class UsageStore: ObservableObject {
         statusMessage = "Rebuilding local statistics…"
         dataOperationMessage = statusMessage
         dataOperationFailed = false
+        invalidateAnalytics(clearSnapshots: true)
         defer { isMaintainingData = false }
 
         do {
@@ -307,7 +355,7 @@ final class UsageStore: ObservableObject {
             refreshPending = false
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
-            await refreshAnalytics(range: .today, using: collector)
+            await refreshRequestedAnalytics(using: collector)
             await DiagnosticsLogger.shared.record(.rebuildCompleted(quality: result.snapshot.quality))
             statusMessage = result.hasMoreWork
                 ? "Importing local history…"
@@ -329,6 +377,7 @@ final class UsageStore: ObservableObject {
         statusMessage = "Clearing local history…"
         dataOperationMessage = statusMessage
         dataOperationFailed = false
+        invalidateAnalytics(clearSnapshots: true)
         defer { isMaintainingData = false }
 
         do {
@@ -342,7 +391,7 @@ final class UsageStore: ObservableObject {
             refreshPending = false
             lastSourceRefreshAt = Date()
             isImportingHistory = result.hasMoreWork
-            await refreshAnalytics(range: .today, using: collector)
+            await refreshRequestedAnalytics(using: collector)
             await DiagnosticsLogger.shared.record(.clearCompleted)
             statusMessage = result.hasMoreWork
                 ? "Importing local history…"
@@ -362,13 +411,14 @@ final class UsageStore: ObservableObject {
     private func collector() async throws -> CodexUsageCollector {
         if let collector { return collector }
 
+        let provider = self.provider
         let setup = try await Task.detached(priority: .utility) {
-            let database = try SQLiteDatabase(url: AppPaths.databaseURL)
-            let roots = CodexSourceDiscovery().defaultRoots()
+            let database = try SQLiteDatabase(url: provider.databaseURL)
+            let roots = provider.sourceRoots()
             return (database, roots)
         }.value
 
-        let collector = CodexUsageCollector(database: setup.0, roots: setup.1)
+        let collector = CodexUsageCollector(database: setup.0, roots: setup.1, provider: provider)
         self.collector = collector
         sourceRoots = setup.1
         updateWatcherForRefreshMode()
@@ -380,10 +430,15 @@ final class UsageStore: ObservableObject {
     }
 
     func refreshAnalytics(range: AnalyticsRange) async {
+        requestedAnalyticsRanges.insert(range)
+        guard !isMaintainingData else { return }
+        let revision = analyticsRevision
         do {
             let collector = try await collector()
+            guard revision == analyticsRevision, !isMaintainingData, !Task.isCancelled else { return }
             await refreshAnalytics(range: range, using: collector)
         } catch {
+            guard revision == analyticsRevision, !Task.isCancelled else { return }
             analyticsStatusMessage = analyticsSnapshots[range] == nil
                 ? "Analytics are unavailable"
                 : "Showing the last analytics snapshot"
@@ -391,16 +446,43 @@ final class UsageStore: ObservableObject {
     }
 
     private func refreshAnalytics(range: AnalyticsRange, using collector: CodexUsageCollector) async {
+        let request = UUID()
+        let revision = analyticsRevision
+        analyticsRequests[range] = request
         isAnalyticsRefreshing = true
-        defer { isAnalyticsRefreshing = false }
+        defer {
+            if analyticsRequests[range] == request { analyticsRequests.removeValue(forKey: range) }
+            isAnalyticsRefreshing = !analyticsRequests.isEmpty
+        }
         do {
             let snapshot = try await collector.analyticsSnapshot(range: range)
+            guard revision == analyticsRevision, analyticsRequests[range] == request,
+                  !Task.isCancelled else { return }
             analyticsSnapshots[range] = snapshot
             analyticsStatusMessage = "Analytics updated"
         } catch {
+            guard revision == analyticsRevision, analyticsRequests[range] == request,
+                  !Task.isCancelled else { return }
             analyticsStatusMessage = analyticsSnapshots[range] == nil
                 ? "Analytics are unavailable"
                 : "Showing the last analytics snapshot"
+        }
+    }
+
+    private func invalidateAnalytics(clearSnapshots: Bool) {
+        // Results already in flight must not restore data from before maintenance
+        // or supersede a newer import, even if their task finishes later.
+        analyticsRevision &+= 1
+        analyticsRequests.removeAll()
+        isAnalyticsRefreshing = false
+        if clearSnapshots { analyticsSnapshots.removeAll() }
+    }
+
+    private func refreshRequestedAnalytics(using collector: CodexUsageCollector) async {
+        let revision = analyticsRevision
+        for range in AnalyticsRange.allCases where requestedAnalyticsRanges.contains(range) {
+            guard revision == analyticsRevision, !Task.isCancelled else { return }
+            await refreshAnalytics(range: range, using: collector)
         }
     }
 
@@ -488,8 +570,8 @@ final class UsageStore: ObservableObject {
         Task { await refresh() }
     }
 
-    private func recalculateVisiblePeriods() async {
-        guard !isMaintainingData else {
+    func recalculateVisiblePeriods() async {
+        guard !isMaintainingData, !isRefreshing else {
             refreshPending = true
             return
         }
@@ -500,11 +582,13 @@ final class UsageStore: ObservableObject {
             if cached != snapshot {
                 snapshot = cached
             }
+            invalidateAnalytics(clearSnapshots: false)
+            await refreshRequestedAnalytics(using: collector)
             if cached.quality != .exact {
                 statusMessage = switch cached.quality {
-                case .partial: cached.updatedAt == nil ? "No Codex usage found" : "Updated"
+                case .partial: cached.updatedAt == nil ? "No \(provider.title) usage found" : "Updated"
                 case .stale: "Refresh failed"
-                case .unavailable: "No Codex usage found"
+                case .unavailable: "No \(provider.title) usage found"
                 case .error: "Unable to read local usage"
                 case .exact: statusMessage
                 }

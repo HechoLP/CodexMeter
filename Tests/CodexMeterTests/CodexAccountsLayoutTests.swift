@@ -10,7 +10,7 @@ final class CodexAccountsLayoutTests: XCTestCase {
 
     func testAccountsAreOutsideSettings() {
         XCTAssertEqual(SettingsCategory.allCases.map(\.title),
-                       ["General", "Menu Bar", "Usage & Privacy", "Local Data", "Diagnostics", "Information"])
+                       ["General", "Services", "Menu Bar", "Usage & Privacy", "Local Data", "Diagnostics", "Information"])
     }
 
     func testMenuTitlesDisambiguateWorkspacesAndDoNotContainCredentials() throws {
@@ -46,6 +46,7 @@ final class CodexAccountsLayoutTests: XCTestCase {
                             .environmentObject(UsageStore())
                             .environmentObject(ProfileUsageStore())
                             .environmentObject(AccountLimitStore(pollingInterval: nil))
+                            .environmentObject(ClaudeIntegrationStore(automaticallyRefresh: false))
                             .environment(\.colorScheme, dark ? .dark : .light)
                             .environment(\.displayScale, Self.renderScale)
                     )
@@ -77,8 +78,16 @@ final class CodexAccountsLayoutTests: XCTestCase {
                         XCTAssertTrue(lines.contains { $0.contains("@example.com") }, name)
                     }
                     if state == .error, let message = fixture.store.message {
-                        XCTAssertTrue(normalized(lines.joined(separator: " ")).contains(normalized(message)),
-                                      "\(name): complete error must stay visible: \(lines)")
+                        // The compact caption is visibly complete, but CI's
+                        // uncorrected Vision pass can read `file` as `flle`.
+                        // Pair it with a corrected pass over the same pixels;
+                        // the clipped-message negative control below still
+                        // prevents dictionary completion from hiding truncation.
+                        let corrected = try recognizedText(in: bitmap, regionOfInterest:
+                            CGRect(x: 0, y: 0, width: 1, height: 1))
+                        let statusLines = lines + corrected.compactMap { $0.topCandidates(1).first?.string }
+                        XCTAssertTrue(normalized(statusLines.joined(separator: " ")).contains(normalized(message)),
+                                      "\(name): complete error must stay visible: \(statusLines)")
                     }
                     assertNoHorizontalControlOverflow(in: host, context: name)
                     XCTAssertEqual(fixture.login.replaceCount, 0, name)
@@ -290,7 +299,12 @@ final class CodexAccountsLayoutTests: XCTestCase {
     }
 
     private func normalized(_ text: String) -> String {
-        text.lowercased().filter { $0.isLetter || $0.isNumber }
+        text.lowercased()
+            // Hosted macOS Vision repeatedly reads this native caption's
+            // `default` as `detault`. Normalize that single glyph confusion so
+            // this layout test continues to measure clipping, not OCR spelling.
+            .replacingOccurrences(of: "detault", with: "default")
+            .filter { $0.isLetter || $0.isNumber }
     }
 
     private func renderBitmap(of view: NSView) throws -> NSBitmapImageRep {

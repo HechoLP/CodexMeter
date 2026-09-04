@@ -10,16 +10,29 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private static let defaultContentSize = NSSize(width: 980, height: 680)
 
     private var settingsWindow: NSWindow?
+    private var presentedProvider: UsageProvider?
 
     var isSettingsWindowVisible: Bool {
         settingsWindow?.isVisible == true
     }
 
-    func showSettings(for store: UsageStore, limitStore: AccountLimitStore) {
+    func showSettings(
+        for store: UsageStore,
+        limitStore: AccountLimitStore,
+        claude: ClaudeIntegrationStore = ClaudeIntegrationStore(automaticallyRefresh: false)
+    ) {
         let window: NSWindow
 
         if let settingsWindow {
             window = settingsWindow
+            if presentedProvider != store.provider {
+                window.contentViewController = NSHostingController(
+                    rootView: SettingsView()
+                        .environmentObject(store)
+                        .environmentObject(limitStore)
+                        .environmentObject(claude)
+                )
+            }
         } else {
             let created = NSWindow(
                 contentRect: NSRect(origin: .zero, size: Self.defaultContentSize),
@@ -34,6 +47,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                 rootView: SettingsView()
                     .environmentObject(store)
                     .environmentObject(limitStore)
+                    .environmentObject(claude)
             )
             created.delegate = self
             if !created.setFrameUsingName(Self.frameAutosaveName) {
@@ -44,6 +58,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window = created
         }
 
+        presentedProvider = store.provider
+        window.title = "CodexMeter Settings — \(store.provider.title)"
         NSApplication.shared.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }

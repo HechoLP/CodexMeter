@@ -13,8 +13,11 @@ import SwiftUI
 struct CodexMeterApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: UsageStore
+    @StateObject private var claudeStore: UsageStore
+    @AppStorage("usageProvider") private var usageProvider = UsageProvider.codex.rawValue
     @StateObject private var profileStore: ProfileUsageStore
     @StateObject private var accountLimitStore: AccountLimitStore
+    @StateObject private var claudeIntegrationStore: ClaudeIntegrationStore
     @AppStorage("menuBarDisplay") private var menuBarDisplay = AppPreferences.defaultMenuBarDisplay
     @AppStorage("menuBarPeriod") private var menuBarPeriod = UsagePeriod.today.rawValue
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = AppPreferences.defaultShowMenuBarIcon
@@ -23,11 +26,25 @@ struct CodexMeterApp: App {
     init() {
         AppPreferences.registerDefaults()
         let store = UsageStore()
+        let claudeStore = UsageStore(provider: .claude, automaticallyRefresh: false)
         let profileStore = ProfileUsageStore()
         let accountLimitStore = AccountLimitStore()
+        let claudeIntegrationStore = ClaudeIntegrationStore(automaticallyRefresh: false)
         _store = StateObject(wrappedValue: store)
+        _claudeStore = StateObject(wrappedValue: claudeStore)
         _profileStore = StateObject(wrappedValue: profileStore)
         _accountLimitStore = StateObject(wrappedValue: accountLimitStore)
+        _claudeIntegrationStore = StateObject(wrappedValue: claudeIntegrationStore)
+        claudeIntegrationStore.onAvailabilityChanged = { [weak claudeStore] available in
+            guard let claudeStore else { return }
+            if available {
+                claudeStore.startAutomaticRefresh()
+                Task { @MainActor in await claudeStore.refresh() }
+            } else {
+                claudeStore.stopAutomaticRefresh()
+            }
+        }
+        claudeIntegrationStore.startAutomaticRefresh()
         CodexAccountStore.shared.onAccountWillChange = { [weak profileStore, weak accountLimitStore] in
             profileStore?.clearForAccountSwitch()
             accountLimitStore?.clearForAccountSwitch()
@@ -58,9 +75,11 @@ struct CodexMeterApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuPopoverView(accounts: .shared)
-                .environmentObject(store)
+                .id(selectedStore.provider)
+                .environmentObject(selectedStore)
                 .environmentObject(profileStore)
                 .environmentObject(accountLimitStore)
+                .environmentObject(claudeIntegrationStore)
         } label: {
             HStack(spacing: 4) {
                 if resolvedShowIcon {
@@ -81,9 +100,10 @@ struct CodexMeterApp: App {
 
         Settings {
             SettingsView()
-                .environmentObject(store)
+                .environmentObject(selectedStore)
                 .environmentObject(profileStore)
                 .environmentObject(accountLimitStore)
+                .environmentObject(claudeIntegrationStore)
         }
     }
 
@@ -104,18 +124,19 @@ struct CodexMeterApp: App {
     }
 
     private var menuBarText: String {
-        store.menuBarText(totalOverride: profileTotalOverride)
+        selectedStore.menuBarText(totalOverride: profileTotalOverride)
     }
 
     private var menuBarAccessibilityLabel: String {
-        store.menuBarAccessibilityLabel(
+        "\(selectedStore.provider.title), " + selectedStore.menuBarAccessibilityLabel(
             totalOverride: profileTotalOverride,
             totalPeriodDescription: profilePeriodDescription
         )
     }
 
     private var profileTotalOverride: Int64? {
-        guard profileStore.isEnabled, let snapshot = profileStore.snapshot else { return nil }
+        guard selectedStore.provider.supportsAccountTotals,
+              profileStore.isEnabled, let snapshot = profileStore.snapshot else { return nil }
         return UsageDisplayPolicy.profileOverride(
             for: UsagePeriod(rawValue: menuBarPeriod) ?? .today,
             profileSnapshot: snapshot
@@ -123,7 +144,8 @@ struct CodexMeterApp: App {
     }
 
     private var profilePeriodDescription: String? {
-        guard profileStore.isEnabled, let snapshot = profileStore.snapshot else { return nil }
+        guard selectedStore.provider.supportsAccountTotals,
+              profileStore.isEnabled, let snapshot = profileStore.snapshot else { return nil }
         let asOf = snapshot.statsAsOf.formatted(.dateTime.month(.abbreviated).day())
         return switch UsagePeriod(rawValue: menuBarPeriod) ?? .today {
         case .today: nil
@@ -131,6 +153,12 @@ struct CodexMeterApp: App {
         case .month: "this month in the ChatGPT profile through \(asOf)"
         case .allTime: "in the ChatGPT profile through \(asOf)"
         }
+    }
+
+    private var selectedStore: UsageStore {
+        UsageProvider(rawValue: usageProvider) == .claude && claudeIntegrationStore.isAvailable
+            ? claudeStore
+            : store
     }
 
     private static var selectedWeekStart: WeekStart {

@@ -45,6 +45,7 @@ verify_app() {
   local info_plist="${candidate}/Contents/Info.plist"
   local sparkle_framework="${candidate}/Contents/Frameworks/Sparkle.framework"
   local sparkle_binary="${sparkle_framework}/Versions/Current/Sparkle"
+  local claude_bridge="${candidate}/Contents/Helpers/CodexMeterClaudeBridge"
 
   plutil -lint "${info_plist}"
   codesign --verify --deep --strict --verbose=2 "${candidate}"
@@ -84,6 +85,18 @@ verify_app() {
     print -u2 "Sparkle.framework is missing from the app bundle: ${candidate}"
     exit 1
   fi
+  if [[ ! -x "${claude_bridge}" ]]; then
+    print -u2 "Claude limits helper is missing from the app bundle: ${candidate}"
+    exit 1
+  fi
+  codesign --verify --strict --verbose=2 "${claude_bridge}"
+  local provider_logo
+  for provider_logo in OpenAI Claude; do
+    if [[ ! -s "${candidate}/Contents/Resources/ProviderLogos/${provider_logo}.svg" ]]; then
+      print -u2 "Provider logo is missing from the app bundle: ${provider_logo}"
+      exit 1
+    fi
+  done
   codesign --verify --deep --strict --verbose=2 "${sparkle_framework}"
 
   local sparkle_architectures
@@ -97,6 +110,12 @@ verify_app() {
   architectures=$(lipo -archs "${binary_path}")
   if [[ "${architectures}" != *arm64* || "${architectures}" != *x86_64* ]]; then
     print -u2 "Expected a Universal 2 binary, found: ${architectures}"
+    exit 1
+  fi
+  local bridge_architectures
+  bridge_architectures=$(lipo -archs "${claude_bridge}")
+  if [[ "${bridge_architectures}" != *arm64* || "${bridge_architectures}" != *x86_64* ]]; then
+    print -u2 "Expected a Universal 2 Claude limits helper, found: ${bridge_architectures}"
     exit 1
   fi
 
