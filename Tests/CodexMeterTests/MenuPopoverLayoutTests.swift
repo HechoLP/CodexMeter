@@ -89,6 +89,13 @@ final class MenuPopoverLayoutTests: XCTestCase {
 
     func testClaudeDetailScreensPreserveProviderContext() throws {
         _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        let previousCost = defaults.object(forKey: "costEstimatesEnabled")
+        defaults.set(true, forKey: "costEstimatesEnabled")
+        defer {
+            if let previousCost { defaults.set(previousCost, forKey: "costEstimatesEnabled") }
+            else { defaults.removeObject(forKey: "costEstimatesEnabled") }
+        }
         for dark in [false, true] {
             for destination in analyticsDestinations {
                 let host = NSHostingView(rootView:
@@ -110,6 +117,13 @@ final class MenuPopoverLayoutTests: XCTestCase {
                 XCTAssertEqual(host.fittingSize.width, MenuPopoverMetrics.width)
                 XCTAssertLessThanOrEqual(host.fittingSize.height, 580)
                 XCTAssertEqual(scrollViewCount(in: host), 1)
+                if destination == .usage {
+                    // Claude has no cost data, so the token/cost metric picker must not appear.
+                    XCTAssertLessThanOrEqual(
+                        descendants(of: NSSegmentedControl.self, in: host).count, 1,
+                        "Claude usage analytics should show only the range picker, no cost metric picker"
+                    )
+                }
                 try captureIfRequested(host, name: "claude-\(destination.title(usesProfileTotals: false))-\(dark ? "dark" : "light")")
             }
         }

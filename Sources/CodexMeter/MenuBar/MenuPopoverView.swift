@@ -488,7 +488,7 @@ struct MenuPopoverView: View {
                         Divider().frame(height: 34)
                         metricSummary("Output", value: store.snapshot.today.outputTokens, symbol: "arrow.down")
                     }
-                    if analyticsEnabled, costEstimatesEnabled,
+                    if analyticsEnabled, costEstimatesEnabled, store.provider.supportsCostEstimates,
                        let analytics = store.analyticsSnapshots[.today] {
                         EstimatedCostLabel(snapshot: analytics, showsUnavailable: false)
                     }
@@ -846,7 +846,7 @@ struct MenuPopoverView: View {
         guard store.provider == .claude else { return limitStore.status }
         return switch claude.status {
         case .disabled: .disabled
-        case .checking, .connecting: .loading
+        case .checking: .loading
         case .ready: .ready
         case .stale: .stale
         case .waitingForLimits, .needsAccount, .unavailable: .unavailable

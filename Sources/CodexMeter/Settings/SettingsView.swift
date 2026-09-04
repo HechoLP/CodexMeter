@@ -160,16 +160,15 @@ private struct ServiceSettingsView: View {
                                     .truncationMode(.middle)
                                     .help(account.displayName)
                             }
-                            Button("Add Account") {
-                                Task { await claude.addCurrentAccount() }
-                            }
-                            .disabled(claude.isRefreshing)
                         } else {
-                            Button("Sign In and Add Claude Account…") {
-                                Task { await claude.signInAndAddAccount() }
-                            }
-                            .disabled(claude.isRefreshing)
+                            Text("Sign in with the `claude` command in your terminal, then add the account here.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
+                        Button("Add Account") {
+                            Task { await claude.addCurrentAccount() }
+                        }
+                        .disabled(claude.isRefreshing)
                         if claude.isRefreshing {
                             ProgressView("Checking Claude…")
                                 .controlSize(.small)
@@ -426,8 +425,10 @@ private struct UsageSettingsView: View {
             }
             Section("Usage Analytics") {
                 Toggle("Show usage analytics", isOn: $analyticsEnabled)
-                Toggle("Show estimated API-equivalent cost", isOn: $costEstimatesEnabled)
-                    .disabled(!analyticsEnabled)
+                if store.provider.supportsCostEstimates {
+                    Toggle("Show estimated API-equivalent cost", isOn: $costEstimatesEnabled)
+                        .disabled(!analyticsEnabled)
+                }
                 Toggle("Show projects", isOn: $projectsEnabled)
                     .disabled(!analyticsEnabled)
                 Toggle("Show sessions", isOn: $sessionsEnabled)
@@ -436,9 +437,11 @@ private struct UsageSettingsView: View {
                     .disabled(!analyticsEnabled || !sessionsEnabled)
                 Toggle("Show attachment metadata", isOn: $attachmentMetadataEnabled)
                     .disabled(!analyticsEnabled || !sessionsEnabled || store.provider == .claude)
-                Text("Cost is an estimate based on current official API token prices. It is not a bill, subscription charge, or prediction of remaining quota.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if store.provider.supportsCostEstimates {
+                    Text("Cost is an estimate based on current official API token prices. It is not a bill, subscription charge, or prediction of remaining quota.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if store.provider == .codex {
                 Section("ChatGPT Account Totals") {

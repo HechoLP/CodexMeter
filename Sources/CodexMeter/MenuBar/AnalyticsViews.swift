@@ -216,8 +216,9 @@ struct UsageAnalyticsView: View {
     @AppStorage("costEstimatesEnabled") private var costEstimatesEnabled = AppPreferences.defaultCostEstimatesEnabled
 
     private var range: AnalyticsRange { navigation.usageRange }
+    private var showsCost: Bool { costEstimatesEnabled && store.provider.supportsCostEstimates }
     private var chartMetric: AnalyticsChartMetric {
-        navigation.chartMetric.resolved(costEstimatesEnabled: costEstimatesEnabled)
+        navigation.chartMetric.resolved(costEstimatesEnabled: showsCost)
     }
     private var selectedBucketDate: Date? { navigation.selectedBucketDate }
 
@@ -225,7 +226,7 @@ struct UsageAnalyticsView: View {
         AnalyticsDetailLayout {
             VStack(alignment: .leading, spacing: 10) {
                 AnalyticsRangePicker(range: $navigation.usageRange)
-                if costEstimatesEnabled {
+                if showsCost {
                     Picker("Chart metric", selection: $navigation.chartMetric) {
                         ForEach(AnalyticsChartMetric.allCases) { Text($0.title).tag($0) }
                     }
@@ -264,7 +265,7 @@ struct UsageAnalyticsView: View {
             Text("tokens")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if costEstimatesEnabled {
+            if showsCost {
                 EstimatedCostLabel(snapshot: snapshot)
             }
         }
@@ -299,7 +300,7 @@ struct UsageAnalyticsView: View {
                         .font(.caption.weight(.semibold))
                     Text("\(bucket.usage.totalTokens.formatted()) tokens")
                         .font(.caption).foregroundStyle(.secondary)
-                    if costEstimatesEnabled {
+                    if showsCost {
                         EstimatedCostText(
                             models: bucket.models,
                             through: bucket.end,
@@ -467,12 +468,14 @@ struct ProjectDetailView: View {
                let project = snapshot.projects.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
                     analyticsHeader(project.name, tokens: project.usage.totalTokens)
-                    EstimatedCostText(
-                        models: project.models,
-                        through: snapshot.through,
-                        quality: snapshot.quality,
-                        compact: false
-                    )
+                    if store.provider.supportsCostEstimates {
+                        EstimatedCostText(
+                            models: project.models,
+                            through: snapshot.through,
+                            quality: snapshot.quality,
+                            compact: false
+                        )
+                    }
                     LabeledContent("Sessions", value: project.sessionCount.formatted())
                     usageBreakdown(project.usage)
                     modelRows(project.models)
@@ -497,12 +500,14 @@ struct SessionDetailView: View {
                let session = snapshot.sessions.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
                     analyticsHeader(session.displayName, tokens: session.usage.totalTokens)
-                    EstimatedCostText(
-                        models: session.models,
-                        through: snapshot.through,
-                        quality: snapshot.quality,
-                        compact: false
-                    )
+                    if store.provider.supportsCostEstimates {
+                        EstimatedCostText(
+                            models: session.models,
+                            through: snapshot.through,
+                            quality: snapshot.quality,
+                            compact: false
+                        )
+                    }
                     LabeledContent("Last activity", value: session.lastActivityAt.formatted(date: .abbreviated, time: .shortened))
                     if let startedAt = session.startedAt {
                         LabeledContent("Started", value: startedAt.formatted(date: .abbreviated, time: .shortened))
@@ -559,12 +564,14 @@ struct ModelDetailView: View {
                let model = snapshot.models.first(where: { $0.id == id }) {
                 VStack(alignment: .leading, spacing: 14) {
                     analyticsHeader(model.displayName, tokens: model.usage.totalTokens)
-                    EstimatedCostText(
-                        models: [model],
-                        through: snapshot.through,
-                        quality: snapshot.quality,
-                        compact: false
-                    )
+                    if store.provider.supportsCostEstimates {
+                        EstimatedCostText(
+                            models: [model],
+                            through: snapshot.through,
+                            quality: snapshot.quality,
+                            compact: false
+                        )
+                    }
                     usageBreakdown(model.usage)
                     LabeledContent(
                         "Projects",

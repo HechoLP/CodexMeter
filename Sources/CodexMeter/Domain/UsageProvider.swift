@@ -11,6 +11,8 @@ enum UsageProvider: String, CaseIterable, Identifiable, Sendable {
     var logoResourceName: String { self == .codex ? "OpenAI" : "Claude" }
     var symbol: String { self == .codex ? "terminal" : "sparkles" }
     var supportsAccountTotals: Bool { self == .codex }
+    /// Claude API-equivalent pricing is not published here, so cost is never shown for it.
+    var supportsCostEstimates: Bool { self == .codex }
 
     func analyticsHint(for destinationTitle: String) -> String {
         "Shows detailed local \(title) \(destinationTitle.lowercased())"
