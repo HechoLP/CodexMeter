@@ -4,7 +4,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/HechoLP/CodexMeter/ci.yml?branch=main&style=flat-square&label=CI&color=0a0a0c)](https://github.com/HechoLP/CodexMeter/actions/workflows/ci.yml)
 [![macOS 14+](https://img.shields.io/badge/macOS-14%2B-0a0a0c?style=flat-square)](https://support.apple.com/macos)
-[![macOS Release](https://img.shields.io/badge/macOS-v1.2.0-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.2.0.md)
+[![macOS Release](https://img.shields.io/badge/macOS-v1.3.0-6e5aff?style=flat-square)](Documentation/ReleaseNotes/1.3.0.md)
 [![Swift 6.2](https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift&logoColor=white)](Package.swift)
 [![License: MIT](https://img.shields.io/badge/license-MIT-6e5aff?style=flat-square)](LICENSE)
 
@@ -55,9 +55,9 @@ Homebrew 6 no longer provides the old `--no-quarantine` installation option. The
 
 ### Direct download
 
-CodexMeter v1.2.0 is available from the public [CodexMeter repository](https://github.com/HechoLP/CodexMeter/releases/tag/v1.2.0) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
+CodexMeter v1.3.0 is available from the public [CodexMeter repository](https://github.com/HechoLP/CodexMeter/releases/tag/v1.3.0) as a certificate-free Universal 2 DMG and ZIP. The app uses an ad-hoc signature rather than an Apple Developer ID certificate, so macOS will not trust the first launch automatically. Verify the downloaded DMG and follow the one-time first-run steps below.
 
-This is the stable 1.2.0 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
+This is the stable 1.3.0 application release, but it is not Apple-trusted or notarized. Sparkle update archives and the update feed are separately authenticated with Ed25519 signatures, while first-install trust is established by checking the published SHA-256 manifest.
 
 ### macOS에서 인증서 없는 릴리스를 처음 실행할 때
 
@@ -65,8 +65,8 @@ This is the stable 1.2.0 application release, but it is not Apple-trusted or not
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.2.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.2.0.dmg
+grep ' CodexMeter-1.3.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.3.0.dmg
 ```
 
 열린 DMG에서 `CodexMeter.app`을 `Applications` 폴더로 복사합니다. 체크섬이 일치하고 공식 릴리스임을 확인한 경우에만 아래 명령으로 해당 앱의 격리 속성을 제거하고 실행하세요.
@@ -81,7 +81,7 @@ open /Applications/CodexMeter.app
 ## First run
 
 1. Launch CodexMeter after Codex has created local session history.
-2. To add Claude Code, open **Settings → Services**, enable Claude Code, and explicitly add the account already signed in to the official Claude CLI. If no account is signed in, use **Sign In and Add Claude Account**.
+2. To add Claude Code, open **Settings → Services**, enable Claude Code, and explicitly add the account already signed in to the official Claude CLI. If no account is signed in, run `claude` in your terminal and sign in there first, then choose **Add Account**.
 3. Select the diamond meter in the macOS menu bar, then choose **Codex** or **Claude**.
 4. Use **Refresh** whenever you want an immediate reconciliation. Claude limits appear after Claude Code completes a response.
 
@@ -143,7 +143,7 @@ Optional profile sync also reads only `tokens.access_token` and `tokens.account_
 
 The macOS **Limits** view uses the signed Codex app-server's read-only `account/rateLimits/read` RPC. The last successful limit response is held in memory only. This provider never changes accounts, consumes reset credits, or makes purchases. The separate **Accounts** feature changes the local Codex login only after the user confirms a switch.
 
-Claude account discovery and sign-in are delegated to the official `claude auth` commands. After the user enables Claude and adds that account, CodexMeter installs a small local status-line helper and records only the documented five-hour/weekly percentages and reset timestamps. Claude credentials remain owned by Claude Code. Any prior user status-line command is preserved and restored when the integration is disabled or disconnected.
+Claude account discovery uses the read-only `claude auth status` command; signing in stays entirely inside Claude Code. After the user enables Claude and adds that account, CodexMeter installs a small local status-line helper and records only the documented five-hour/weekly percentages and reset timestamps. Claude credentials remain owned by Claude Code. Any prior user status-line command is preserved and restored when the integration is disabled or disconnected.
 
 For local analytics, CodexMeter stores canonical model IDs, a keyed HMAC of each normalized working directory, the final project-folder name, hashed session relationships, and numeric image counts. Image counts describe the whole retained session after the local-history cutoff, rather than only the selected chart range. It does not store full working-directory paths, session text, image bytes, MIME payloads, or attachment contents.
 
@@ -180,7 +180,7 @@ The Application Support directory is owner-only (`0700`); the SQLite database, l
 | Screen Recording | No | Does not inspect the screen. |
 | Profile credential access | Optional | Reads only the access token and account ID after the user enables account totals. |
 | Saved Codex accounts | Optional | Explicit registration stores a login in this Mac’s Keychain; a confirmed switch replaces the local Codex login and restarts Codex. |
-| Claude account | Optional | Uses the official Claude CLI for sign-in and status; CodexMeter stores only connection consent and documented limit percentages/reset times. |
+| Claude account | Optional | Reads the official Claude CLI's signed-in status only; sign-in stays in Claude Code. CodexMeter stores only connection consent and documented limit percentages/reset times. |
 | Launch at Login | Optional | Enabled only by the user in Settings. |
 
 ## Settings

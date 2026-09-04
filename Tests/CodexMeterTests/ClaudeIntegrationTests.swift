@@ -55,6 +55,26 @@ final class ClaudeRateLimitCodecTests: XCTestCase {
         XCTAssertFalse(ClaudeBridgeOutputPath.isAllowed(URL(fileURLWithPath: "/tmp/ClaudeLimits.json"), applicationSupportDirectory: support))
         XCTAssertFalse(ClaudeBridgeOutputPath.isAllowed(support.appendingPathComponent("CodexMeter/Other.json"), applicationSupportDirectory: support))
     }
+
+    func testExecutableResolutionFallsBackToTheLaunchPath() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let home = root.appendingPathComponent("home", isDirectory: true)
+        let versioned = root.appendingPathComponent("nodes/v20/bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: versioned, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try ClaudeExecutable.resolve(home: home, environment: [:]))
+
+        let claude = versioned.appendingPathComponent("claude")
+        FileManager.default.createFile(atPath: claude.path, contents: Data("#!/bin/sh\n".utf8),
+                                       attributes: [.posixPermissions: 0o755])
+        let resolved = try ClaudeExecutable.resolve(
+            home: home,
+            environment: ["PATH": "relative/skip:\(versioned.path)"]
+        )
+        XCTAssertEqual(resolved, claude.standardizedFileURL)
+    }
 }
 
 @MainActor
@@ -343,7 +363,6 @@ final class ClaudeStatusLineInstallerTests: XCTestCase {
 private struct StaticClaudeAuthenticator: ClaudeAuthenticating {
     let account: ClaudeAccount?
     func accountStatus() async throws -> ClaudeAccount? { account }
-    func beginLogin() async throws {}
 }
 
 private actor SwitchableClaudeAuthenticator: ClaudeAuthenticating {
@@ -358,8 +377,6 @@ private actor SwitchableClaudeAuthenticator: ClaudeAuthenticating {
         if shouldFail { throw ClaudeIntegrationError.processFailed }
         return account
     }
-
-    func beginLogin() async throws {}
 }
 
 private struct DelayedClaudeAuthenticator: ClaudeAuthenticating {
@@ -370,7 +387,6 @@ private struct DelayedClaudeAuthenticator: ClaudeAuthenticating {
         return account
     }
 
-    func beginLogin() async throws {}
 }
 
 private final class RecordingClaudeInstaller: ClaudeStatusLineInstalling, @unchecked Sendable {

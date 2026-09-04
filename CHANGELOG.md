@@ -4,21 +4,7 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
-### Changed
-
-- Replaced the provider segmented control with compact, logo-first Codex and Claude Code tabs, and removed redundant popover branding so usage information appears first.
-- Show the connected Claude account and plan in the menu header so it lines up with the Codex account row instead of leaving the space blank.
-- Made Claude Code an explicit Services integration: enable it, add the official CLI account, then access its token and limit views.
-
-### Fixed
-
-- Keep the last known Claude account and limits visible during temporary CLI failures, while clearly marking expired or old limit snapshots instead of presenting them as current.
-- Distinguish Claude accounts in the same organization, cancel in-flight account setup when Claude is turned off, and fail safely if the existing status-line configuration cannot be restored.
-- Refresh previously opened 7D/30D analysis after imports, calendar changes, rebuilds, and history clearing; discard superseded in-flight analytics results.
-- Keep cleared Claude responses excluded when later streaming blocks or copied transcripts appear, including across restarts and rebuilds.
-- Restore the user's original Claude status line on disconnect even when they changed it themselves while CodexMeter was connected; the first captured value is no longer overwritten on a later reinstall.
-- Run the Claude status-line install and byte-comparison off the main thread so the periodic account refresh never blocks the menu.
-- Show the token chart when cost estimates are turned off, even if Cost was previously selected.
+## [1.3.0] - 2026-09-04
 
 ### Added
 
@@ -28,9 +14,28 @@ All notable changes to CodexMeter will be documented in this file.
 - Read-only Claude five-hour and weekly limits through the documented status-line fields, with existing user status-line configuration preserved and restored.
 - A bundled owner-only Claude limits helper that stores no prompts, paths, session identifiers, or credentials.
 
+### Changed
+
+- Replaced the provider segmented control with compact, logo-first Codex and Claude Code tabs, and removed redundant popover branding so usage information appears first.
+- Show the connected Claude account and plan in the menu header so it lines up with the Codex account row.
+- Made Claude Code an explicit Services integration: enable it, add the account already signed in to the `claude` CLI, then access its token and limit views.
+- Resolve the `claude` command from the launch `PATH` as well as the common install locations, and report a clearer message when it is not found.
+
+### Fixed
+
+- Keep the last known Claude account and limits visible during temporary CLI failures, while clearly marking expired or old limit snapshots instead of presenting them as current.
+- Distinguish Claude accounts in the same organization, cancel in-flight account setup when Claude is turned off, and fail safely if the existing status-line configuration cannot be restored.
+- Restore the user's original Claude status line on disconnect even when they changed it themselves while CodexMeter was connected; the first captured value is no longer overwritten on a later reinstall.
+- Run the Claude status-line install and byte-comparison off the main thread so the periodic account refresh never blocks the menu.
+- Removed the in-app Claude sign-in launcher, which could not complete the CLI's paste-code flow and left a stranded process; sign in with `claude` in a terminal, then choose **Add Account**.
+- Never offer or imply an API-equivalent cost for Claude, where official prices are not published; the cost metric, labels, and toggle are Codex-only rather than showing an "unavailable" estimate.
+- Refresh previously opened 7D/30D analysis after imports, calendar changes, rebuilds, and history clearing; discard superseded in-flight analytics results.
+- Keep cleared Claude responses excluded when later streaming blocks or copied transcripts appear, including across restarts and rebuilds.
+- Show the token chart when cost estimates are turned off, even if Cost was previously selected.
+
 ### Scope
 
-- Claude web/mobile totals, account switching, attachment counts, and cost estimates are not included. Claude credentials are never read or copied.
+- Claude web/mobile account-wide totals, account switching, attachment counts, and API-equivalent cost estimates are not included. Claude credentials are never read or copied.
 
 ## [1.2.0] - 2026-08-31
 

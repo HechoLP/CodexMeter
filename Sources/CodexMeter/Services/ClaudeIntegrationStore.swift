@@ -36,7 +36,6 @@ enum ClaudeIntegrationStatus: Equatable, Sendable {
     case disabled
     case checking
     case needsAccount
-    case connecting
     case ready
     case stale
     case waitingForLimits
@@ -55,9 +54,9 @@ enum ClaudeIntegrationError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .cliNotFound: "Claude Code is not installed. Install it, then try again."
+        case .cliNotFound: "Claude Code was not found. Make sure the `claude` command runs in your terminal."
         case .processFailed: "Claude Code could not be opened."
-        case .timedOut: "Claude sign-in did not finish in time."
+        case .timedOut: "Checking the Claude account took too long."
         case .responseTooLarge, .malformedResponse: "Claude returned an unsupported account response."
         case .noSignedInAccount: "Sign in to Claude Code, then add the account again."
         case .bridgeNotFound: "The Claude limits helper is missing. Reinstall CodexMeter."
@@ -68,7 +67,6 @@ enum ClaudeIntegrationError: Error, LocalizedError, Equatable {
 
 protocol ClaudeAuthenticating: Sendable {
     func accountStatus() async throws -> ClaudeAccount?
-    func beginLogin() async throws
 }
 
 protocol ClaudeStatusLineInstalling: Sendable {
@@ -110,15 +108,6 @@ struct ClaudeCLIService: ClaudeAuthenticating {
         )
     }
 
-    func beginLogin() async throws {
-        let box = ClaudeLoginProcessBox(
-            executable: try ClaudeExecutable.resolve(),
-            arguments: ["auth", "login", "--claudeai"]
-        )
-        do { try box.process.run() } catch { throw ClaudeIntegrationError.processFailed }
-        box.retainUntilExit()
-    }
-
     private static func safeText(_ value: Any?) -> String? {
         guard let text = value as? String else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -132,13 +121,21 @@ struct ClaudeCLIService: ClaudeAuthenticating {
 enum ClaudeExecutable {
     static func resolve(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) throws -> URL {
-        let candidates = [
+        var candidates = [
             home.appendingPathComponent(".local/bin/claude"),
+            home.appendingPathComponent(".claude/local/claude"),
             URL(fileURLWithPath: "/opt/homebrew/bin/claude"),
             URL(fileURLWithPath: "/usr/local/bin/claude")
         ]
+        // A GUI launch usually inherits a minimal PATH, but honor a fuller one
+        // (Node version managers, custom prefixes) when the launch environment has it.
+        for directory in (environment["PATH"] ?? "").split(separator: ":") where directory.hasPrefix("/") {
+            candidates.append(URL(fileURLWithPath: String(directory), isDirectory: true)
+                .appendingPathComponent("claude"))
+        }
         guard let executable = candidates.first(where: { fileManager.isExecutableFile(atPath: $0.path) }) else {
             throw ClaudeIntegrationError.cliNotFound
         }
@@ -434,37 +431,6 @@ final class ClaudeIntegrationStore: ObservableObject {
         }
     }
 
-    func signInAndAddAccount() async {
-        guard isEnabled, !isRefreshing else { return }
-        let operation = beginOperation()
-        status = .connecting
-        statusMessage = "Continue sign-in in your browser…"
-        defer { finishOperation(operation) }
-        do {
-            try await authenticator.beginLogin()
-            for _ in 0..<90 {
-                try await Task.sleep(for: .seconds(2))
-                guard isCurrent(operation), isEnabled else { return }
-                if let found = try await authenticator.accountStatus() {
-                    guard isCurrent(operation), isEnabled else { return }
-                    clearLimitsCache()
-                    try await performInstall()
-                    defaults.set(true, forKey: "claudeAccountLinked")
-                    defaults.set(found.linkIdentifier, forKey: "claudeLinkedAccountID")
-                    detectedAccount = found
-                    account = found
-                    isConnected = true
-                    loadLimits()
-                    notifyAvailabilityIfNeeded()
-                    return
-                }
-            }
-            throw ClaudeIntegrationError.timedOut
-        } catch {
-            if isCurrent(operation) { fail(error) }
-        }
-    }
-
     func disconnect() async {
         cancelCurrentOperation()
         do {
@@ -691,27 +657,6 @@ private final class ClaudeRunningProcessBox: @unchecked Sendable {
     func stop() {
         guard process.isRunning else { return }
         process.terminate()
-    }
-}
-
-private final class ClaudeLoginProcessBox: @unchecked Sendable {
-    let process = Process()
-
-    init(executable: URL, arguments: [String]) {
-        process.executableURL = executable
-        process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        process.environment = ClaudeProcessEnvironment.sanitized
-    }
-
-    func retainUntilExit() {
-        let box = self
-        DispatchQueue.global(qos: .utility).async {
-            box.process.waitUntilExit()
-            _ = box
-        }
     }
 }
 
