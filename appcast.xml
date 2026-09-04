@@ -4,27 +4,27 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.3.1</title>
-            <pubDate>Fri, 04 Sep 2026 14:58:38 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.3.1</link>
-            <sparkle:version>131</sparkle:version>
-            <sparkle:shortVersionString>1.3.1</sparkle:shortVersionString>
+            <title>1.4.0</title>
+            <pubDate>Fri, 04 Sep 2026 22:03:48 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.0</link>
+            <sparkle:version>140</sparkle:version>
+            <sparkle:shortVersionString>1.4.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.3.1
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.0
 
-A small follow-up to 1.3.0 that makes the Codex and Claude Code views read consistently and hardens Claude setup.
+CodexMeter 1.4.0 rebuilds the Settings window so Codex and Claude Code are configured side by side in one place.
 
 ## What changed
 
-- **Claude limit cards** no longer show the window name twice ("Weekly · Weekly"). Each card names its window once — "Weekly" or "5 hours" — the same way the Codex limit cards do.
-- **Popover footer** now shows the same "Updated <relative>" freshness line for both services. When ChatGPT account totals are on, that snapshot's date stays in the Token History header rather than taking over the footer.
-- **Claude usage keeps working** even if the status-line limits helper can't be installed. Local token totals connect anyway, and the Limits section explains the helper problem instead of the whole Claude integration going unavailable.
+- **Sidebar-first Settings.** A tinted icon sidebar with a search field. It lists the shared sections — General, Menu Bar, Diagnostics, Information — and then a **Providers** group with **Codex** and **Claude Code**, each showing an on/off dot.
+- **One window, not one per service.** Selecting a provider opens its own pane — account, limits, usage-analytics options, ChatGPT account totals (Codex), local-data status, and clear/rebuild. The window title tracks the selected section instead of naming a provider.
+- **Flat rows.** Setting rows are a title with a short caption and a right-aligned control, separated by hairline dividers under small section headers — no boxed groups.
 
-Local accounting, privacy boundaries, and the Codex database are unchanged from 1.3.0.
+Everything the settings control is unchanged: the same preference keys, the same launch-at-login, update-check, history-clear, and Claude connect/disconnect behavior. Local accounting, privacy boundaries, and both databases are untouched from 1.3.1.
 
 ## Verification
 
-- 279 automated tests, 0 failures (5 environment-integration tests skipped).
+- 283 automated tests, 0 failures (7 environment-integration tests skipped). New `SettingsLayoutTests` renders every settings pane in light and dark and asserts no horizontal clipping.
 - Universal 2 build for Apple silicon and Intel Macs running macOS 14 or later; the bundled Claude limits helper is signed and verified as part of the release.
 - The app remains ad-hoc signed and not Apple-notarized. SHA-256 protects the first download; Sparkle authenticates later update feeds and archives with Ed25519 signatures.
 
@@ -50,12 +50,12 @@ open /Applications/CodexMeter.app
 
 ## First direct-download launch
 
-Download `CodexMeter-1.3.1.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
+Download `CodexMeter-1.4.0.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.3.1.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.3.1.dmg
+grep ' CodexMeter-1.4.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.4.0.dmg
 ```
 
 Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above.
@@ -64,10 +64,10 @@ Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and 
 
 This release does not migrate any database. Published version tags are immutable; corrections ship as a new patch release.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.3.1/CodexMeter-1.3.1.zip" length="3701773" type="application/octet-stream" sparkle:edSignature="HrAgIw9oXU4T34rrQ1RgAScDPeLc+WnOomesU/deiapN+ZryDLATWphEdtCa3cpEfece/8BapAfomuDX6TDEBQ=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.0/CodexMeter-1.4.0.zip" length="3783626" type="application/octet-stream" sparkle:edSignature="vPsh+b+VmJL83IPdqg4BdVxvm/h7NwvbLc4i3+l3iFwMCTKGIrcr4nMsHj5x5kntyKQ6e2Z4w+bjn4RLQr1OCg=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: evmTgO5xbN5baA7r76whNabqQA0X0Q5dtOndXIFGT2hvIarr/bKV+FjyudFwvUezhVrHub7EfXJtuuPCNSV4Cg==
-length: 3540
+edSignature: J3M40Ce+cAn3JAAKr6PZMjqsKVBJsTD9KwkO/oqLPrpQ0pPnPWL2fbrMY5Pphpgu+fF2ihKnN03TKMRs7Wf+DA==
+length: 3858
 -->
