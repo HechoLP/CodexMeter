@@ -18,6 +18,7 @@ struct CodexMeterApp: App {
     @StateObject private var profileStore: ProfileUsageStore
     @StateObject private var accountLimitStore: AccountLimitStore
     @StateObject private var claudeIntegrationStore: ClaudeIntegrationStore
+    @StateObject private var settingsEnvironment: SettingsEnvironment
     @AppStorage("menuBarDisplay") private var menuBarDisplay = AppPreferences.defaultMenuBarDisplay
     @AppStorage("menuBarPeriod") private var menuBarPeriod = UsagePeriod.today.rawValue
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon = AppPreferences.defaultShowMenuBarIcon
@@ -35,6 +36,14 @@ struct CodexMeterApp: App {
         _profileStore = StateObject(wrappedValue: profileStore)
         _accountLimitStore = StateObject(wrappedValue: accountLimitStore)
         _claudeIntegrationStore = StateObject(wrappedValue: claudeIntegrationStore)
+        let settingsEnvironment = SettingsEnvironment(
+            codexStore: store,
+            claudeStore: claudeStore,
+            limitStore: accountLimitStore,
+            claude: claudeIntegrationStore
+        )
+        _settingsEnvironment = StateObject(wrappedValue: settingsEnvironment)
+        SettingsWindowController.shared.configure(environment: settingsEnvironment)
         claudeIntegrationStore.onAvailabilityChanged = { [weak claudeStore] available in
             guard let claudeStore else { return }
             if available {
@@ -100,9 +109,7 @@ struct CodexMeterApp: App {
 
         Settings {
             SettingsView()
-                .environmentObject(selectedStore)
-                .environmentObject(profileStore)
-                .environmentObject(accountLimitStore)
+                .environmentObject(settingsEnvironment)
                 .environmentObject(claudeIntegrationStore)
         }
     }
