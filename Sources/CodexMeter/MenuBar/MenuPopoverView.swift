@@ -309,6 +309,8 @@ struct MenuPopoverView: View {
 
             if store.provider == .codex {
                 CodexAccountSwitcher(accounts: accounts)
+            } else {
+                claudeAccountBadge
             }
 
             HStack(spacing: 8) {
@@ -321,6 +323,35 @@ struct MenuPopoverView: View {
 
             Divider()
         }
+    }
+
+    // Mirrors CodexAccountSwitcher's row so the connected account reads the same
+    // on both providers. Claude has no account switching, so the trailing slot
+    // shows the plan instead of a Switch menu.
+    private var claudeAccountBadge: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.crop.circle")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text(claude.account?.displayName ?? "Claude account")
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(claude.account?.displayName ?? "Claude account")
+            if let plan = claude.account?.planName {
+                Text(plan)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Plan, \(plan)")
+            }
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 6)
+        .frame(minHeight: 36)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("menu.claudeAccount")
+        .accessibilityLabel("Claude account, \(claude.account?.displayName ?? "not connected")")
     }
 
     private func providerTab(_ provider: UsageProvider) -> some View {

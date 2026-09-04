@@ -175,12 +175,31 @@ struct ClaudeStatusLineInstaller: ClaudeStatusLineInstalling, @unchecked Sendabl
         var settings = try readJSONObject(at: settingsURL) ?? [:]
         let stateURL = managedDirectory.appendingPathComponent("StatusLineState.json")
         guard statusLineCommand(settings["statusLine"]) != command else { return }
-        let state: [String: Any] = [
-            "version": 1,
-            "installedCommand": command,
-            "hadOriginal": settings["statusLine"] != nil,
-            "originalStatusLine": settings["statusLine"] ?? NSNull()
-        ]
+
+        // Capture the user's real status line exactly once. On any later install
+        // (an app move that changes the helper path, or a status line the user
+        // edited while connected) keep the first-captured original so uninstall
+        // still restores it instead of stranding it behind a CodexMeter command.
+        let existingState = try? readJSONObject(at: stateURL)
+        let alreadyInstalled = (existingState?["installedCommand"] as? String).map { !$0.isEmpty } ?? false
+        let currentIsManaged = statusLineCommand(settings["statusLine"])?
+            .contains(installedBridge.path) ?? false
+        let state: [String: Any]
+        if alreadyInstalled, let existingState {
+            state = [
+                "version": 1,
+                "installedCommand": command,
+                "hadOriginal": existingState["hadOriginal"] as? Bool ?? false,
+                "originalStatusLine": existingState["originalStatusLine"] ?? NSNull()
+            ]
+        } else {
+            state = [
+                "version": 1,
+                "installedCommand": command,
+                "hadOriginal": !currentIsManaged && settings["statusLine"] != nil,
+                "originalStatusLine": currentIsManaged ? NSNull() : (settings["statusLine"] ?? NSNull())
+            ]
+        }
         try writeJSONObject(state, to: stateURL, permissions: 0o600)
         settings["statusLine"] = ["type": "command", "command": command]
         try writeJSONObject(settings, to: settingsURL, permissions: 0o600)
@@ -364,7 +383,7 @@ final class ClaudeIntegrationStore: ObservableObject {
         } else {
             cancelCurrentOperation()
             do {
-                try installer.uninstall()
+                try await performUninstall()
             } catch {
                 status = .unavailable
                 statusMessage = "Claude could not be turned off safely. Try again."
@@ -402,7 +421,7 @@ final class ClaudeIntegrationStore: ObservableObject {
                 return
             }
             clearLimitsCache()
-            try installer.install()
+            try await performInstall()
             defaults.set(true, forKey: "claudeAccountLinked")
             defaults.set(found.linkIdentifier, forKey: "claudeLinkedAccountID")
             detectedAccount = found
@@ -429,7 +448,7 @@ final class ClaudeIntegrationStore: ObservableObject {
                 if let found = try await authenticator.accountStatus() {
                     guard isCurrent(operation), isEnabled else { return }
                     clearLimitsCache()
-                    try installer.install()
+                    try await performInstall()
                     defaults.set(true, forKey: "claudeAccountLinked")
                     defaults.set(found.linkIdentifier, forKey: "claudeLinkedAccountID")
                     detectedAccount = found
@@ -449,7 +468,7 @@ final class ClaudeIntegrationStore: ObservableObject {
     func disconnect() async {
         cancelCurrentOperation()
         do {
-            try installer.uninstall()
+            try await performUninstall()
         } catch {
             status = .unavailable
             statusMessage = "Claude could not be disconnected safely. Try again."
@@ -492,7 +511,7 @@ final class ClaudeIntegrationStore: ObservableObject {
                 notifyAvailabilityIfNeeded()
                 return
             }
-            try installer.install()
+            try await performInstall()
             account = found
             isConnected = true
             loadLimits()
@@ -537,6 +556,18 @@ final class ClaudeIntegrationStore: ObservableObject {
             status = .ready
             statusMessage = "Claude limits updated"
         }
+    }
+
+    // Status-line install touches the settings file and byte-compares the bundled
+    // helper. Keep that off the main actor so a 2-minute refresh never stutters UI.
+    private func performInstall() async throws {
+        let installer = self.installer
+        try await Task.detached(priority: .utility) { try installer.install() }.value
+    }
+
+    private func performUninstall() async throws {
+        let installer = self.installer
+        try await Task.detached(priority: .utility) { try installer.uninstall() }.value
     }
 
     private func clearLimitsCache() {

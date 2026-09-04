@@ -16,7 +16,7 @@ The default source is `~/.claude/projects/**/*.jsonl`. `CLAUDE_CONFIG_DIR` is ho
 
 ## Menu presentation
 
-The native service picker switches between Codex and Claude Code after Claude has been enabled and connected. Menu bar totals, Today, history, Usage/Projects/Sessions, and Settings data actions follow the selected service. The second top-level mode changes between **Codex Limits** and **Claude Limits**. Profile totals, reset credits, and account switching remain Codex-only.
+The native service picker switches between Codex and Claude Code after Claude has been enabled and connected. Menu bar totals, Today, history, Usage/Projects/Sessions, and Settings data actions follow the selected service. The second top-level mode changes between **Codex Limits** and **Claude Limits**. The header shows the connected account for both services in the same row; Claude reports its plan there instead of a switcher, since profile totals, reset credits, and account switching remain Codex-only.
 
 Claude inherits the existing 372pt macOS menu, semantic colors, system typography, keyboard controls, and Reduce Motion behavior. The service picker has a VoiceOver label, and analytics shortcut hints name the selected provider. With no local Claude usage, the menu prompts “Start a Claude Code session, then Refresh.” and hides history rows until a usage snapshot exists, rather than presenting missing history as zero.
 

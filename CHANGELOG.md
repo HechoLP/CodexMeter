@@ -7,6 +7,7 @@ All notable changes to CodexMeter will be documented in this file.
 ### Changed
 
 - Replaced the provider segmented control with compact, logo-first Codex and Claude Code tabs, and removed redundant popover branding so usage information appears first.
+- Show the connected Claude account and plan in the menu header so it lines up with the Codex account row instead of leaving the space blank.
 - Made Claude Code an explicit Services integration: enable it, add the official CLI account, then access its token and limit views.
 
 ### Fixed
@@ -15,6 +16,8 @@ All notable changes to CodexMeter will be documented in this file.
 - Distinguish Claude accounts in the same organization, cancel in-flight account setup when Claude is turned off, and fail safely if the existing status-line configuration cannot be restored.
 - Refresh previously opened 7D/30D analysis after imports, calendar changes, rebuilds, and history clearing; discard superseded in-flight analytics results.
 - Keep cleared Claude responses excluded when later streaming blocks or copied transcripts appear, including across restarts and rebuilds.
+- Restore the user's original Claude status line on disconnect even when they changed it themselves while CodexMeter was connected; the first captured value is no longer overwritten on a later reinstall.
+- Run the Claude status-line install and byte-comparison off the main thread so the periodic account refresh never blocks the menu.
 - Show the token chart when cost estimates are turned off, even if Cost was previously selected.
 
 ### Added

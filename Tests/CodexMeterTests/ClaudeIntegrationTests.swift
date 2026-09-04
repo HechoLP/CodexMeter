@@ -112,6 +112,9 @@ final class ClaudeIntegrationStoreTests: XCTestCase {
 
         await store.refresh()
         XCTAssertEqual(store.status, .ready)
+        // The menu header renders these two fields next to the Codex account row.
+        XCTAssertEqual(store.account?.displayName, "person@example.com")
+        XCTAssertEqual(store.account?.planName, "Max")
         XCTAssertEqual(store.snapshot?.windows.map(\.windowDurationMinutes), [10_080, 300])
         XCTAssertEqual(store.snapshot?.windows.map(\.remainingPercent), [70, 80])
         await store.setEnabled(false)
@@ -307,6 +310,33 @@ final class ClaudeStatusLineInstallerTests: XCTestCase {
         )
         XCTAssertEqual((restored["statusLine"] as? [String: Any])?["command"] as? String, "existing-status")
         XCTAssertEqual(restored["theme"] as? String, "dark")
+    }
+
+    func testReinstallKeepsTheFirstCapturedStatusLineWhenTheUserChangesItWhileManaged() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent(".claude/settings.json")
+        let managed = root.appendingPathComponent("managed", isDirectory: true)
+        let helper = root.appendingPathComponent("CodexMeterClaudeBridge")
+        try FileManager.default.createDirectory(at: settings.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"statusLine":{"type":"command","command":"original-bar"}}"#.utf8).write(to: settings)
+        FileManager.default.createFile(atPath: helper.path, contents: Data("helper".utf8), attributes: [.posixPermissions: 0o700])
+        let installer = ClaudeStatusLineInstaller(
+            settingsURL: settings,
+            managedDirectory: managed,
+            bridgeSource: { helper }
+        )
+
+        try installer.install()
+        // The user swaps in their own status line while CodexMeter manages it.
+        try Data(#"{"statusLine":{"type":"command","command":"user-edited-bar"}}"#.utf8).write(to: settings)
+        try installer.install()
+        try installer.uninstall()
+
+        let restored = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: Data(contentsOf: settings)) as? [String: Any]
+        )
+        XCTAssertEqual((restored["statusLine"] as? [String: Any])?["command"] as? String, "original-bar")
     }
 }
 
