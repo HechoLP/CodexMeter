@@ -4,27 +4,26 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.4.0</title>
-            <pubDate>Fri, 04 Sep 2026 22:03:48 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.0</link>
-            <sparkle:version>140</sparkle:version>
-            <sparkle:shortVersionString>1.4.0</sparkle:shortVersionString>
+            <title>1.4.1</title>
+            <pubDate>Sat, 05 Sep 2026 08:24:22 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.1</link>
+            <sparkle:version>141</sparkle:version>
+            <sparkle:shortVersionString>1.4.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.0
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.1
 
-CodexMeter 1.4.0 rebuilds the Settings window so Codex and Claude Code are configured side by side in one place.
+A follow-up to 1.4.0's Settings redesign.
 
 ## What changed
 
-- **Sidebar-first Settings.** A tinted icon sidebar with a search field. It lists the shared sections — General, Menu Bar, Diagnostics, Information — and then a **Providers** group with **Codex** and **Claude Code**, each showing an on/off dot.
-- **One window, not one per service.** Selecting a provider opens its own pane — account, limits, usage-analytics options, ChatGPT account totals (Codex), local-data status, and clear/rebuild. The window title tracks the selected section instead of naming a provider.
-- **Flat rows.** Setting rows are a title with a short caption and a right-aligned control, separated by hairline dividers under small section headers — no boxed groups.
+- **Real provider marks.** The Codex and Claude Code rows in Settings — and each provider's detail header — now show the actual OpenAI and Claude logos, the same marks used in the menu bar's provider tabs, instead of generic `terminal`/`sparkles` icons.
+- **A CodexMeter look, not a copy.** Provider chips are a neutral bordered square around the real logo rather than a flat color fill, and the sidebar's sort-menu button is gone — it added nothing with six entries and read as too close to the app that inspired the layout.
 
-Everything the settings control is unchanged: the same preference keys, the same launch-at-login, update-check, history-clear, and Claude connect/disconnect behavior. Local accounting, privacy boundaries, and both databases are untouched from 1.3.1.
+No preference, store, or behavior changes since 1.4.0.
 
 ## Verification
 
-- 283 automated tests, 0 failures (7 environment-integration tests skipped). New `SettingsLayoutTests` renders every settings pane in light and dark and asserts no horizontal clipping.
+- 283 automated tests, 0 failures (7 environment-integration tests skipped).
 - Universal 2 build for Apple silicon and Intel Macs running macOS 14 or later; the bundled Claude limits helper is signed and verified as part of the release.
 - The app remains ad-hoc signed and not Apple-notarized. SHA-256 protects the first download; Sparkle authenticates later update feeds and archives with Ed25519 signatures.
 
@@ -50,12 +49,12 @@ open /Applications/CodexMeter.app
 
 ## First direct-download launch
 
-Download `CodexMeter-1.4.0.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
+Download `CodexMeter-1.4.1.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.4.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.4.0.dmg
+grep ' CodexMeter-1.4.1.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.4.1.dmg
 ```
 
 Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above.
@@ -64,10 +63,10 @@ Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and 
 
 This release does not migrate any database. Published version tags are immutable; corrections ship as a new patch release.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.0/CodexMeter-1.4.0.zip" length="3783626" type="application/octet-stream" sparkle:edSignature="vPsh+b+VmJL83IPdqg4BdVxvm/h7NwvbLc4i3+l3iFwMCTKGIrcr4nMsHj5x5kntyKQ6e2Z4w+bjn4RLQr1OCg=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.1/CodexMeter-1.4.1.zip" length="3768200" type="application/octet-stream" sparkle:edSignature="XVRkc71/qoFuBRfTNnz+VdF4Nwad0QvVXjcGKv7jj1RcHY3XEb0zsYq6wH/HClQGL5QIjyDX3UWz6CSnT1PgCQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: J3M40Ce+cAn3JAAKr6PZMjqsKVBJsTD9KwkO/oqLPrpQ0pPnPWL2fbrMY5Pphpgu+fF2ihKnN03TKMRs7Wf+DA==
-length: 3858
+edSignature: Nz4vra5je2ud2t7buH0LEJtL/IKC1muDlt6n2bg+vsIW3HOfchsTr+KCX07OaZDePUfpAowe4eryXzTjEyR3Bw==
+length: 3325
 -->
