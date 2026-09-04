@@ -4,9 +4,11 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-04
+
 ### Changed
 
-- Rebuilt the Settings window with a tinted icon sidebar, a search field, and flat row groups instead of boxed forms. Codex and Claude Code each get their own sidebar entry with account, limits, analytics, and local-data controls; the window is no longer scoped to one provider.
+- Rebuilt the Settings window: a tinted icon sidebar with a search field, and flat row groups instead of boxed forms. Codex and Claude Code each get their own sidebar entry with account, limits, analytics, and local-data controls, so the window is no longer scoped to one provider and its title tracks the selected section.
 
 ## [1.3.1] - 2026-09-04
 
