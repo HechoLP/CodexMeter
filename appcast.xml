@@ -4,41 +4,29 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.3.0</title>
-            <pubDate>Fri, 04 Sep 2026 11:08:50 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.3.0</link>
-            <sparkle:version>130</sparkle:version>
-            <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
+            <title>1.3.1</title>
+            <pubDate>Fri, 04 Sep 2026 14:58:38 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.3.1</link>
+            <sparkle:version>131</sparkle:version>
+            <sparkle:shortVersionString>1.3.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.3.0
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.3.1
 
-CodexMeter 1.3.0 adds optional Claude Code support next to Codex: local token totals, private on-device analytics, and read-only five-hour and weekly limits, each kept fully separate from Codex data.
+A small follow-up to 1.3.0 that makes the Codex and Claude Code views read consistently and hardens Claude setup.
 
 ## What changed
 
-- **Codex / Claude Code selector:** a logo-first switch at the top of the menu. Menu bar totals, Today, history, Usage / Projects / Sessions, and the Settings data actions all follow the selected service.
-- **Claude Code local usage:** Today, This Week, This Month, and Local History totals for this Mac, with model, project, and session drill-downs and sub-agent relationships. Read from `~/.claude/projects` (or `CLAUDE_CONFIG_DIR/projects` when set in the app's environment).
-- **Honest Claude accounting:** cache-read and cache-creation tokens are included in Input; repeated streaming blocks and copied history are deduplicated by response ID rather than summed.
-- **Read-only Claude limits:** the documented status-line five-hour and weekly percentages and reset times, shown after Claude Code completes a response. Any existing status-line command is preserved and restored on disconnect.
-- **Separate storage:** Claude usage lives in its own `Claude.sqlite`; the Codex database, schema, and counting rules are unchanged.
-- **Menu header parity:** the connected account now shows for both services in the same row (Claude shows its plan instead of a switcher).
+- **Claude limit cards** no longer show the window name twice ("Weekly · Weekly"). Each card names its window once — "Weekly" or "5 hours" — the same way the Codex limit cards do.
+- **Popover footer** now shows the same "Updated <relative>" freshness line for both services. When ChatGPT account totals are on, that snapshot's date stays in the Token History header rather than taking over the footer.
+- **Claude usage keeps working** even if the status-line limits helper can't be installed. Local token totals connect anyway, and the Limits section explains the helper problem instead of the whole Claude integration going unavailable.
 
-## Setting up Claude Code
+Local accounting, privacy boundaries, and the Codex database are unchanged from 1.3.0.
 
-1. Open **Settings → Services** and enable **Claude Code**.
-2. If you are already signed in to the `claude` CLI, choose **Add Account**. Otherwise run `claude` in your terminal and sign in there first, then choose **Add Account**.
-3. The Claude tab appears in the menu only after this explicit setup. Use Claude Code once and press **Refresh** to populate limits.
+## Verification
 
-CodexMeter runs only the read-only `claude auth status` command to identify the signed-in account. It never launches a login flow and never reads or copies Claude credentials. Disconnecting removes the status-line helper; it does not sign you out of Claude Code.
-
-## Verification and limitations
-
-- Automated tests cover Claude cache arithmetic, duplicate blocks, copied history, streaming revisions, restarts, local day/week/month boundaries, analytics reconciliation, sub-agents, history cutoffs, source isolation, status-line install and restore, account identity, and native layout in both appearances. Full suite: 276 tests, 0 failures (5 environment-integration tests skipped).
-- On real local logs, response-ID deduplication avoids roughly a 1.8× over-count versus naive summing.
-- The package is Universal 2 for Apple silicon and Intel Macs running macOS 14 or later. The bundled Claude limits helper is signed and verified as part of the release.
-- **Not included:** Claude web/mobile account-wide totals, Claude account switching, attachment counts, and API-equivalent cost estimates. Claude prices are not published here, so cost is never shown for Claude rather than displayed as an unavailable estimate.
-- Codex-only users are unaffected: Claude is off by default, its tab stays hidden, and the Codex database is untouched.
-- The app remains ad-hoc signed, without Apple Developer ID signing or notarization. SHA-256 protects the first download; Sparkle authenticates later update feeds and archives with Ed25519 signatures.
+- 279 automated tests, 0 failures (5 environment-integration tests skipped).
+- Universal 2 build for Apple silicon and Intel Macs running macOS 14 or later; the bundled Claude limits helper is signed and verified as part of the release.
+- The app remains ad-hoc signed and not Apple-notarized. SHA-256 protects the first download; Sparkle authenticates later update feeds and archives with Ed25519 signatures.
 
 ## Install or update with Homebrew
 
@@ -53,7 +41,7 @@ For a new installation:
 brew install --cask HechoLP/tap/codexmeter
 ```
 
-Homebrew verifies the published ZIP checksum. If macOS blocks this certificate-free app after installation, confirm that it came from `HechoLP/tap/codexmeter`, then remove quarantine from this app only:
+If macOS blocks this certificate-free app after installation, confirm that it came from `HechoLP/tap/codexmeter`, then remove quarantine from this app only:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/CodexMeter.app
@@ -62,24 +50,24 @@ open /Applications/CodexMeter.app
 
 ## First direct-download launch
 
-Download `CodexMeter-1.3.0.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
+Download `CodexMeter-1.3.1.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.3.0.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.3.0.dmg
+grep ' CodexMeter-1.3.1.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.3.1.dmg
 ```
 
-Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above. Do not run an unverified download or disable Gatekeeper globally.
+Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above.
 
 ## Recovery
 
-This release does not migrate the Codex usage database. Claude usage is stored separately and is only read when Claude Code is enabled and connected; earlier versions ignore it. Do not delete the local usage databases or saved Keychain entries when troubleshooting. Published version tags are immutable; corrections ship as a new patch release.
+This release does not migrate any database. Published version tags are immutable; corrections ship as a new patch release.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.3.0/CodexMeter-1.3.0.zip" length="3699202" type="application/octet-stream" sparkle:edSignature="gcuPXRCcgD85oirQ3YvEyES8riUIMYKBxiG5fAIsnerfDtXJlW7NiHWLO30s21ubFkztpk1aIs2t1DP+dheJBw=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.3.1/CodexMeter-1.3.1.zip" length="3701773" type="application/octet-stream" sparkle:edSignature="HrAgIw9oXU4T34rrQ1RgAScDPeLc+WnOomesU/deiapN+ZryDLATWphEdtCa3cpEfece/8BapAfomuDX6TDEBQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 7zmB90bZeVarDGo9wInXind3AdQ8v9eGRV9Z1szsKLOGsbP9IMwYADK4+nnqn39Io+ZH4SNYmzmqQGEF3tb0Aw==
-length: 5903
+edSignature: evmTgO5xbN5baA7r76whNabqQA0X0Q5dtOndXIFGT2hvIarr/bKV+FjyudFwvUezhVrHub7EfXJtuuPCNSV4Cg==
+length: 3540
 -->
