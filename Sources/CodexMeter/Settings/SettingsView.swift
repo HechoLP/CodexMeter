@@ -7,12 +7,11 @@ struct SettingsView: View {
     @EnvironmentObject private var claude: ClaudeIntegrationStore
     @State private var selection: SettingsPane? = .category(.general)
     @State private var search = ""
-    @State private var sort = SettingsSidebarSort.recommended
 
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
-                SettingsSidebarSearchField(text: $search, sort: $sort)
+                SettingsSidebarSearchField(text: $search)
                     .padding(8)
                 Divider()
                 List(selection: $selection) {
@@ -31,8 +30,7 @@ struct SettingsView: View {
                             ForEach(visibleProviders) { provider in
                                 SettingsChipLabel(
                                     title: provider.title,
-                                    systemImage: provider.symbol,
-                                    tint: provider == .codex ? .green : .orange,
+                                    logoProvider: provider,
                                     statusDot: providerIsOn(provider) ? .green : nil,
                                     dimmed: !providerIsOn(provider)
                                 )
@@ -97,12 +95,10 @@ struct SettingsView: View {
     }
 
     private var visibleCategories: [SettingsCategory] {
-        let filtered = SettingsCategory.allCases.filter { SettingsPane.category($0).matches(search) }
-        return sort == .name ? filtered.sorted { $0.title < $1.title } : filtered
+        SettingsCategory.allCases.filter { SettingsPane.category($0).matches(search) }
     }
 
     private var visibleProviders: [UsageProvider] {
-        let filtered = UsageProvider.allCases.filter { SettingsPane.provider($0).matches(search) }
-        return sort == .name ? filtered.sorted { $0.title < $1.title } : filtered
+        UsageProvider.allCases.filter { SettingsPane.provider($0).matches(search) }
     }
 }

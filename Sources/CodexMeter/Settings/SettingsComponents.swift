@@ -2,26 +2,20 @@ import SwiftUI
 
 // MARK: - Sidebar
 
-/// One sidebar row: a tinted icon chip, a single-line title, and an optional
-/// trailing status dot (a provider that is on).
+/// One sidebar row: an icon chip, a single-line title, and an optional trailing
+/// status dot. Categories get a tinted SF Symbol chip; providers show their real
+/// logo on a neutral chip.
 struct SettingsChipLabel: View {
     let title: String
-    let systemImage: String
-    var tint: Color
+    var systemImage: String?
+    var logoProvider: UsageProvider?
+    var tint: Color = .gray
     var statusDot: Color?
     var dimmed = false
 
     var body: some View {
         HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(tint.gradient)
-                .frame(width: 20, height: 20)
-                .overlay(
-                    Image(systemName: systemImage)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                )
-                .accessibilityHidden(true)
+            chip.accessibilityHidden(true)
             Text(title)
                 .lineLimit(1)
                 .foregroundStyle(dimmed ? Color.secondary : Color.primary)
@@ -38,11 +32,36 @@ struct SettingsChipLabel: View {
         .accessibilityLabel(statusDot != nil ? "\(title), on" : title)
         .accessibilityHint("Select to view this section.")
     }
+
+    @ViewBuilder
+    private var chip: some View {
+        if let logoProvider {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(.quaternary, lineWidth: 1)
+                )
+                .frame(width: 20, height: 20)
+                .overlay(
+                    ProviderLogo(provider: logoProvider, size: 13)
+                        .foregroundStyle(dimmed ? Color.secondary : Color.primary)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(tint.gradient)
+                .frame(width: 20, height: 20)
+                .overlay(
+                    Image(systemName: systemImage ?? "circle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                )
+        }
+    }
 }
 
 struct SettingsSidebarSearchField: View {
     @Binding var text: String
-    @Binding var sort: SettingsSidebarSort
 
     var body: some View {
         HStack(spacing: 6) {
@@ -61,19 +80,6 @@ struct SettingsSidebarSearchField: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
             }
-            Menu {
-                Picker("Sort", selection: $sort) {
-                    ForEach(SettingsSidebarSort.allCases) { option in
-                        Text(option.title).tag(option)
-                    }
-                }
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .accessibilityLabel("Sort settings list")
         }
         .padding(6)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -340,8 +346,7 @@ struct SettingsProviderCard<Trailing: View>: View {
                 .fill((provider == .codex ? Color.green : Color.orange).gradient)
                 .frame(width: 30, height: 30)
                 .overlay(
-                    Image(systemName: provider.symbol)
-                        .font(.system(size: 15, weight: .semibold))
+                    ProviderLogo(provider: provider, size: 16)
                         .foregroundStyle(.white)
                 )
                 .accessibilityHidden(true)
