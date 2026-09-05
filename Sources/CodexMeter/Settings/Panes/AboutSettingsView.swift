@@ -23,7 +23,8 @@ struct AboutSettingsView: View {
             }
 
             SettingsSection(title: "Updates") {
-                SettingsButtonRow(title: "Check for Updates…", isEnabled: UpdateService.shared.isAvailable) {
+                SettingsButtonRow(title: "Check for Updates…", systemImage: "arrow.triangle.2.circlepath",
+                                  isEnabled: UpdateService.shared.isAvailable) {
                     UpdateService.shared.checkForUpdates()
                 }
             }
