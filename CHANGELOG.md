@@ -4,6 +4,12 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-09-05
+
+### Fixed
+
+- Eliminated the last remaining compiler warning in the project: `SettingsToggleRow` forwarded its get/set closures into a SwiftUI `Binding` initializer that only infers Sendable safety for closure literals written at the call site, not forwarded parameters. Restructured to build the `Binding` from literals inside `body`. No behavior change; `swift build` now produces zero warnings.
+
 ## [1.4.4] - 2026-09-05
 
 ### Changed
