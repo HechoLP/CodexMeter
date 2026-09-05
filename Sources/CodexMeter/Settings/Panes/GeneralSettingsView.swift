@@ -16,7 +16,7 @@ struct GeneralSettingsView: View {
                 )
                 SettingsValueRow(title: "Status", value: launchAtLogin.statusText)
                 if launchAtLogin.status == .requiresApproval {
-                    SettingsButtonRow(title: "Open Login Items Settings") {
+                    SettingsButtonRow(title: "Open Login Items Settings", systemImage: "gearshape") {
                         launchAtLogin.openSystemSettings()
                     }
                 }

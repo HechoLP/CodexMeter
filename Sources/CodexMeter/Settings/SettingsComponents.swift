@@ -242,20 +242,31 @@ struct SettingsPickerRow<SelectionValue: Hashable, Options: View>: View {
     }
 }
 
+/// A real bordered action button — not a bare colored link — so it reads as
+/// something to click rather than as inline text.
 struct SettingsButtonRow: View {
     let title: String
+    var systemImage: String?
     var caption: String?
     var role: ButtonRole?
     var isEnabled = true
     let action: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(spacing: 12) {
             Button(role: role, action: action) {
-                Text(title)
-                    .foregroundStyle(role == .destructive ? Color.red : Color.accentColor)
+                Group {
+                    if let systemImage {
+                        Label(title, systemImage: systemImage)
+                    } else {
+                        Text(title)
+                    }
+                }
+                .fixedSize()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .tint(role == .destructive ? .red : .accentColor)
             .disabled(!isEnabled)
             if let caption {
                 Text(caption)

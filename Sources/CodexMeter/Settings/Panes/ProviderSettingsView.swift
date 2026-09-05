@@ -116,7 +116,7 @@ private struct ProviderSettingsContent: View {
                         SettingsValueRow(title: "Plan", value: plan)
                     }
                     SettingsValueRow(title: "Limits", value: claude.statusMessage)
-                    SettingsButtonRow(title: "Disconnect", role: .destructive) {
+                    SettingsButtonRow(title: "Disconnect", systemImage: "xmark.circle", role: .destructive) {
                         Task { await claude.disconnect() }
                     }
                 }
@@ -126,7 +126,7 @@ private struct ProviderSettingsContent: View {
                     if let detected = claude.detectedAccount {
                         SettingsValueRow(title: "Detected account", value: detected.displayName)
                     }
-                    SettingsButtonRow(title: "Add Account", isEnabled: !claude.isRefreshing) {
+                    SettingsButtonRow(title: "Add Account", systemImage: "person.badge.plus", isEnabled: !claude.isRefreshing) {
                         Task { await claude.addCurrentAccount() }
                     }
                 }
@@ -218,7 +218,7 @@ private struct ProviderSettingsContent: View {
             SettingsValueRow(title: "Database size", value: formattedBytes(store.dataStatistics.databaseBytes))
             SettingsValueRow(title: "Oldest record", value: formattedDate(store.dataStatistics.oldestRecord))
             SettingsValueRow(title: "Newest record", value: formattedDate(store.dataStatistics.newestRecord))
-            SettingsButtonRow(title: "Open Data Folder") { openDataFolder() }
+            SettingsButtonRow(title: "Open Data Folder", systemImage: "folder") { openDataFolder() }
         }
     }
 
@@ -252,10 +252,10 @@ private struct ProviderSettingsContent: View {
                     tint: store.dataOperationFailed ? .red : .secondary
                 )
             }
-            SettingsButtonRow(title: "Rebuild Statistics", isEnabled: !isBusy) {
+            SettingsButtonRow(title: "Rebuild Statistics", systemImage: "hammer", isEnabled: !isBusy) {
                 Task { await store.rebuildStatistics() }
             }
-            SettingsButtonRow(title: "Clear Local History", role: .destructive, isEnabled: !isBusy) {
+            SettingsButtonRow(title: "Clear Local History", systemImage: "trash", role: .destructive, isEnabled: !isBusy) {
                 confirmsClear = true
             }
         }

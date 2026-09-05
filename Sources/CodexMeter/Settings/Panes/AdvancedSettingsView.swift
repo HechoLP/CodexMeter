@@ -8,7 +8,7 @@ struct AdvancedSettingsView: View {
         SettingsForm {
             SettingsSection(title: "Diagnostics") {
                 SettingsToggleRow("Enable debug logging", isOn: $debugLogging)
-                SettingsButtonRow(title: "Open Log Folder") { openLogFolder() }
+                SettingsButtonRow(title: "Open Log Folder", systemImage: "folder") { openLogFolder() }
             }
 
             SettingsSection(title: "Codex Account Limit Source") {
