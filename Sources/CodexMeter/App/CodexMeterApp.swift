@@ -40,7 +40,8 @@ struct CodexMeterApp: App {
             codexStore: store,
             claudeStore: claudeStore,
             limitStore: accountLimitStore,
-            claude: claudeIntegrationStore
+            claude: claudeIntegrationStore,
+            codexAccounts: .shared
         )
         _settingsEnvironment = StateObject(wrappedValue: settingsEnvironment)
         SettingsWindowController.shared.configure(environment: settingsEnvironment)

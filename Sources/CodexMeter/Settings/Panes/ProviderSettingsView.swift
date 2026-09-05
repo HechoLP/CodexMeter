@@ -10,7 +10,8 @@ struct ProviderSettingsView: View {
             provider: provider,
             store: env.usageStore(for: provider),
             limitStore: env.limitStore,
-            claude: env.claude
+            claude: env.claude,
+            codexAccounts: env.codexAccounts
         )
         // Reset @State (confirmsClear) when switching provider panes.
         .id(provider)
@@ -22,6 +23,7 @@ private struct ProviderSettingsContent: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var limitStore: AccountLimitStore
     @ObservedObject var claude: ClaudeIntegrationStore
+    @ObservedObject var codexAccounts: CodexAccountStore
 
     @AppStorage("profileSyncEnabled") private var profileSyncEnabled = AppPreferences.defaultProfileSyncEnabled
     @AppStorage("accountLimitsEnabled") private var accountLimitsEnabled = AppPreferences.defaultAccountLimitsEnabled
@@ -53,7 +55,13 @@ private struct ProviderSettingsContent: View {
             privacySection
             footerNotes
         }
-        .task { if !isCodex, claude.isEnabled { await claude.refresh() } }
+        .task {
+            if isCodex {
+                codexAccounts.load()
+            } else if claude.isEnabled {
+                await claude.refresh()
+            }
+        }
         .confirmationDialog(
             "Clear \(provider.title) local history?",
             isPresented: $confirmsClear,
@@ -73,7 +81,14 @@ private struct ProviderSettingsContent: View {
     @ViewBuilder private var headerCard: some View {
         if isCodex {
             SettingsProviderCard(provider: .codex, statusLine: "Available", isOn: true) {
-                EmptyView()
+                Button {
+                    Task { await store.refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(store.isRefreshing)
+                .accessibilityLabel("Refresh Codex")
             }
         } else {
             SettingsProviderCard(provider: .claude, statusLine: claude.statusMessage, isOn: claude.isEnabled) {
@@ -105,7 +120,7 @@ private struct ProviderSettingsContent: View {
     @ViewBuilder private var accountSection: some View {
         if isCodex {
             SettingsSection(title: "Account") {
-                SettingsInfoRow(text: "Uses the account already signed in to the Codex app", systemImage: "person.crop.circle")
+                SettingsValueRow(title: "Account", value: codexAccountValue)
             }
             SettingsNote("Codex remains the primary service. Save, add, or switch accounts from the menu bar popover.")
         } else if claude.isEnabled {
@@ -292,6 +307,16 @@ private struct ProviderSettingsContent: View {
     }
 
     // MARK: Helpers
+
+    /// Mirrors the menu bar's account switcher: the saved login's disambiguated
+    /// name when one is on record, otherwise a generic signed-in status — never
+    /// a guess at an account CodexMeter hasn't been told about.
+    private var codexAccountValue: String {
+        guard let current = codexAccounts.accounts.first(where: { $0.id == codexAccounts.currentID }) else {
+            return "Signed in to the Codex app"
+        }
+        return current.menuTitle(in: codexAccounts.accounts)
+    }
 
     private var accountLimitStatus: String {
         switch limitStore.status {
