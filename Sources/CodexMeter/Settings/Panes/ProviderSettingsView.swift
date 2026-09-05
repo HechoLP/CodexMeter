@@ -53,7 +53,6 @@ private struct ProviderSettingsContent: View {
             sourcesSection
             manageDataSection
             privacySection
-            footerNotes
         }
         .task {
             if isCodex {
@@ -122,7 +121,7 @@ private struct ProviderSettingsContent: View {
             SettingsSection(title: "Account") {
                 SettingsValueRow(title: "Account", value: codexAccountValue)
             }
-            SettingsNote("Codex remains the primary service. Save, add, or switch accounts from the menu bar popover.")
+            SettingsNote("Add or switch accounts from the menu bar popover.")
         } else if claude.isEnabled {
             if claude.isConnected, let account = claude.account {
                 SettingsSection(title: "Account") {
@@ -186,7 +185,7 @@ private struct ProviderSettingsContent: View {
                               isEnabled: analyticsEnabled && sessionsEnabled && isCodex)
         }
         if provider.supportsCostEstimates {
-            SettingsNote("Cost is an estimate based on current official API token prices. It is not a bill, subscription charge, or prediction of remaining quota.")
+            SettingsNote("Estimated from current API prices — not a bill or a quota prediction.")
         }
     }
 
@@ -197,17 +196,12 @@ private struct ProviderSettingsContent: View {
             SettingsSection(title: "ChatGPT Account Totals") {
                 SettingsToggleRow("Use ChatGPT account totals", isOn: $profileSyncEnabled)
             }
-            SettingsNote("When enabled, CodexMeter uses your current Codex sign-in only to request aggregate profile totals from chatgpt.com. Credentials and profile responses stay in memory and are never written to CodexMeter's database or logs.")
-            SettingsNote("Profile totals use a non-public ChatGPT endpoint and can be delayed to the date shown in the popover.")
-            SettingsNote("The main Today value always uses this Mac's live local history. Account totals remain separate and show the server snapshot date.")
+            SettingsNote("Uses your Codex sign-in only to fetch aggregate totals from chatgpt.com; credentials and responses stay in memory and are never stored. Totals can lag and are shown separately from this Mac's live Today value.")
         }
     }
 
     private var claudeNoteSection: some View {
-        Group {
-            SettingsNote("Token usage comes from Claude Code session logs on this Mac. Five-hour and weekly limits appear after an enabled, connected Claude account completes a response.")
-            SettingsNote("Claude cost estimates are not available yet. Unknown prices are never shown as zero cost.")
-        }
+        SettingsNote("Comes from Claude Code session logs on this Mac. Five-hour and weekly limits appear after a connected account completes a response; cost estimates aren't available yet.")
     }
 
     // MARK: Breakdown
@@ -220,7 +214,9 @@ private struct ProviderSettingsContent: View {
                 SettingsInfoRow(text: "Output is counted independently", systemImage: "arrow.down")
                 SettingsInfoRow(text: "Total equals Input plus Output", systemImage: "sum")
             }
-            SettingsNote("Cached input is included in Input, not added to Total a second time. For Claude Code, Input also includes cache creation tokens.")
+            SettingsNote(isCodex
+                ? "Calendar periods use your Mac's time zone and selected week start."
+                : "Input also includes cache creation tokens.")
         }
     }
 
@@ -248,7 +244,7 @@ private struct ProviderSettingsContent: View {
             }
         }
         if !isCodex {
-            SettingsNote("Reads ~/.claude/projects, or projects inside CLAUDE_CONFIG_DIR when set in the app's environment.")
+            SettingsNote("Reads ~/.claude/projects, or CLAUDE_CONFIG_DIR when set in the app's environment.")
         }
     }
 
@@ -290,19 +286,8 @@ private struct ProviderSettingsContent: View {
                 }
             }
             SettingsNote(isCodex
-                ? "Limits are requested read-only from the signed Codex app-server. The last successful response stays in memory only."
-                : "Claude Code logs are read locally. Sign-in stays with Claude Code; CodexMeter changes only the status-line command used to receive documented limit percentages. Disconnecting restores your previous status line.")
-        }
-    }
-
-    // MARK: Footer
-
-    private var footerNotes: some View {
-        Group {
-            SettingsNote("Clearing history establishes a new cutoff for \(provider.title) only. Older logs stay excluded on the next refresh. Other services are not affected.")
-            if isCodex {
-                SettingsNote("Account totals and this Mac's component breakdown are separate data sets and are never added together. Calendar periods use your Mac's current time zone and selected week start.")
-            }
+                ? "Limits are requested read-only from the signed Codex app-server; the last successful response stays in memory only."
+                : "Sign-in stays with Claude Code. CodexMeter only changes the status-line command used to receive limit percentages, and restores your previous one on disconnect.")
         }
     }
 

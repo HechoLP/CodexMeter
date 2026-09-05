@@ -10,14 +10,13 @@ struct AdvancedSettingsView: View {
                 SettingsToggleRow("Enable debug logging", isOn: $debugLogging)
                 SettingsButtonRow(title: "Open Log Folder", systemImage: "folder") { openLogFolder() }
             }
+            SettingsNote("Never includes prompts, responses, source code, terminal output, or authentication tokens.")
 
             SettingsSection(title: "Codex Account Limit Source") {
                 SettingsValueRow(title: "Mode", value: "Automatic")
                 SettingsValueRow(title: "Provider", value: "Signed Codex app-server")
             }
-            SettingsNote("CodexMeter uses a read-only local RPC request and does not expose reset or purchase actions.")
-
-            SettingsNote("Diagnostics never include prompts, responses, source code, terminal output, or authentication tokens.")
+            SettingsNote("Read-only local RPC request — no reset or purchase actions.")
         }
     }
 
