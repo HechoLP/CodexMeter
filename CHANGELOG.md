@@ -4,6 +4,12 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-09-05
+
+### Fixed
+
+- Settings action rows ("Check for Updates…", "Open Log Folder", "Add Account", "Disconnect", "Open Data Folder", "Rebuild Statistics", "Clear Local History") are now bordered icon buttons instead of bare accent-colored text, so they read as clickable controls instead of floating links.
+
 ## [1.4.1] - 2026-09-05
 
 ### Fixed

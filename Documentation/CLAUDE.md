@@ -1,6 +1,6 @@
 # Claude Code
 
-Open **Settings → Services**, enable Claude Code, and add the account already signed in to the official Claude CLI. If Claude Code is signed out, run `claude` in your terminal and sign in there first, then choose **Add Account**. The Claude tab remains hidden until this explicit setup is complete.
+Open **Settings**, select **Claude Code** in the Providers sidebar, enable it, and add the account already signed in to the official Claude CLI. If Claude Code is signed out, run `claude` in your terminal and sign in there first, then choose **Add Account**. The Claude tab remains hidden until this explicit setup is complete.
 
 ## Included
 
