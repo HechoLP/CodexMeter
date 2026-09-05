@@ -32,7 +32,7 @@ struct GeneralSettingsView: View {
                     }
                 }
             }
-            SettingsNote("Automatic reacts to local session changes and uses a lightweight one-minute fallback check. Fixed intervals are available when you prefer predictable polling.")
+            SettingsNote("Automatic reacts to session changes with a one-minute fallback check.")
 
             SettingsSection(title: "Updates") {
                 SettingsToggleRow(

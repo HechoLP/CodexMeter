@@ -132,7 +132,7 @@ struct SettingsSection<Content: View>: View {
             }
             _VariadicView.Tree(SettingsDividedRows()) { content }
         }
-        .padding(.top, 14)
+        .padding(.top, 18)
     }
 }
 

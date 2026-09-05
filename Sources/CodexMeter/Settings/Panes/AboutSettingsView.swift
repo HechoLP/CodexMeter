@@ -11,7 +11,7 @@ struct AboutSettingsView: View {
 
     var body: some View {
         SettingsForm {
-            SettingsInfoRow(text: "CodexMeter — local Codex and Claude Code token usage in the menu bar", systemImage: "diamond")
+            appHeader
 
             SettingsSection(title: "Application") {
                 SettingsValueRow(title: "Version", value: version)
@@ -28,7 +28,7 @@ struct AboutSettingsView: View {
                     UpdateService.shared.checkForUpdates()
                 }
             }
-            SettingsNote("Update checks use the signed CodexMeter update feed. Token usage data is never sent.")
+            SettingsNote("Uses the signed CodexMeter update feed. Token usage data is never sent.")
 
             SettingsSection(title: "Project") {
                 SettingsLinkRow(title: "Open Source on GitHub", systemImage: "chevron.left.forwardslash.chevron.right",
@@ -41,5 +41,30 @@ struct AboutSettingsView: View {
 
             SettingsNote("CodexMeter is an independent utility and is not affiliated with or endorsed by OpenAI or Anthropic.")
         }
+    }
+
+    private var appHeader: some View {
+        VStack(spacing: 8) {
+            Group {
+                if let icon = NSApp.applicationIconImage {
+                    Image(nsImage: icon).resizable()
+                } else {
+                    Image(systemName: "diamond.fill")
+                }
+            }
+            .scaledToFit()
+            .frame(width: 64, height: 64)
+            .accessibilityHidden(true)
+
+            Text("CodexMeter")
+                .font(.title2.weight(.semibold))
+            Text("Version \(version)")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .combine)
     }
 }

@@ -4,6 +4,11 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Trimmed Settings to the text that carries real information: merged and shortened notes that repeated what an adjacent row or dialog already said (account-totals, breakdown, and history-clearing notes), and moved a misplaced diagnostics note back next to the section it explains. No preference, control, or behavior changed.
+- The About pane now leads with the app icon, name, and version — matching native macOS About panels — instead of a one-line tagline.
+
 ## [1.4.3] - 2026-09-05
 
 ### Fixed
