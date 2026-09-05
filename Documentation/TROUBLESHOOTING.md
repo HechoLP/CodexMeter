@@ -2,7 +2,7 @@
 
 ## Codex usage not found
 
-Confirm that Codex has created local session history on this Mac. Local History cannot recover deleted logs or usage from another computer. On macOS, enable **Settings → Usage & Privacy → Use ChatGPT account totals** to load the separate account-wide profile totals.
+Confirm that Codex has created local session history on this Mac. Local History cannot recover deleted logs or usage from another computer. On macOS, enable **Settings → Codex → Use ChatGPT account totals** to load the separate account-wide profile totals.
 
 ## Sessions directory is empty
 
