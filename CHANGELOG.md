@@ -4,6 +4,13 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-09-05
+
+### Fixed
+
+- The Codex and Claude Code Settings panes now match: Codex's Account section is a label/value row like Claude's (showing the saved login or "Signed in to the Codex app"), and Codex's header card has the same refresh button as Claude's. Real differences (Claude's on/off toggle, the Codex-only Limits section) are unchanged.
+- Settings no longer reads the real Keychain-backed saved-login vault during automated tests; the account store is now injected, with `swift test` using an in-memory vault.
+
 ## [1.4.2] - 2026-09-05
 
 ### Fixed
