@@ -4,22 +4,22 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.4.2</title>
-            <pubDate>Sat, 05 Sep 2026 10:42:20 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.2</link>
-            <sparkle:version>142</sparkle:version>
-            <sparkle:shortVersionString>1.4.2</sparkle:shortVersionString>
+            <title>1.4.3</title>
+            <pubDate>Sat, 05 Sep 2026 11:20:50 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.3</link>
+            <sparkle:version>143</sparkle:version>
+            <sparkle:shortVersionString>1.4.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.2
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.3
 
-A small follow-up to the 1.4.x Settings redesign.
+A follow-up to the 1.4.x Settings redesign: the Codex and Claude Code panes now match.
 
 ## What changed
 
-- **Action rows now look like buttons.** "Check for Updates…", "Open Log Folder", "Add Account", "Disconnect", "Open Data Folder", "Rebuild Statistics", and "Clear Local History" were a bare line of accent-colored text with a lot of empty space around it. They're now bordered icon buttons — destructive actions in red — so they read as something to click.
-- Documentation for finding Claude and ChatGPT-account settings was updated to match the 1.4.0 sidebar (there's no more "Services" or "Usage & Privacy" category; those controls live in each provider's own pane).
+- **Consistent provider panes.** Codex's Account section was a plain sentence while Claude's showed an account value and a Disconnect button, and only Claude's header card had a refresh button. Codex's Account section is now the same label/value row as Claude's (showing your saved Codex login, or "Signed in to the Codex app" if none is saved), and Codex's header card has a matching refresh button. Real feature differences stay: Claude keeps its on/off toggle, and the Limits section (additional limits, reset credits) remains Codex-only, since Claude has no equivalent settings.
+- **Safer, faster tests.** Settings no longer reads the real Keychain-backed saved-login vault while running automated tests; the account store is injected, with tests using an in-memory one instead.
 
-No preference, store, or behavior changes.
+No preference or behavior changes beyond the above.
 
 ## Verification
 
@@ -49,12 +49,12 @@ open /Applications/CodexMeter.app
 
 ## First direct-download launch
 
-Download `CodexMeter-1.4.2.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
+Download `CodexMeter-1.4.3.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.4.2.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.4.2.dmg
+grep ' CodexMeter-1.4.3.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.4.3.dmg
 ```
 
 Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above.
@@ -63,10 +63,10 @@ Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and 
 
 This release does not migrate any database. Published version tags are immutable; corrections ship as a new patch release.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.2/CodexMeter-1.4.2.zip" length="3771954" type="application/octet-stream" sparkle:edSignature="G8U1mlRp9IguG7qnoFqSDtdg1XZWxbMm9hbBkY2YVYV3vYqu+Bh4lcYnKdhAotpM4jRduouQV/aMcGy21C3GDA=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.3/CodexMeter-1.4.3.zip" length="3778425" type="application/octet-stream" sparkle:edSignature="IQnFCbA5MBDJMkvQkdyIx0s31iI247w+hY03EK6zEfbAf4ZrrSC+tcncXk30Eq8qODiOK1x/pTntywaYgVaNBw=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: QuOwHgZ+rSOAyo8vs5riNCmqUUOEOEsecIYll3xEVZoXhZt7fzIbJB2T6+JRmr5trF02N3I6SE0k02W8q7aoDg==
-length: 3364
+edSignature: lCgt1fFdJieiupru9wbp6LZ55r3E+U2e25/TOgcCJNbRNc9PRqFXX3gPdpbQRRrPJ6I2kH4A9ibxvHe25ySLAw==
+length: 3618
 -->
