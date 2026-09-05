@@ -4,6 +4,8 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-09-05
+
 ### Changed
 
 - Trimmed Settings to the text that carries real information: merged and shortened notes that repeated what an adjacent row or dialog already said (account-totals, breakdown, and history-clearing notes), and moved a misplaced diagnostics note back next to the section it explains. No preference, control, or behavior changed.
