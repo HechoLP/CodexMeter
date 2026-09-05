@@ -197,14 +197,16 @@ struct SettingsValueRow: View {
 struct SettingsToggleRow: View {
     let title: String
     var caption: String?
-    let isOn: Binding<Bool>
     var isEnabled = true
+    private let getValue: () -> Bool
+    private let setValue: (Bool) -> Void
 
     init(_ title: String, caption: String? = nil, isOn: Binding<Bool>, isEnabled: Bool = true) {
         self.title = title
         self.caption = caption
-        self.isOn = isOn
         self.isEnabled = isEnabled
+        getValue = { isOn.wrappedValue }
+        setValue = { isOn.wrappedValue = $0 }
     }
 
     /// Get/set variant for stores whose "enabled" flag is not a plain `Binding`.
@@ -213,12 +215,16 @@ struct SettingsToggleRow: View {
         self.title = title
         self.caption = caption
         self.isEnabled = isEnabled
-        self.isOn = Binding(get: get, set: set)
+        getValue = get
+        setValue = set
     }
 
     var body: some View {
+        // Written as closure literals (not forwarded parameters) so `Binding.init`'s
+        // `@_inheritActorContext` picks up `body`'s MainActor isolation here, instead
+        // of requiring `getValue`/`setValue` to be independently `@Sendable`.
         SettingsRow(title: title, caption: caption) {
-            Toggle("", isOn: isOn)
+            Toggle("", isOn: Binding(get: { getValue() }, set: { setValue($0) }))
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .disabled(!isEnabled)
