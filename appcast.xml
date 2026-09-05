@@ -4,28 +4,27 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.4.4</title>
-            <pubDate>Sat, 05 Sep 2026 14:15:52 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.4</link>
-            <sparkle:version>144</sparkle:version>
-            <sparkle:shortVersionString>1.4.4</sparkle:shortVersionString>
+            <title>1.4.5</title>
+            <pubDate>Sat, 05 Sep 2026 17:47:06 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.5</link>
+            <sparkle:version>145</sparkle:version>
+            <sparkle:shortVersionString>1.4.5</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.4
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.5
 
-A copy and polish pass on the 1.4.x Settings redesign: less to read, and a nicer About pane.
+A maintenance release following a full security and code-quality review of the project.
 
 ## What changed
 
-- **Trimmed Settings text.** Several notes repeated what an adjacent row or the clear-history confirmation dialog already said. The three "ChatGPT Account Totals" notes are now one, the two Claude footnotes are one, and the "This Mac Breakdown" note dropped its redundant first sentence and keeps only the fact that wasn't already on screen. A note about Diagnostics privacy that had drifted to the bottom of the Advanced pane, past an unrelated section, moved back next to Diagnostics where it belongs.
-- **A native-style About pane.** The About pane now leads with the app icon, name, and version, centered, the way a standard macOS About panel does — replacing a one-line tagline sentence.
-- **A little more breathing room.** Section spacing opened up slightly now that there is less text to separate.
+- **Security and technical review.** Process execution, SQL construction, Keychain storage, login-file handling, network TLS/redirect behavior, Sparkle update verification, CI supply chain, diagnostics logging, and dependency currency were all reviewed. No security issues were found — the project's existing defenses (sandboxed subprocess environments, code-signature checks before executing the Codex app-server, TOCTOU-safe file access, redirect rejection on the profile API, Sparkle 2.9.6 already current) held up.
+- **Zero compiler warnings.** Fixed the one remaining warning in the project: `SettingsToggleRow` forwarded its get/set closures into a SwiftUI `Binding` initializer that only infers Sendable safety for closure literals written at the call site, not forwarded parameters. `swift build` now completes cleanly.
 
-No preference, control, or behavior changed.
+No preference, control, or user-visible behavior changed.
 
 ## Verification
 
 - 283 automated tests, 0 failures (7 environment-integration tests skipped).
-- Every Settings pane re-rendered in light and dark mode and reviewed for clipping and text overflow.
+- `swift build` with zero warnings and zero errors.
 - Universal 2 build for Apple silicon and Intel Macs running macOS 14 or later; the bundled Claude limits helper is signed and verified as part of the release.
 - The app remains ad-hoc signed and not Apple-notarized. SHA-256 protects the first download; Sparkle authenticates later update feeds and archives with Ed25519 signatures.
 
@@ -51,12 +50,12 @@ open /Applications/CodexMeter.app
 
 ## First direct-download launch
 
-Download `CodexMeter-1.4.4.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
+Download `CodexMeter-1.4.5.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.4.4.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.4.4.dmg
+grep ' CodexMeter-1.4.5.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.4.5.dmg
 ```
 
 Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above.
@@ -65,10 +64,10 @@ Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and 
 
 This release does not migrate any database. Published version tags are immutable; corrections ship as a new patch release.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.4/CodexMeter-1.4.4.zip" length="3782202" type="application/octet-stream" sparkle:edSignature="m5/Wjl6bQVbfcM/hBngYa+skwpTpmHTEreuZeRsBlBzSBbTTKsZz/H1jK7GXnYWt5GupPUACXKdea1w2g5rvBQ=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.5/CodexMeter-1.4.5.zip" length="3785764" type="application/octet-stream" sparkle:edSignature="20jtvOL6soDxEtwI3emAYUiyQOwfwQV2DyZyaDcrJTgwx91K0MSF0vPXCqfAxINcEV25tZ+LzpgYFHTvg7hkDA=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 9401GbV19FIJ4v7RDlP4aw51dhQNJr54H7brGmzfJIf54uFbGRxb6c+pwQ4Xq0k/dphCHAZEdANI4bANzy/lAw==
-length: 3743
+edSignature: kvpoLSWs8SSq/GLFTFbIa9n4UCtP9nQquDy9j4Nz9AdSW7f+i29zj93fitTif9yNNs6hB4l9ZNbP00I/nnYqAQ==
+length: 3724
 -->
