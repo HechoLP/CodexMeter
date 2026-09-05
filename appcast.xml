@@ -4,26 +4,28 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.4.3</title>
-            <pubDate>Sat, 05 Sep 2026 11:20:50 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.3</link>
-            <sparkle:version>143</sparkle:version>
-            <sparkle:shortVersionString>1.4.3</sparkle:shortVersionString>
+            <title>1.4.4</title>
+            <pubDate>Sat, 05 Sep 2026 14:15:52 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.4</link>
+            <sparkle:version>144</sparkle:version>
+            <sparkle:shortVersionString>1.4.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.3
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.4
 
-A follow-up to the 1.4.x Settings redesign: the Codex and Claude Code panes now match.
+A copy and polish pass on the 1.4.x Settings redesign: less to read, and a nicer About pane.
 
 ## What changed
 
-- **Consistent provider panes.** Codex's Account section was a plain sentence while Claude's showed an account value and a Disconnect button, and only Claude's header card had a refresh button. Codex's Account section is now the same label/value row as Claude's (showing your saved Codex login, or "Signed in to the Codex app" if none is saved), and Codex's header card has a matching refresh button. Real feature differences stay: Claude keeps its on/off toggle, and the Limits section (additional limits, reset credits) remains Codex-only, since Claude has no equivalent settings.
-- **Safer, faster tests.** Settings no longer reads the real Keychain-backed saved-login vault while running automated tests; the account store is injected, with tests using an in-memory one instead.
+- **Trimmed Settings text.** Several notes repeated what an adjacent row or the clear-history confirmation dialog already said. The three "ChatGPT Account Totals" notes are now one, the two Claude footnotes are one, and the "This Mac Breakdown" note dropped its redundant first sentence and keeps only the fact that wasn't already on screen. A note about Diagnostics privacy that had drifted to the bottom of the Advanced pane, past an unrelated section, moved back next to Diagnostics where it belongs.
+- **A native-style About pane.** The About pane now leads with the app icon, name, and version, centered, the way a standard macOS About panel does — replacing a one-line tagline sentence.
+- **A little more breathing room.** Section spacing opened up slightly now that there is less text to separate.
 
-No preference or behavior changes beyond the above.
+No preference, control, or behavior changed.
 
 ## Verification
 
 - 283 automated tests, 0 failures (7 environment-integration tests skipped).
+- Every Settings pane re-rendered in light and dark mode and reviewed for clipping and text overflow.
 - Universal 2 build for Apple silicon and Intel Macs running macOS 14 or later; the bundled Claude limits helper is signed and verified as part of the release.
 - The app remains ad-hoc signed and not Apple-notarized. SHA-256 protects the first download; Sparkle authenticates later update feeds and archives with Ed25519 signatures.
 
@@ -49,12 +51,12 @@ open /Applications/CodexMeter.app
 
 ## First direct-download launch
 
-Download `CodexMeter-1.4.3.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
+Download `CodexMeter-1.4.4.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.4.3.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.4.3.dmg
+grep ' CodexMeter-1.4.4.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.4.4.dmg
 ```
 
 Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above.
@@ -63,10 +65,10 @@ Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and 
 
 This release does not migrate any database. Published version tags are immutable; corrections ship as a new patch release.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.3/CodexMeter-1.4.3.zip" length="3778425" type="application/octet-stream" sparkle:edSignature="IQnFCbA5MBDJMkvQkdyIx0s31iI247w+hY03EK6zEfbAf4ZrrSC+tcncXk30Eq8qODiOK1x/pTntywaYgVaNBw=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.4/CodexMeter-1.4.4.zip" length="3782202" type="application/octet-stream" sparkle:edSignature="m5/Wjl6bQVbfcM/hBngYa+skwpTpmHTEreuZeRsBlBzSBbTTKsZz/H1jK7GXnYWt5GupPUACXKdea1w2g5rvBQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: lCgt1fFdJieiupru9wbp6LZ55r3E+U2e25/TOgcCJNbRNc9PRqFXX3gPdpbQRRrPJ6I2kH4A9ibxvHe25ySLAw==
-length: 3618
+edSignature: 9401GbV19FIJ4v7RDlP4aw51dhQNJr54H7brGmzfJIf54uFbGRxb6c+pwQ4Xq0k/dphCHAZEdANI4bANzy/lAw==
+length: 3743
 -->
