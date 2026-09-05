@@ -498,16 +498,29 @@ final class CodexAccountSwitchingTests: XCTestCase {
                           "The detected executable must be the pinned desktop app-server.")
             try await LocalCodexAccountRuntime().checkPolicy(for: nil)
             let inspector = SystemCodexProcessInspector()
-            let blockers = try CodexProcessGate.runningCodexPIDs(using: inspector)
-            XCTAssertFalse(blockers.isEmpty, "The running desktop's Codex process must still block replacement.")
-            for pid in blockers {
+            let identified = try CodexProcessGate.runningCodexPIDs(using: inspector)
+            XCTAssertFalse(identified.isEmpty, "The running desktop's Codex process must be identified.")
+            for pid in identified {
                 if let path = inspector.executablePath(for: pid) {
                     XCTAssertTrue(CodexProcessIdentity.isCodexExecutable(path: path))
                 } else if let info = inspector.metadata(for: pid) {
                     XCTAssertTrue(info.command == "codex" || info.command.hasPrefix("codex-"))
                 }
             }
-            print("Read-only process verification: \(blockers.count) Codex blockers; no application or login changed.")
+            // Identification alone no longer blocks: only a process holding the
+            // login file open does. The read-only probe records which applies.
+            var loginStat = stat()
+            let loginPath = CodexLoginFile.defaultDirectory.appendingPathComponent("auth.json").path
+            let holdsLogin: Bool
+            if stat(loginPath, &loginStat) == 0 {
+                let identity = CodexFileIdentity(device: UInt64(UInt32(bitPattern: loginStat.st_dev)),
+                                                 inode: loginStat.st_ino)
+                holdsLogin = identified.contains { inspector.holdsFile($0, identity: identity) == true }
+            } else {
+                holdsLogin = false
+            }
+            print("Read-only process verification: \(identified.count) Codex processes identified; "
+                  + "login-file holders: \(holdsLogin ? "present" : "none"); no application or login changed.")
         } catch let error as AccountSwitchError {
             XCTFail("Read-only desktop policy probe failed: \(error.errorDescription ?? "Unavailable")")
         } catch {

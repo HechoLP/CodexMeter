@@ -7,11 +7,21 @@ struct CodexProcessMetadata: Equatable {
     let command: String
 }
 
+/// Device and inode of the active login file, so a concurrent holder is matched
+/// by identity rather than by a path that a rename could have moved.
+struct CodexFileIdentity: Hashable {
+    let device: UInt64
+    let inode: UInt64
+}
+
 protocol CodexProcessInspecting {
     func processIDs() throws -> [pid_t]
     func metadata(for pid: pid_t) -> CodexProcessMetadata?
     func executablePath(for pid: pid_t) -> String?
     func isAlive(_ pid: pid_t) -> Bool
+    /// Whether the process currently has the identified regular file open.
+    /// `nil` means the open files could not be read.
+    func holdsFile(_ pid: pid_t, identity: CodexFileIdentity) -> Bool?
 }
 
 /// Reads process identity only: never arguments, environment, or credentials.
@@ -63,16 +73,54 @@ struct SystemCodexProcessInspector: CodexProcessInspecting {
         return errno != ESRCH // A permission error is not proof of exit.
     }
 
+    func holdsFile(_ pid: pid_t, identity: CodexFileIdentity) -> Bool? {
+        let listBytes = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        guard listBytes > 0 else { return nil }
+        let stride = MemoryLayout<proc_fdinfo>.stride
+        let capacity = Int(listBytes) / stride + 32
+        var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: capacity)
+        let filled = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, &fds, Int32(capacity * stride))
+        guard filled > 0 else { return nil }
+        let entries = min(capacity, Int(filled) / stride)
+        for index in 0..<entries where fds[index].proc_fdtype == UInt32(PROX_FDTYPE_VNODE) {
+            var info = vnode_fdinfowithpath()
+            let read = proc_pidfdinfo(pid, fds[index].proc_fd, PROC_PIDFDVNODEPATHINFO,
+                                     &info, Int32(MemoryLayout<vnode_fdinfowithpath>.size))
+            guard read == Int32(MemoryLayout<vnode_fdinfowithpath>.size) else { continue }
+            let stat = info.pvip.vip_vi.vi_stat
+            if UInt64(stat.vst_dev) == identity.device, stat.vst_ino == identity.inode { return true }
+        }
+        return false
+    }
+
     private static func command(in bytes: UnsafeRawBufferPointer) -> String {
         String(bytes: bytes.prefix(while: { $0 != 0 }), encoding: .utf8) ?? ""
     }
 }
 
 enum CodexProcessGate {
+    static var defaultAuthFile: URL {
+        CodexLoginFile.defaultDirectory.appendingPathComponent("auth.json", isDirectory: false)
+    }
+
+    /// A running Codex client only blocks a switch while it actually holds the
+    /// login file open. An idle background app-server, a remote session, or an
+    /// editor extension that has already released the file is not a blocker;
+    /// `CodexLoginFile.replace` still refuses to overwrite a login that changed.
     static func requireStopped(using inspector: any CodexProcessInspecting = SystemCodexProcessInspector(),
-                               userID: uid_t = getuid()) throws {
-        guard try runningCodexPIDs(using: inspector, userID: userID).isEmpty else {
-            throw AccountSwitchError.codexRunning
+                               userID: uid_t = getuid(),
+                               authFile: URL = defaultAuthFile) throws {
+        let candidates = try runningCodexPIDs(using: inspector, userID: userID)
+        guard !candidates.isEmpty, let identity = fileIdentity(of: authFile) else { return }
+        for pid in candidates {
+            switch inspector.holdsFile(pid, identity: identity) {
+            case .some(true):
+                throw AccountSwitchError.codexRunning
+            case .some(false):
+                continue
+            case .none:
+                if inspector.isAlive(pid) { throw AccountSwitchError.processInspectionFailed }
+            }
         }
     }
 
@@ -102,5 +150,11 @@ enum CodexProcessGate {
             if current.command == "codex" || current.command.hasPrefix("codex-") { running.append(pid) }
         }
         return running
+    }
+
+    private static func fileIdentity(of url: URL) -> CodexFileIdentity? {
+        var info = stat()
+        guard stat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return nil }
+        return CodexFileIdentity(device: UInt64(UInt32(bitPattern: info.st_dev)), inode: info.st_ino)
     }
 }

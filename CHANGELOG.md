@@ -4,6 +4,10 @@ All notable changes to CodexMeter will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Account switching no longer aborts when an unrelated `codex` process is alive anywhere on the machine. Modern Codex keeps an idle background app-server running after its window closes, and editor extensions and remote sessions spawn their own — the switch would quit and reopen the desktop app but never apply the saved login, showing only a small "Another Codex process is still running" note. The process gate now blocks a switch only while a Codex process actually holds `~/.codex/auth.json` open (checked by device and inode); `CodexLoginFile.replace` still refuses to overwrite a login that changed under it, so the switch stays safe. The blocked-state message now points at CLI sessions and editor extensions.
+
 ## [1.4.5] - 2026-09-05
 
 ### Fixed
