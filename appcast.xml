@@ -4,28 +4,30 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>CodexMeter</title>
         <item>
-            <title>1.4.5</title>
-            <pubDate>Sat, 05 Sep 2026 17:47:06 +0900</pubDate>
-            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.5</link>
-            <sparkle:version>145</sparkle:version>
-            <sparkle:shortVersionString>1.4.5</sparkle:shortVersionString>
+            <title>1.4.6</title>
+            <pubDate>Sun, 06 Sep 2026 01:27:58 +0900</pubDate>
+            <link>https://github.com/HechoLP/CodexMeter/releases/tag/v1.4.6</link>
+            <sparkle:version>146</sparkle:version>
+            <sparkle:shortVersionString>1.4.6</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.5
+            <description sparkle:format="markdown"><![CDATA[# CodexMeter 1.4.6
 
-A maintenance release following a full security and code-quality review of the project.
+A bug-fix release for Codex account switching.
 
 ## What changed
 
-- **Security and technical review.** Process execution, SQL construction, Keychain storage, login-file handling, network TLS/redirect behavior, Sparkle update verification, CI supply chain, diagnostics logging, and dependency currency were all reviewed. No security issues were found — the project's existing defenses (sandboxed subprocess environments, code-signature checks before executing the Codex app-server, TOCTOU-safe file access, redirect rejection on the profile API, Sparkle 2.9.6 already current) held up.
-- **Zero compiler warnings.** Fixed the one remaining warning in the project: `SettingsToggleRow` forwarded its get/set closures into a SwiftUI `Binding` initializer that only infers Sendable safety for closure literals written at the call site, not forwarded parameters. `swift build` now completes cleanly.
+- **Account switching no longer gets stuck behind unrelated Codex processes.** Modern Codex keeps an idle background app-server running after its window closes, and editor extensions and remote sessions start their own `codex` processes. The previous safety gate blocked a switch whenever any `codex`-named process was alive anywhere on the machine, so the switch would quit and reopen the desktop app but never apply the saved login — leaving only a small "Another Codex process is still running" note under the account menu.
+- The gate still identifies Codex processes the same way, but now blocks a switch **only** while one actually holds `~/.codex/auth.json` open, matched by device and inode. An idle daemon, a remote session, or an editor extension that has already released the file no longer blocks. `CodexLoginFile.replace` keeps its compare-and-swap, so a login that changes under the switch is still never overwritten.
+- The blocked-state message now points at CLI sessions and editor extensions rather than a generic "close it" instruction.
 
-No preference, control, or user-visible behavior changed.
+Switching applies the saved login to Codex (the CLI and the desktop app's Codex side). It does not change the account shown in the ChatGPT desktop app's own chat UI, which authenticates from a separate web session.
 
 ## Verification
 
-- 283 automated tests, 0 failures (7 environment-integration tests skipped).
+- 289 automated tests, 0 failures (7 environment-integration tests skipped).
 - `swift build` with zero warnings and zero errors.
 - Universal 2 build for Apple silicon and Intel Macs running macOS 14 or later; the bundled Claude limits helper is signed and verified as part of the release.
+- Read-only real-desktop probe: three live `codex` processes identified, none holding the login file open, switch no longer blocked.
 - The app remains ad-hoc signed and not Apple-notarized. SHA-256 protects the first download; Sparkle authenticates later update feeds and archives with Ed25519 signatures.
 
 ## Install or update with Homebrew
@@ -50,12 +52,12 @@ open /Applications/CodexMeter.app
 
 ## First direct-download launch
 
-Download `CodexMeter-1.4.5.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
+Download `CodexMeter-1.4.6.dmg` and `SHA256SUMS.txt` from this release into the same folder. Verify the checksum before opening the disk image:
 
 ```bash
 cd ~/Downloads
-grep ' CodexMeter-1.4.5.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
-open CodexMeter-1.4.5.dmg
+grep ' CodexMeter-1.4.6.dmg$' SHA256SUMS.txt | shasum -a 256 -c -
+open CodexMeter-1.4.6.dmg
 ```
 
 Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and use the app-scoped quarantine command above.
@@ -64,10 +66,10 @@ Only after the checksum reports `OK`, copy `CodexMeter.app` to Applications and 
 
 This release does not migrate any database. Published version tags are immutable; corrections ship as a new patch release.
 ]]></description>
-            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.5/CodexMeter-1.4.5.zip" length="3785764" type="application/octet-stream" sparkle:edSignature="20jtvOL6soDxEtwI3emAYUiyQOwfwQV2DyZyaDcrJTgwx91K0MSF0vPXCqfAxINcEV25tZ+LzpgYFHTvg7hkDA=="></enclosure>
+            <enclosure url="https://github.com/HechoLP/CodexMeter/releases/download/v1.4.6/CodexMeter-1.4.6.zip" length="3788377" type="application/octet-stream" sparkle:edSignature="7XkCaRui5QpEi6uov5JzKlPWo9S+x2jy6mrSUUStPnmyu04mFe2oWpA9W2RoXwNETj2t6WjvL3HA0JiuokquCQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: kvpoLSWs8SSq/GLFTFbIa9n4UCtP9nQquDy9j4Nz9AdSW7f+i29zj93fitTif9yNNs6hB4l9ZNbP00I/nnYqAQ==
-length: 3724
+edSignature: q2wMun9eWZK8xUR4V+9nenF7WNjoUZqJ+uN3KpJWtaxUETOdqKxD19QtCh6z2pS/hmG2BN8bw8yCk8f3i2R4Cw==
+length: 4199
 -->
